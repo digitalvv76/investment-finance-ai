@@ -1,5 +1,6 @@
 # ====== Secrets ======
 .env
+.claude/settings.json
 
 # ====== Python ======
 __pycache__/
