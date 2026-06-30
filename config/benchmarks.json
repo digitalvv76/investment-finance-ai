@@ -1,0 +1,15 @@
+{
+  "benchmarks": {
+    "US": { "ticker": "^GSPC", "name": "S&P 500", "currency": "USD" },
+    "US_tech": { "ticker": "^IXIC", "name": "NASDAQ Composite", "currency": "USD" },
+    "US_blue": { "ticker": "^DJI", "name": "Dow Jones Industrial", "currency": "USD" },
+    "CN_large": { "ticker": "000300.SS", "name": "CSI 300", "currency": "CNY" },
+    "CN_composite": { "ticker": "000001.SS", "name": "Shanghai Composite", "currency": "CNY" },
+    "CN_shenzhen": { "ticker": "399001.SZ", "name": "Shenzhen Component", "currency": "CNY" },
+    "HK": { "ticker": "^HSI", "name": "Hang Seng Index", "currency": "HKD" },
+    "HK_tech": { "ticker": "^HSTECH", "name": "Hang Seng TECH Index", "currency": "HKD" },
+    "global": { "ticker": "ACWI", "name": "MSCI ACWI", "currency": "USD" },
+    "crypto": { "ticker": "BTC", "name": "Bitcoin", "currency": "USD" }
+  },
+  "defaultPortfolioBenchmark": "^GSPC"
+}

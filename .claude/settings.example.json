@@ -1,0 +1,59 @@
+{
+  "env": {
+    "FRED_API_KEY": "your_fred_api_key_here",
+    "ALPHA_VANTAGE_API_KEY": "your_alpha_vantage_key_here"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(date:*)",
+      "Bash(mkdir:*)",
+      "Bash(echo:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "WebSearch",
+      "WebFetch",
+      "Read(*/data/**)",
+      "Read(*/config/**)",
+      "Read(*/.claude/memory/**)",
+      "Write(*/data/**)",
+      "Write(*/config/**)",
+      "Write(*/.claude/memory/**)"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'mkdir -p .claude/logs && echo \"[Finance Agent] Session started at $(date -Iseconds)\" >> .claude/logs/session.log'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__stock-scanner__workspace_save_thesis",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'mkdir -p data/theses && echo \"$(date -Iseconds): Saving investment thesis for $ARGUMENTS\" >> data/audit.log'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__stock-scanner__workspace_save_thesis",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[Finance Agent] Investment thesis saved. Run /daily-briefing to incorporate into next briefing.\""
+          }
+        ]
+      }
+    ]
+  }
+}

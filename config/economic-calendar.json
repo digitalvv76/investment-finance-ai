@@ -1,0 +1,20 @@
+{
+  "regular_events": [
+    { "day": "first_friday", "time": "08:30", "event": "US Non-Farm Payrolls", "importance": "high" },
+    { "day": "mid_month_wed", "time": "08:30", "event": "US CPI", "importance": "high" },
+    { "day": "mid_month_thu", "time": "08:30", "event": "US PPI", "importance": "medium" },
+    { "day": "wednesday", "time": "10:30", "event": "EIA Crude Oil Inventories", "importance": "medium" },
+    { "day": "thursday", "time": "08:30", "event": "US Initial Jobless Claims", "importance": "medium" }
+  ],
+  "fomc_meetings_2026": [
+    "2026-01-28", "2026-03-18", "2026-05-06",
+    "2026-06-17", "2026-07-29", "2026-09-16",
+    "2026-11-04", "2026-12-16"
+  ],
+  "earnings_seasons": {
+    "Q1": "January (banks) / February-March (rest)",
+    "Q2": "April (banks) / May-June (rest)",
+    "Q3": "July (banks) / August-September (rest)",
+    "Q4": "October (banks) / November-December (rest)"
+  }
+}

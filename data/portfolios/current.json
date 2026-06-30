@@ -1,0 +1,24 @@
+{
+  "date": "2026-06-30",
+  "currency": "USD",
+  "holdings": [],
+  "cash": {
+    "USD": 50000.00,
+    "CNY": 0,
+    "HKD": 0
+  },
+  "targetAllocation": {
+    "US_equities": 50,
+    "CN_equities": 20,
+    "HK_equities": 10,
+    "crypto": 10,
+    "cash": 10
+  },
+  "constraints": {
+    "max_per_stock_pct": 5,
+    "max_per_etf_crypto_major_pct": 10,
+    "max_sector_concentration_pct": 30,
+    "min_cash_reserve_pct": 5,
+    "crypto_max_pct": 10
+  }
+}

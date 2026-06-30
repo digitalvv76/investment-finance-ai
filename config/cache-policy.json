@@ -1,0 +1,18 @@
+{
+  "ttl": {
+    "realtime_quote": 300,
+    "daily_ohlcv": 14400,
+    "historical_data": 86400,
+    "sec_filings": 604800,
+    "options_chain": 900,
+    "sentiment_data": 3600,
+    "fundamentals": 86400,
+    "insider_trades": 86400,
+    "institutional_holdings": 86400,
+    "economic_indicators": 86400,
+    "crypto_price": 300,
+    "forex_rate": 14400
+  },
+  "maxCacheSizeMB": 500,
+  "cacheDir": "data/cache"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "default",
+  "created": "2026-06-30T00:00:00Z",
+  "updated": "2026-06-30T00:00:00Z",
+  "tickers": {
+    "US": ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"],
+    "CN": ["600519", "000858", "300750", "601318"],
+    "HK": ["0700", "9988", "3690"],
+    "crypto": ["BTC", "ETH", "SOL"]
+  },
+  "indices": [
+    "^GSPC", "^IXIC", "^DJI",
+    "000001.SS", "399001.SZ", "000300.SS",
+    "^HSI", "^HSTECH"
+  ]
+}

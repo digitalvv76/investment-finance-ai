@@ -1,0 +1,38 @@
+{
+  "moving_averages": {
+    "short_term": [5, 10, 20],
+    "medium_term": [50, 60],
+    "long_term": [100, 200],
+    "default_combo": [5, 20, 50, 200]
+  },
+  "rsi": {
+    "period": 14,
+    "oversold": 30,
+    "overbought": 70,
+    "extreme_oversold": 20,
+    "extreme_overbought": 80
+  },
+  "macd": {
+    "fast": 12,
+    "slow": 26,
+    "signal": 9
+  },
+  "bollinger_bands": {
+    "period": 20,
+    "stddev": 2
+  },
+  "atr": {
+    "period": 14
+  },
+  "volume": {
+    "average_period": 20,
+    "unusual_multiplier": 2.0,
+    "extreme_multiplier": 3.0
+  },
+  "crypto_specific": {
+    "rsi_period": 14,
+    "volume_ma_period": 20,
+    "dominance_threshold_btc": 40,
+    "dominance_threshold_eth": 15
+  }
+}
