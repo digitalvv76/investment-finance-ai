@@ -2,6 +2,8 @@
 
 Claude Code 驱动的全能型投资金融智能体，覆盖全球市场的股票研究、量化策略和投资组合管理。
 
+🌐 **首页**: https://class1-cyan.vercel.app | 📂 **GitHub**: https://github.com/digitalvv76/investment-finance-ai | ⏰ **时钟**: https://class1-cyan.vercel.app/datetime
+
 ## 项目结构
 
 ```
@@ -12,7 +14,8 @@ class1/
 │   ├── memory/            # 跨技能状态共享
 │   │   ├── portfolio-state.md
 │   │   ├── watchlist-state.md
-│   │   └── active-signals.md
+│   │   ├── active-signals.md
+│   │   └── deployment-state.md
 │   └── skills/
 │       ├── stock-research.md       # 个股深度研究
 │       ├── quant-strategy.md       # 量化策略开发与回测
