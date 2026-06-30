@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/datetime", "destination": "/datetime.html" }
+  ],
+  "cleanUrls": true,
+  "trailingSlash": false
+}

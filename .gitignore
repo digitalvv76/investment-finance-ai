@@ -1,0 +1,48 @@
+# ====== Secrets ======
+.env
+
+# ====== Python ======
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env.py
+
+# ====== Node.js ======
+node_modules/
+npm-debug.log*
+
+# ====== OS ======
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# ====== Claude Code ======
+.claude/cache/
+.claude/sessions/
+.claude/shell-snapshots/
+.claude/tasks/
+.claude/backups/
+.claude/file-history/
+.claude/history.jsonl
+.claude/telemetry/
+.claude/logs/
+.claude/plans/
+
+# ====== Project Data (generated) ======
+data/cache/
+data/alerts.log
+data/audit.log
+data/theses/
+
+# ====== Scripts ======
+scripts/__pycache__/
+scripts/*.pyc
+.pytest_cache/
+
+# ====== IDE ======
+.vscode/
+.idea/
+*.swp
+*.swo
