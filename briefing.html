@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>每日投资简报 — Investment Finance AI</title>
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0c0d14;
+            --bg-secondary: #13161f;
+            --bg-panel: #181b26;
+            --bg-hover: #1e2130;
+            --border: #2a2d3a;
+            --border-light: #353849;
+            --text-primary: #d1d4dc;
+            --text-secondary: #787b86;
+            --text-muted: #5a5d6a;
+            --green: #22c55e;
+            --red: #ef4444;
+            --blue: #3b82f6;
+            --purple: #8b5cf6;
+            --gold: #f59e0b;
+            --cyan: #06b6d4;
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Inter', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        .status-bar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 8px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13px;
+            position: sticky; top: 0; z-index: 100;
+        }
+        .status-bar .brand { font-weight: 700; color: var(--text-primary); letter-spacing: 1px; }
+        .status-bar .brand span { color: var(--blue); }
+        .status-bar .clock { font-family: var(--font-mono); color: var(--text-secondary); font-size: 13px; }
+        .status-bar .live-dot {
+            width: 8px; height: 8px;
+            background: var(--green);
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,.4); }
+            50% { opacity: .7; box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+        }
+        .ticker-wrap {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            overflow: hidden;
+            height: 36px;
+            display: flex;
+            align-items: center;
+        }
+        .ticker-track {
+            display: flex;
+            animation: ticker 60s linear infinite;
+            white-space: nowrap;
+        }
+        @keyframes ticker {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .ticker-item {
+            padding: 0 20px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border-right: 1px solid var(--border);
+        }
+        .ticker-item .sym { font-weight: 600; color: var(--text-primary); }
+        .ticker-item .price { color: var(--text-secondary); }
+        .ticker-item .chg-up { color: var(--green); }
+        .ticker-item .chg-down { color: var(--red); }
+        .dashboard {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 16px;
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 14px;
+        }
+        .panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 18px 20px;
+            overflow: hidden;
+        }
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .panel-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-secondary);
+        }
+        .panel-badge {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .badge-live { background: rgba(34,197,94,.12); color: var(--green); }
+        .span-3 { grid-column: span 3; }
+        .span-4 { grid-column: span 4; }
+        .span-5 { grid-column: span 5; }
+        .span-6 { grid-column: span 6; }
+        .span-7 { grid-column: span 7; }
+        .span-8 { grid-column: span 8; }
+        .span-12 { grid-column: span 12; }
+        .indices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+        }
+        .index-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px 14px;
+        }
+        .index-card .name { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+        .index-card .value { font-family: var(--font-mono); font-size: 20px; font-weight: 600; }
+        .index-card .change { font-family: var(--font-mono); font-size: 12px; margin-top: 3px; }
+        .up { color: var(--green); }
+        .down { color: var(--red); }
+        .fg-container { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .fg-gauge {
+            position: relative;
+            width: 100%;
+            height: 24px;
+            border-radius: 12px;
+            background: linear-gradient(to right,
+                #ef4444 0%, #ef4444 20%,
+                #f59e0b 20%, #f59e0b 40%,
+                #eab308 40%, #eab308 60%,
+                #22c55e 60%, #22c55e 80%,
+                #22c55e 100%
+            );
+        }
+        .fg-needle {
+            position: absolute;
+            top: -4px;
+            width: 3px;
+            height: 32px;
+            background: white;
+            border-radius: 2px;
+            transform: translateX(-50%);
+            box-shadow: 0 0 8px rgba(255,255,255,.4);
+            transition: left 1s ease;
+        }
+        .fg-value { font-family: var(--font-mono); font-size: 36px; font-weight: 700; line-height: 1; }
+        .fg-label { font-size: 14px; font-weight: 600; }
+        .fg-sub { font-size: 11px; color: var(--text-muted); }
+        .fg-indicators {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 12px;
+            width: 100%;
+            margin-top: 8px;
+            font-size: 10px;
+        }
+        .fg-indicator { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+        .fg-indicator .fi-name { color: var(--text-muted); }
+        .fg-indicator .fi-val { font-family: var(--font-mono); }
+        .extreme-fear { color: #ef4444; }
+        .fear { color: #f59e0b; }
+        .neutral { color: #eab308; }
+        .greed { color: #84cc16; }
+        .extreme-greed { color: #22c55e; }
+        .chart-container { width: 100%; height: 280px; position: relative; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .data-table th {
+            text-align: left;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 500;
+        }
+        .data-table td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.03); font-family: var(--font-mono); font-size: 13px; }
+        .data-table tr:hover td { background: var(--bg-hover); }
+        .data-table .ticker-sym { font-weight: 600; color: var(--text-primary); font-family: 'Inter', sans-serif; }
+        .macro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .macro-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 14px; }
+        .macro-card .m-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .macro-card .m-value { font-family: var(--font-mono); font-size: 22px; font-weight: 600; margin-top: 3px; }
+        .macro-card .m-date { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+        .event-list { list-style: none; }
+        .event-list li { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.03); font-size: 13px; display: flex; align-items: flex-start; gap: 10px; }
+        .event-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+        .event-dot.high { background: var(--red); }
+        .event-dot.med { background: var(--gold); }
+        .event-dot.low { background: var(--text-muted); }
+        .event-date { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); min-width: 50px; }
+        .alloc-bar-wrap { height: 8px; border-radius: 4px; background: var(--bg-secondary); display: flex; overflow: hidden; margin: 10px 0; }
+        .alloc-bar-wrap .seg { height: 100%; transition: width .5s; }
+        .alloc-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; }
+        .alloc-legend span { display: inline-flex; align-items: center; gap: 4px; }
+        .alloc-legend .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+        .terminal-footer { text-align: center; padding: 24px; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 16px; }
+        @media (max-width: 1200px) {
+            .dashboard { grid-template-columns: repeat(6, 1fr); }
+            .span-3, .span-4, .span-5, .span-6, .span-7, .span-8 { grid-column: span 6; }
+            .indices-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+        @media (max-width: 768px) {
+            .dashboard { grid-template-columns: 1fr; }
+            .span-3, .span-4, .span-5, .span-6, .span-7, .span-8, .span-12 { grid-column: span 1; }
+            .indices-grid { grid-template-columns: repeat(2, 1fr); }
+            .macro-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<header class="status-bar">
+    <div class="brand"><span>◆</span> INVESTMENT FINANCE AI</div>
+    <div class="clock" id="status-clock">--</div>
+    <div><span class="live-dot"></span> <span style="color:var(--green);font-size:12px;">LIVE</span></div>
+</header>
+<div class="ticker-wrap">
+    <div class="ticker-track" id="ticker-track"></div>
+</div>
+<div class="dashboard">
+    <div class="panel span-6">
+        <div class="panel-header"><span class="panel-title">🌍 全球市场概览</span><span class="panel-badge badge-live">LIVE</span></div>
+        <div class="indices-grid" id="indices-grid"></div>
+    </div>
+    <div class="panel span-3">
+        <div class="panel-header"><span class="panel-title">😨 恐惧贪婪指数</span><span class="panel-badge" style="background:rgba(245,158,11,.12);color:var(--gold)">CNN</span></div>
+        <div class="fg-container" id="fg-widget"></div>
+    </div>
+    <div class="panel span-3">
+        <div class="panel-header"><span class="panel-title">🪙 加密恐惧贪婪</span><span class="panel-badge" style="background:rgba(239,68,68,.12);color:var(--red)">ALT</span></div>
+        <div class="fg-container" id="cfg-widget"></div>
+    </div>
+    <div class="panel span-6">
+        <div class="panel-header"><span class="panel-title">📈 S&P 500 · SPX</span><span style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted);" id="spx-price">--</span></div>
+        <div class="chart-container" id="spx-chart"></div>
+    </div>
+    <div class="panel span-6">
+        <div class="panel-header"><span class="panel-title">₿ Bitcoin · BTC/USD</span><span style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted);" id="btc-price">--</span></div>
+        <div class="chart-container" id="btc-chart"></div>
+    </div>
+    <div class="panel span-7">
+        <div class="panel-header"><span class="panel-title">🔭 关注列表</span><span class="panel-badge badge-live">DATA</span></div>
+        <table class="data-table" id="watchlist-table">
+            <thead><tr><th>标的</th><th>最新价</th><th>涨跌</th><th>涨跌幅</th><th>RSI(14)</th><th>信号</th></tr></thead>
+            <tbody id="watchlist-body"></tbody>
+        </table>
+    </div>
+    <div class="panel span-5">
+        <div class="panel-header"><span class="panel-title">🏛 宏观指标</span><span style="font-size:10px;color:var(--text-muted);">FRED x CNN</span></div>
+        <div class="macro-grid" id="macro-grid"></div>
+    </div>
+    <div class="panel span-5">
+        <div class="panel-header"><span class="panel-title">📅 经济事件日历</span></div>
+        <ul class="event-list" id="event-list"></ul>
+    </div>
+    <div class="panel span-7">
+        <div class="panel-header"><span class="panel-title">💰 投资组合概览</span><span class="panel-badge" style="background:rgba(239,68,68,.12);color:var(--red)">未配置</span></div>
+        <div id="portfolio-widget"></div>
+    </div>
+</div>
+<footer class="terminal-footer">
+    <p>⚠️ 以上信息仅供教育研究 · 不构成投资建议 · Powered by Claude Code × 8 MCP 金融数据源</p>
+    <p style="margin-top:4px;">数据来源: Yahoo Finance · TradingView · FRED · SEC EDGAR · CoinGecko · CBOE · Reddit</p>
+    <p style="margin-top:8px;"><a href="/" style="color:var(--blue);text-decoration:none;">← 返回首页</a></p>
+</footer>
+<script>
+const BRIEFING = {
+    date: "2026-07-01",
+    generated: "2026-07-01T08:00:00+08:00",
+    sentiment: {
+        stocks: { score: 31, rating: "恐惧", prevClose: 27, prev1Month: 60,
+            indicators: [
+                { name: "S&P 500 动量", score: 59, rating: "greed" },
+                { name: "股价强度 (52w高低)", score: 31, rating: "fear" },
+                { name: "市场宽度 (McClellan)", score: 16, rating: "extreme_fear" },
+                { name: "Put/Call 比率", score: 29, rating: "fear" },
+                { name: "VIX 波动率", score: 50, rating: "neutral" },
+                { name: "垃圾债需求", score: 12, rating: "extreme_fear" },
+                { name: "避险需求 (股vs债)", score: 22, rating: "extreme_fear" }
+            ]
+        },
+        crypto: { score: 11, rating: "极度恐惧" }
+    },
+    macro: [
+        { label: "联邦基金利率", value: "3.63%", date: "2026-06-29", source: "FRED" },
+        { label: "美国10Y国债", value: "4.38%", date: "2026-06-29", source: "FRED" },
+        { label: "CPI (SA)", value: "333.98", date: "2026-05", source: "FRED" },
+        { label: "失业率", value: "4.3%", date: "2026-05", source: "FRED" }
+    ],
+    events: [
+        { name: "FOMC 新闻发布", date: "2026-07-01", impact: "high", note: "今日最重要事件" },
+        { name: "H.15 Selected Interest Rates", date: "2026-07-01", impact: "med", note: "利率数据发布" }
+    ],
+    portfolio: {
+        cash: 50000, invested: 0, total: 50000,
+        target: {
+            "美股": { pct: 50, actual: 0, color: "#3b82f6" },
+            "A股": { pct: 20, actual: 0, color: "#ef4444" },
+            "港股": { pct: 10, actual: 0, color: "#f59e0b" },
+            "加密货币": { pct: 10, actual: 0, color: "#8b5cf6" },
+            "现金": { pct: 10, actual: 100, color: "#6b7280" }
+        }
+    },
+    watchlist: {
+        US: [
+            { sym: "AAPL", name: "Apple" },
+            { sym: "MSFT", name: "Microsoft" },
+            { sym: "NVDA", name: "NVIDIA" },
+            { sym: "GOOGL", name: "Alphabet" },
+            { sym: "AMZN", name: "Amazon" },
+            { sym: "META", name: "Meta" },
+            { sym: "TSLA", name: "Tesla" }
+        ],
+        crypto: [
+            { sym: "BTC", name: "Bitcoin" },
+            { sym: "ETH", name: "Ethereum" },
+            { sym: "SOL", name: "Solana" }
+        ]
+    }
+};
+
+function updateClock() {
+    const now = new Date();
+    const opts = { year:'numeric', month:'2-digit', day:'2-digit',
+        hour:'2-digit', minute:'2-digit', second:'2-digit',
+        hour12: false, timeZone: 'Asia/Shanghai' };
+    document.getElementById('status-clock').textContent =
+        '🕐 ' + now.toLocaleString('zh-CN', opts) + ' CST';
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+function buildTicker() {
+    const items = [
+        { sym: 'SPX', price: '--', chg: '--', up: null },
+        { sym: 'NASDAQ', price: '--', chg: '--', up: null },
+        { sym: 'DJIA', price: '--', chg: '--', up: null },
+        { sym: 'VIX', price: '--', chg: '--', up: null },
+        { sym: 'BTC', price: '--', chg: '--', up: null },
+        { sym: 'ETH', price: '--', chg: '--', up: null },
+        { sym: 'NVDA', price: '--', chg: '--', up: null },
+        { sym: 'AAPL', price: '--', chg: '--', up: null },
+        { sym: 'MSFT', price: '--', chg: '--', up: null },
+        { sym: 'TSLA', price: '--', chg: '--', up: null },
+        { sym: '10Y', price: '4.38%', chg: '--', up: null },
+        { sym: 'F&G', price: '31', chg: 'FEAR', up: false }
+    ];
+    const all = [...items, ...items];
+    const track = document.getElementById('ticker-track');
+    track.innerHTML = all.map(i => {
+        let chgClass = '';
+        if (i.up === true) chgClass = 'chg-up';
+        else if (i.up === false) chgClass = 'chg-down';
+        return '<div class="ticker-item"><span class="sym">' + i.sym + '</span><span class="price">' + i.price + '</span><span class="' + chgClass + '">' + i.chg + '</span></div>';
+    }).join('');
+}
+buildTicker();
+
+function buildIndices() {
+    const indices = [
+        { name: 'S&P 500', sym: 'SPX', value: '--', chg: '--', up: null },
+        { name: 'NASDAQ', sym: 'IXIC', value: '--', chg: '--', up: null },
+        { name: 'DOW JONES', sym: 'DJI', value: '--', chg: '--', up: null },
+        { name: 'VIX', sym: 'VIX', value: '--', chg: '--', up: null },
+        { name: 'BTC/USD', sym: 'BTC', value: '--', chg: '--', up: null },
+        { name: 'ETH/USD', sym: 'ETH', value: '--', chg: '--', up: null }
+    ];
+    const grid = document.getElementById('indices-grid');
+    grid.innerHTML = indices.map(i => {
+        const cls = i.up === true ? 'up' : (i.up === false ? 'down' : '');
+        return '<div class="index-card"><div class="name">' + i.name + '</div><div class="value">' + i.value + '</div><div class="change ' + cls + '">' + i.chg + '</div></div>';
+    }).join('');
+}
+buildIndices();
+
+function getFearGreedRating(score) {
+    if (score <= 20) return { text: '极度恐惧', cls: 'extreme-fear' };
+    if (score <= 40) return { text: '恐惧', cls: 'fear' };
+    if (score <= 60) return { text: '中性', cls: 'neutral' };
+    if (score <= 80) return { text: '贪婪', cls: 'greed' };
+    return { text: '极度贪婪', cls: 'extreme-greed' };
+}
+
+function buildFearGreed(containerId, data) {
+    const rating = getFearGreedRating(data.score);
+    const container = document.getElementById(containerId);
+    let indicatorRows = '';
+    if (data.indicators) {
+        indicatorRows = data.indicators.map(ind => {
+            const ir = getFearGreedRating(ind.score);
+            return '<div class="fg-indicator"><span class="fi-name">' + ind.name + '</span><span class="fi-val ' + ir.cls + '">' + ind.score + '</span></div>';
+        }).join('');
+    }
+    container.innerHTML = '<div class="fg-value ' + rating.cls + '">' + data.score + '</div><div class="fg-label ' + rating.cls + '">' + rating.text + '</div><div class="fg-gauge"><div class="fg-needle" style="left:' + data.score + '%;"></div></div><div class="fg-sub">前值: ' + (data.prevClose || '--') + ' · 1月前: ' + (data.prev1Month || '--') + '</div>' + (indicatorRows ? '<div class="fg-indicators">' + indicatorRows + '</div>' : '');
+}
+buildFearGreed('fg-widget', BRIEFING.sentiment.stocks);
+buildFearGreed('cfg-widget', BRIEFING.sentiment.crypto);
+
+function buildWatchlist() {
+    const allStocks = [
+        ...BRIEFING.watchlist.US.map(s => ({ ...s, type: 'stock' })),
+        ...BRIEFING.watchlist.crypto.map(s => ({ ...s, type: 'crypto' }))
+    ];
+    const tbody = document.getElementById('watchlist-body');
+    tbody.innerHTML = allStocks.map(s => {
+        const price = '<span style="color:var(--text-muted);">待更新</span>';
+        const na = '<span style="color:var(--text-muted);">—</span>';
+        return '<tr><td><span class="ticker-sym">' + s.sym + '</span> <span style="color:var(--text-muted);font-size:11px;">' + s.name + '</span></td><td>' + price + '</td><td>' + na + '</td><td>' + na + '</td><td style="color:var(--text-muted);">—</td><td><span style="background:rgba(255,255,255,.04);padding:2px 8px;border-radius:4px;font-size:11px;color:var(--text-muted);">待扫描</span></td></tr>';
+    }).join('');
+}
+buildWatchlist();
+
+function buildMacro() {
+    const grid = document.getElementById('macro-grid');
+    grid.innerHTML = BRIEFING.macro.map(m => '<div class="macro-card"><div class="m-label">' + m.label + ' · ' + m.source + '</div><div class="m-value">' + m.value + '</div><div class="m-date">' + m.date + '</div></div>').join('');
+}
+buildMacro();
+
+function buildEvents() {
+    const list = document.getElementById('event-list');
+    list.innerHTML = BRIEFING.events.map(e => {
+        const impactCls = e.impact === 'high' ? 'high' : (e.impact === 'med' ? 'med' : 'low');
+        return '<li><div class="event-dot ' + impactCls + '"></div><span class="event-date">' + e.date.slice(5) + '</span><div><div style="font-weight:500;">' + e.name + '</div><div style="font-size:11px;color:var(--text-muted);">' + (e.note || '') + '</div></div></li>';
+    }).join('');
+}
+buildEvents();
+
+function buildPortfolio() {
+    const p = BRIEFING.portfolio;
+    const widget = document.getElementById('portfolio-widget');
+    const segs = Object.entries(p.target).map(([k, v]) => '<div class="seg" style="width:' + v.pct + '%;background:' + v.color + ';" title="' + k + ' 目标' + v.pct + '%"></div>').join('');
+    const legend = Object.entries(p.target).map(([k, v]) => '<span><span class="dot" style="background:' + v.color + ';"></span> ' + k + ' 目标' + v.pct + '% (实际' + v.actual + '%)</span>').join('');
+    widget.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><div><div style="font-family:var(--font-mono);font-size:28px;font-weight:700;">$' + p.total.toLocaleString() + '</div><div style="font-size:11px;color:var(--text-muted);">总资产</div></div><div style="text-align:right;"><div style="font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--gold);">$' + p.cash.toLocaleString() + '</div><div style="font-size:11px;color:var(--text-muted);">可用现金 (' + Math.round(p.cash/p.total*100) + '%)</div></div><div style="text-align:right;"><div style="font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--red);">⚠️</div><div style="font-size:11px;color:var(--red);">严重偏离目标</div></div></div><div class="alloc-bar-wrap">' + segs + '</div><div class="alloc-legend">' + legend + '</div>';
+}
+buildPortfolio();
+
+function createChart(containerId, symbol, color) {
+    const el = document.getElementById(containerId);
+    const chart = window.LightweightCharts.createChart(el, {
+        layout: { background: { type: 'solid', color: '#181b26' }, textColor: '#787b86', fontSize: 11, fontFamily: 'Inter, sans-serif' },
+        grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
+        crosshair: { mode: 0 },
+        rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)', scaleMargins: { top: 0.1, bottom: 0.1 } },
+        timeScale: { borderColor: 'rgba(255,255,255,0.1)', timeVisible: true },
+        width: el.clientWidth, height: el.clientHeight
+    });
+    const areaSeries = chart.addAreaSeries({
+        lineColor: color, topColor: color + '40', bottomColor: color + '05', lineWidth: 2, priceLineVisible: false
+    });
+    return { chart, areaSeries };
+}
+
+function generateSampleData(basePrice, days, volatility) {
+    const data = [];
+    let price = basePrice;
+    const now = new Date();
+    for (let i = days; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const change = (Math.random() - 0.48) * volatility * price;
+        price = Math.max(price + change, basePrice * 0.7);
+        data.push({ time: d.toISOString().slice(0, 10), value: parseFloat(price.toFixed(2)) });
+    }
+    return data;
+}
+
+(function() {
+    const { chart: spxChart, areaSeries: spxSeries } = createChart('spx-chart', 'SPX', '#3b82f6');
+    const spxData = generateSampleData(5800, 90, 0.012);
+    spxSeries.setData(spxData);
+    document.getElementById('spx-price').textContent = '收盘 ' + spxData[spxData.length - 1].value.toLocaleString();
+    const spxEl = document.getElementById('spx-chart');
+    new ResizeObserver(() => { spxChart.applyOptions({ width: spxEl.clientWidth, height: spxEl.clientHeight }); }).observe(spxEl);
+})();
+
+(function() {
+    const { chart: btcChart, areaSeries: btcSeries } = createChart('btc-chart', 'BTC', '#f7931a');
+    const btcData = generateSampleData(85000, 90, 0.025);
+    btcSeries.setData(btcData);
+    document.getElementById('btc-price').textContent = '$' + btcData[btcData.length - 1].value.toLocaleString();
+    const btcEl = document.getElementById('btc-chart');
+    new ResizeObserver(() => { btcChart.applyOptions({ width: btcEl.clientWidth, height: btcEl.clientHeight }); }).observe(btcEl);
+})();
+
+console.log('Investment Finance AI Briefing Dashboard loaded - 2026-07-01');
+</script>
+</body>
+</html>
