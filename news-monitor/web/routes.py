@@ -126,7 +126,6 @@ async def post_feedback(request: web.Request) -> web.Response:
     fb = FeedbackRecord(news_id=int(news_id), reaction=reaction)
     fid = db.insert_feedback(fb)
 
-    # Trigger adaptation cycle in background
     if learner and reaction in ("content_good", "thumbs_up", "thumbs_down"):
         asyncio.create_task(_run_adaptation(learner))
 
@@ -196,7 +195,6 @@ async def post_training_url(request: web.Request) -> web.Response:
 
     title = body.get("title", "").strip()
 
-    # Run in background — URL fetch + LLM summarization can take 10-30s
     async def _ingest():
         try:
             doc_id = await trainer.ingest_url(url, title=title)
@@ -226,6 +224,45 @@ async def post_training_text(request: web.Request) -> web.Response:
     source = body.get("source", "web-dashboard").strip()
     doc_id = trainer.ingest_text(text, title=title, source=source)
     return _json({"id": doc_id, "ok": True})
+
+
+async def post_training_file(request: web.Request) -> web.Response:
+    """Upload a .docx or .pdf file for training."""
+    trainer = _get_trainer(request)
+    if not trainer:
+        return _error("Trainer not available", status=503)
+
+    reader = await request.multipart()
+    field = await reader.next()
+    if not field or field.name != "file":
+        return _error("Missing 'file' field in multipart form")
+
+    filename = field.filename or "upload"
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    if ext not in ('docx', 'pdf'):
+        return _error(f"Unsupported file type: .{ext}. Use .docx or .pdf")
+
+    import tempfile, os as _os
+    suffix = f".{ext}"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        while True:
+            chunk = await field.read_chunk(65536)
+            if not chunk:
+                break
+            tmp.write(chunk)
+        tmp_path = tmp.name
+
+    try:
+        result = await trainer.ingest_file(tmp_path, filename=filename)
+        return _json(result)
+    except Exception as e:
+        logger.error("File ingestion failed: %s", e)
+        return _error(f"Ingestion failed: {str(e)}")
+    finally:
+        try:
+            _os.unlink(tmp_path)
+        except Exception:
+            pass
 
 
 async def delete_training_doc(request: web.Request) -> web.Response:
@@ -352,7 +389,6 @@ async def sse_events(request: web.Request) -> web.StreamResponse:
     sse_mgr = _get_sse(request)
     cid, queue = await sse_mgr.subscribe()
 
-    # Initial heartbeat
     await response.write(b": ok\n\n")
 
     try:
@@ -361,7 +397,6 @@ async def sse_events(request: web.Request) -> web.StreamResponse:
                 message = await asyncio.wait_for(queue.get(), timeout=30.0)
                 await response.write(message.encode("utf-8"))
             except asyncio.TimeoutError:
-                # Keepalive ping
                 await response.write(b": ping\n\n")
     except (ConnectionResetError, ConnectionAbortedError, asyncio.CancelledError):
         pass
