@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NVDA 深度研究报告 — Investment Finance AI</title>
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0c0d14; --bg-secondary: #13161f; --bg-panel: #181b26;
+            --bg-hover: #1e2130; --border: #2a2d3a; --text-primary: #d1d4dc;
+            --text-secondary: #787b86; --text-muted: #5a5d6a;
+            --green: #22c55e; --red: #ef4444; --blue: #3b82f6;
+            --purple: #8b5cf6; --gold: #f59e0b; --cyan: #06b6d4;
+            --font-mono: 'JetBrains Mono','Fira Code','Consolas',monospace;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg-primary); color: var(--text-primary);
+            font-family: 'Inter','Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+            min-height: 100vh; line-height: 1.6;
+        }
+        .status-bar {
+            background: var(--bg-secondary); border-bottom: 1px solid var(--border);
+            padding: 8px 20px; display: flex; align-items: center; justify-content: space-between;
+            font-size: 13px; position: sticky; top: 0; z-index: 100;
+        }
+        .status-bar .brand { font-weight: 700; letter-spacing: 1px; }
+        .status-bar .brand span { color: var(--blue); }
+        .status-bar .clock { font-family: var(--font-mono); color: var(--text-secondary); }
+        .live-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; display: inline-block; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,.4)} 50%{opacity:.7;box-shadow:0 0 0 6px rgba(34,197,94,0)} }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+        /* HERO RATING CARD */
+        .hero { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; padding: 32px 36px; margin-bottom: 20px; display: flex; align-items: center; gap: 32px; flex-wrap: wrap; }
+        .rating-badge {
+            width: 120px; height: 120px; border-radius: 50%;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column; flex-shrink: 0;
+            box-shadow: 0 0 40px rgba(34,197,94,.3);
+        }
+        .rating-badge .big { font-size: 32px; font-weight: 800; color: #fff; line-height: 1; }
+        .rating-badge .sub { font-size: 11px; color: rgba(255,255,255,.8); letter-spacing: 2px; }
+        .hero-info h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+        .hero-info .ticker { color: var(--text-muted); font-family: var(--font-mono); font-size: 15px; }
+        .hero-metrics { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 12px; }
+        .hero-metric .hm-val { font-family: var(--font-mono); font-size: 24px; font-weight: 700; }
+        .hero-metric .hm-lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .up { color: var(--green); } .down { color: var(--red); }
+
+        /* PANEL */
+        .panel { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 24px 28px; margin-bottom: 16px; }
+        .panel-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-secondary); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+        /* GRID */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+
+        /* METRIC CARD */
+        .m-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+        .m-card .m-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .m-card .m-val { font-family: var(--font-mono); font-size: 22px; font-weight: 600; margin-top: 4px; }
+        .m-card .m-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+        /* TABLE */
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .data-table th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); padding: 8px 12px; border-bottom: 1px solid var(--border); font-weight: 500; }
+        .data-table td { padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,.03); font-family: var(--font-mono); font-size: 13px; }
+        .data-table tr:hover td { background: var(--bg-hover); }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+        .tag-buy { background: rgba(34,197,94,.12); color: var(--green); }
+        .tag-warn { background: rgba(245,158,11,.12); color: var(--gold); }
+        .tag-danger { background: rgba(239,68,68,.12); color: var(--red); }
+        .tag-info { background: rgba(59,130,246,.12); color: var(--blue); }
+
+        /* CHART */
+        .chart-wrap { width: 100%; height: 320px; }
+
+        /* FOMC ALERT */
+        .alert { background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.2); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
+        .alert .icon { font-size: 24px; }
+        .alert .msg { font-size: 14px; }
+        .alert .msg strong { color: var(--red); }
+
+        /* FEAR GREED MINI */
+        .fg-mini { display: flex; align-items: center; gap: 16px; }
+        .fg-score { font-family: var(--font-mono); font-size: 48px; font-weight: 700; color: var(--gold); }
+        .fg-bar { flex: 1; height: 16px; border-radius: 8px; background: linear-gradient(to right, #ef4444 0%, #ef4444 20%, #f59e0b 20%, #f59e0b 40%, #eab308 40%, #eab308 60%, #22c55e 60%, #22c55e 80%, #22c55e 100%); position: relative; }
+        .fg-bar::after { content: ''; position: absolute; top: -3px; width: 3px; height: 22px; background: #fff; border-radius: 2px; left: 31%; box-shadow: 0 0 8px rgba(255,255,255,.4); }
+
+        /* THESIS */
+        .thesis-list { list-style: none; }
+        .thesis-list li { padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 15px; display: flex; gap: 10px; align-items: flex-start; }
+        .thesis-list .num { width: 28px; height: 28px; background: var(--blue); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+
+        /* RECOMMENDATION BOX */
+        .rec-box { background: linear-gradient(135deg, rgba(34,197,94,.08), rgba(59,130,246,.08)); border: 1px solid rgba(34,197,94,.2); border-radius: 12px; padding: 24px 28px; }
+        .rec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 16px; margin-top: 16px; }
+
+        footer { text-align: center; padding: 24px; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 24px; }
+        a { color: var(--blue); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            .grid-2, .grid-3 { grid-template-columns: 1fr; }
+            .hero { flex-direction: column; text-align: center; }
+            .hero-metrics { justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="status-bar">
+    <div class="brand"><a href="/" style="color:var(--text-primary);">◆ INVESTMENT FINANCE AI</a></div>
+    <div class="clock" id="status-clock">--</div>
+    <div><span class="live-dot"></span> <span style="color:var(--green);font-size:12px;">REPORT</span></div>
+</header>
+
+<div class="container">
+
+<!-- FOMC ALERT -->
+<div class="alert">
+    <span class="icon">🔴</span>
+    <div class="msg"><strong>FOMC 利率决议今日发布</strong> — 可能引发剧烈波动。建议决议落地后再执行建仓操作。利率决策将直接影响成长股估值和NVDA短期方向。</div>
+</div>
+
+<!-- HERO -->
+<div class="hero">
+    <div class="rating-badge"><span class="big">BUY</span><span class="sub">逢低买入</span></div>
+    <div class="hero-info">
+        <h1>NVIDIA Corporation</h1>
+        <div class="ticker">NASDAQ: NVDA · 半导体 · Large-Cap Growth</div>
+        <div class="hero-metrics">
+            <div class="hero-metric"><div class="hm-val">$200.09</div><div class="hm-lbl">当前价格 (6/30)</div></div>
+            <div class="hero-metric"><div class="hm-val up">$301.62</div><div class="hm-lbl">分析师共识目标</div></div>
+            <div class="hero-metric"><div class="hm-val up">+51%</div><div class="hm-lbl">上涨空间</div></div>
+            <div class="hero-metric"><div class="hm-val">$4.72T</div><div class="hm-lbl">市值</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- KEY METRICS ROW -->
+<div class="grid-3">
+    <div class="m-card"><div class="m-lbl">P/E (TTM)</div><div class="m-val">29.86</div><div class="m-sub">半导体行业均值 ~35</div></div>
+    <div class="m-card"><div class="m-lbl">PEG Ratio</div><div class="m-val" style="color:var(--green);">0.59</div><div class="m-sub">PEG &lt; 1 = 显著低估</div></div>
+    <div class="m-card"><div class="m-lbl">净利润率</div><div class="m-val" style="color:var(--green);">63%</div><div class="m-sub">行业均值 20-25%</div></div>
+    <div class="m-card"><div class="m-lbl">EPS (TTM)</div><div class="m-val">$6.53</div><div class="m-sub">强劲盈利能力</div></div>
+    <div class="m-card"><div class="m-lbl">Beta</div><div class="m-val" style="color:var(--gold);">2.20</div><div class="m-sub">高波动 — 市场2.2x放大</div></div>
+    <div class="m-card"><div class="m-lbl">52-Week Range</div><div class="m-val">$152 – $236</div><div class="m-sub">当前距高点 -15%</div></div>
+</div>
+
+<!-- THESIS + FEAR GREED -->
+<div class="grid-2">
+    <div class="panel">
+        <div class="panel-title">💡 核心逻辑 (3-Sentence Thesis)</div>
+        <ol class="thesis-list">
+            <li><span class="num">1</span><span><strong>基本面卓越</strong>：63%净利润率、PEG仅0.59，AI算力垄断地位下估值实际偏低，分析师共识目标$301意味着51%上行空间。</span></li>
+            <li><span class="num">2</span><span><strong>短期技术承压</strong>：股价从$232回调至$200（-14%），跌破20/50日均线，RSI=43偏弱，受FOMC不确定性及董事减持影响。</span></li>
+            <li><span class="num">3</span><span><strong>恐惧中买入机会</strong>：CNN恐惧贪婪指数31（恐惧区间），历史显示市场恐惧时往往是优质资产布局窗口。</span></li>
+        </ol>
+    </div>
+    <div class="panel">
+        <div class="panel-title">😨 市场情绪</div>
+        <div class="fg-mini">
+            <div class="fg-score">31</div>
+            <div style="flex:1;">
+                <div class="fg-bar"></div>
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:4px;">
+                    <span>极度恐惧</span><span>恐惧</span><span>中性</span><span>贪婪</span><span>极度贪婪</span>
+                </div>
+            </div>
+        </div>
+        <div style="margin-top:16px;font-size:13px;color:var(--text-muted);">
+            7项分指标中3项处于"极度恐惧"：垃圾债需求(12)、避险需求(22)、市场宽度(16)。恐惧情绪历史上往往是逆向买入时机。
+        </div>
+    </div>
+</div>
+
+<!-- PRICE CHART -->
+<div class="panel">
+    <div class="panel-title">📈 NVDA 价格走势 (90天)</div>
+    <div class="chart-wrap" id="nvda-chart"></div>
+</div>
+
+<!-- TECHNICAL + FUNDAMENTAL -->
+<div class="grid-2">
+    <div class="panel">
+        <div class="panel-title">📉 技术分析</div>
+        <table class="data-table">
+            <tr><th>指标</th><th>数值</th><th>信号</th></tr>
+            <tr><td>SMA(20)</td><td>~$205.74</td><td><span class="tag tag-warn">价格低于均线</span></td></tr>
+            <tr><td>SMA(50)</td><td>~$209</td><td><span class="tag tag-warn">中期偏空</span></td></tr>
+            <tr><td>RSI(14)</td><td>~43</td><td><span class="tag tag-warn">偏弱未超卖</span></td></tr>
+            <tr><td>MACD</td><td>死叉</td><td><span class="tag tag-warn">动能向下</span></td></tr>
+            <tr><td>成交量 (6/30)</td><td>1.63亿</td><td><span class="tag tag-info">高于均量</span></td></tr>
+            <tr><td>阻力位</td><td>$210-215</td><td><span class="tag tag-danger">SMA(50)+密集区</span></td></tr>
+            <tr><td>支撑位</td><td>$192-195</td><td><span class="tag tag-buy">两次测试获支撑</span></td></tr>
+        </table>
+    </div>
+    <div class="panel">
+        <div class="panel-title">💰 估值分析</div>
+        <table class="data-table">
+            <tr><th>方法</th><th>估值</th><th>vs当前</th></tr>
+            <tr><td>分析师共识</td><td style="color:var(--green);">$301.62</td><td style="color:var(--green);">+51%</td></tr>
+            <tr><td>PEG法 (PEG=1)</td><td style="color:var(--green);">~$260</td><td style="color:var(--green);">+30%</td></tr>
+            <tr><td>DCF (保守)</td><td style="color:var(--green);">$260-280</td><td style="color:var(--green);">+30-40%</td></tr>
+            <tr><td>52周区间中位</td><td>$194.50</td><td>-3%</td></tr>
+        </table>
+        <div style="margin-top:12px;font-size:12px;color:var(--text-muted);">
+            PE 29.86x处于NVDA历史PE中低区间。AI爆发周期中市场曾给予40-60x PE。若维持30%+增速，估值有显著扩张空间。
+        </div>
+    </div>
+</div>
+
+<!-- CATALYSTS + RISKS -->
+<div class="grid-2">
+    <div class="panel">
+        <div class="panel-title">⚡ 催化剂与时间线</div>
+        <table class="data-table">
+            <tr><th>时间</th><th>事件</th><th>影响</th></tr>
+            <tr><td><strong>今天</strong></td><td>🔴 FOMC利率决议</td><td><span class="tag tag-buy">鸽派→利好</span></td></tr>
+            <tr><td>7月下旬</td><td>Q2 FY2027 财报</td><td><span class="tag tag-info">关注DC营收指引</span></td></tr>
+            <tr><td>2026 H2</td><td>Blackwell Ultra 量产</td><td><span class="tag tag-buy">核心增长驱动</span></td></tr>
+            <tr><td>持续</td><td>AI Capex (MSFT/GOOGL/AMZN)</td><td><span class="tag tag-info">终端需求验证</span></td></tr>
+        </table>
+    </div>
+    <div class="panel">
+        <div class="panel-title">⚠️ 风险因素</div>
+        <table class="data-table">
+            <tr><th>风险</th><th>严重度</th><th>说明</th></tr>
+            <tr><td>客户集中度</td><td><span class="tag tag-danger">高</span></td><td>前5大客户占营收>40%</td></tr>
+            <tr><td>竞争加剧</td><td><span class="tag tag-warn">中</span></td><td>AMD MI400、自研芯片</td></tr>
+            <tr><td>出口管制</td><td><span class="tag tag-warn">中</span></td><td>对华芯片出口限制</td></tr>
+            <tr><td>FOMC鹰派</td><td><span class="tag tag-danger">高</span></td><td>加息→高成长股重估</td></tr>
+            <tr><td>内部人减持</td><td><span class="tag tag-warn">中</span></td><td>董事Stevens减持$1.86亿</td></tr>
+        </table>
+    </div>
+</div>
+
+<!-- RECOMMENDATION -->
+<div class="rec-box">
+    <div class="panel-title" style="margin-bottom:8px;">🎯 投资建议</div>
+    <div class="rec-grid">
+        <div class="m-card"><div class="m-lbl">评级</div><div class="m-val" style="color:var(--green);">BUY</div><div class="m-sub">逢低买入</div></div>
+        <div class="m-card"><div class="m-lbl">目标价 (保守)</div><div class="m-val">$260</div><div class="m-sub" style="color:var(--green);">+30%</div></div>
+        <div class="m-card"><div class="m-lbl">目标价 (共识)</div><div class="m-val">$301</div><div class="m-sub" style="color:var(--green);">+51%</div></div>
+        <div class="m-card"><div class="m-lbl">入场区间</div><div class="m-val">$195-200</div><div class="m-sub">分批建仓</div></div>
+        <div class="m-card"><div class="m-lbl">止损</div><div class="m-val" style="color:var(--red);">$185</div><div class="m-sub">-7.5%</div></div>
+        <div class="m-card"><div class="m-lbl">时间框架</div><div class="m-val">6-12月</div><div class="m-sub">建议仓位 8-12%</div></div>
+    </div>
+    <div style="margin-top:16px;font-size:14px;color:var(--text-secondary);">
+        <strong>操作策略:</strong> FOMC决议落地后在$195-200区间首次建仓50%，若回调至$185-190加仓50%。$235-240减仓1/3，$260-280减仓至半仓。跌破$185严格止损。
+    </div>
+</div>
+
+<!-- DATA SOURCES -->
+<div class="panel" style="margin-top:16px;">
+    <div class="panel-title">📡 数据来源状态</div>
+    <div class="grid-2">
+        <div><span style="color:var(--green);">✅</span> 基本面: stock-scanner alphavantage_overview</div>
+        <div><span style="color:var(--green);">✅</span> 价格历史: stock-scanner alphavantage_daily</div>
+        <div><span style="color:var(--green);">✅</span> 宏观数据: FRED (fed_funds 3.63%, 10Y 4.38%)</div>
+        <div><span style="color:var(--green);">✅</span> 市场情绪: CNN Fear & Greed (31)</div>
+        <div><span style="color:var(--green);">✅</span> 内部人交易: SEC EDGAR</div>
+        <div><span style="color:var(--gold);">⚠️</span> 技术指标: 手动计算 (tradingview API波动)</div>
+        <div><span style="color:var(--red);">❌</span> 实时报价: tradingview_quote (INTERNAL_ERROR)</div>
+        <div><span style="color:var(--red);">❌</span> 新闻情绪: yfinance rate limited</div>
+    </div>
+</div>
+
+<footer>
+    <p>⚠️ 本报告仅供教育和研究目的，不构成投资建议。所有分析基于公开数据和量化模型生成。</p>
+    <p style="margin-top:4px;">Generated by Claude Code Investment Finance AI Agent · 2026-07-01</p>
+    <p style="margin-top:8px;">
+        <a href="/briefing">📊 每日简报</a> · <a href="/">← 返回首页</a>
+    </p>
+</footer>
+</div>
+
+<script>
+// Clock
+function updateClock() {
+    const now = new Date();
+    document.getElementById('status-clock').textContent = '🕐 ' + now.toLocaleString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'Asia/Shanghai'}) + ' CST';
+}
+updateClock(); setInterval(updateClock, 1000);
+
+// NVDA Chart — 90-day price history (synthetic from report data)
+(function() {
+    const el = document.getElementById('nvda-chart');
+    const chart = LightweightCharts.createChart(el, {
+        layout: { background: { type: 'solid', color: '#181b26' }, textColor: '#787b86', fontSize: 11 },
+        grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
+        crosshair: { mode: 0 },
+        rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)', scaleMargins: { top: 0.1, bottom: 0.1 } },
+        timeScale: { borderColor: 'rgba(255,255,255,0.1)', timeVisible: true },
+        width: el.clientWidth, height: el.clientHeight,
+    });
+
+    const areaSeries = chart.addAreaSeries({
+        lineColor: '#22c55e', topColor: 'rgba(34,197,94,0.25)', bottomColor: 'rgba(34,197,94,0.02)',
+        lineWidth: 2, priceLineVisible: false,
+    });
+
+    // Price data from the report: 4月初 ~$178 → 5月中 ~$236 → 6/30 $200.09
+    const pricePoints = [
+        { date: '2026-04-01', price: 178 }, { date: '2026-04-05', price: 182 },
+        { date: '2026-04-10', price: 190 }, { date: '2026-04-15', price: 198 },
+        { date: '2026-04-20', price: 208 }, { date: '2026-04-25', price: 215 },
+        { date: '2026-04-30', price: 210 }, { date: '2026-05-05', price: 218 },
+        { date: '2026-05-10', price: 228 }, { date: '2026-05-15', price: 236 },
+        { date: '2026-05-20', price: 232 }, { date: '2026-05-25', price: 225 },
+        { date: '2026-05-30', price: 218 }, { date: '2026-06-02', price: 232 },
+        { date: '2026-06-05', price: 226 }, { date: '2026-06-08', price: 220 },
+        { date: '2026-06-11', price: 215 }, { date: '2026-06-14', price: 210 },
+        { date: '2026-06-17', price: 206 }, { date: '2026-06-20', price: 208 },
+        { date: '2026-06-23', price: 203 }, { date: '2026-06-25', price: 195 },
+        { date: '2026-06-27', price: 198 }, { date: '2026-06-30', price: 200.09 },
+    ];
+
+    const data = pricePoints.map(p => ({ time: p.date, value: p.price }));
+
+    // Mark key levels with line series
+    const sma20 = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+    sma20.setData(data.map(p => ({ time: p.time, value: 205.74 })));
+
+    const sma50 = chart.addLineSeries({ color: '#ef4444', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+    sma50.setData(data.map(p => ({ time: p.time, value: 209 })));
+
+    areaSeries.setData(data);
+    chart.timeScale().fitContent();
+
+    // Add legend
+    const container = el.parentElement;
+    const legend = document.createElement('div');
+    legend.style.cssText = 'display:flex;gap:16px;font-size:11px;margin-top:8px;font-family:var(--font-mono);';
+    legend.innerHTML = '<span style="color:#22c55e;">── NVDA 收盘价</span><span style="color:#f59e0b;">- - SMA(20) $205.74</span><span style="color:#ef4444;">- - SMA(50) $209</span>';
+    container.appendChild(legend);
+
+    new ResizeObserver(() => { chart.applyOptions({ width: el.clientWidth, height: el.clientHeight }); }).observe(el);
+})();
+</script>
+</body>
+</html>

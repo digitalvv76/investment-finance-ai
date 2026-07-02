@@ -1,20 +1,80 @@
 {
-  "regular_events": [
-    { "day": "first_friday", "time": "08:30", "event": "US Non-Farm Payrolls", "importance": "high" },
-    { "day": "mid_month_wed", "time": "08:30", "event": "US CPI", "importance": "high" },
-    { "day": "mid_month_thu", "time": "08:30", "event": "US PPI", "importance": "medium" },
-    { "day": "wednesday", "time": "10:30", "event": "EIA Crude Oil Inventories", "importance": "medium" },
-    { "day": "thursday", "time": "08:30", "event": "US Initial Jobless Claims", "importance": "medium" }
+  "description": "Recurring economic events calendar. For exact dates, use WebFetch on investing.com/economic-calendar.",
+  "recurring": [
+    {
+      "event": "FOMC Interest Rate Decision",
+      "frequency": "6-weekly",
+      "next_estimate": "2026-07-29",
+      "importance": "critical",
+      "impact": "Equities, Bonds, USD, Gold",
+      "source": "federalreserve.gov"
+    },
+    {
+      "event": "CPI (Consumer Price Index)",
+      "frequency": "monthly",
+      "description": "Released ~2nd week of each month at 8:30 AM ET",
+      "importance": "critical",
+      "impact": "Equities, Bonds, USD, Inflation expectations"
+    },
+    {
+      "event": "PCE Price Index",
+      "frequency": "monthly",
+      "description": "Released ~last business day of each month at 8:30 AM ET",
+      "importance": "critical",
+      "impact": "Fed's preferred inflation gauge"
+    },
+    {
+      "event": "Non-Farm Payrolls (NFP)",
+      "frequency": "monthly",
+      "description": "Released 1st Friday of each month at 8:30 AM ET",
+      "importance": "critical",
+      "impact": "Equities, Bonds, USD, Volatility"
+    },
+    {
+      "event": "US GDP (Advance/Revised/Final)",
+      "frequency": "monthly",
+      "description": "Released ~last week of Jan/Apr/Jul/Oct (Advance), revised following months",
+      "importance": "high",
+      "impact": "Broad market direction"
+    },
+    {
+      "event": "Earnings Season Peak",
+      "frequency": "quarterly",
+      "description": "Peak reporting: mid-Jan to mid-Feb, mid-Apr to mid-May, mid-Jul to mid-Aug, mid-Oct to mid-Nov",
+      "importance": "high",
+      "impact": "Individual stocks, sector rotation"
+    },
+    {
+      "event": "OPEC+ Meeting",
+      "frequency": "bi-monthly",
+      "description": "Production quota decisions affecting oil prices",
+      "importance": "medium",
+      "impact": "Oil, Energy sector, Inflation expectations"
+    },
+    {
+      "event": "China PMI (NBS & Caixin)",
+      "frequency": "monthly",
+      "description": "NBS: last day of month. Caixin: 1st-3rd of following month",
+      "importance": "high",
+      "impact": "A-shares, HK stocks, Commodities, CNY"
+    },
+    {
+      "event": "PBOC LPR Setting",
+      "frequency": "monthly",
+      "description": "Loan Prime Rate announced on the 20th of each month (or next business day)",
+      "importance": "high",
+      "impact": "A-shares, Chinese banks, Property sector"
+    },
+    {
+      "event": "ECB Rate Decision",
+      "frequency": "6-weekly",
+      "description": "European Central Bank policy rate announcement",
+      "importance": "medium",
+      "impact": "EUR/USD, European equities, Global bond yields"
+    }
   ],
-  "fomc_meetings_2026": [
-    "2026-01-28", "2026-03-18", "2026-05-06",
-    "2026-06-17", "2026-07-29", "2026-09-16",
-    "2026-11-04", "2026-12-16"
-  ],
-  "earnings_seasons": {
-    "Q1": "January (banks) / February-March (rest)",
-    "Q2": "April (banks) / May-June (rest)",
-    "Q3": "July (banks) / August-September (rest)",
-    "Q4": "October (banks) / November-December (rest)"
+  "sources": {
+    "primary": "WebFetch https://www.investing.com/economic-calendar/",
+    "backup": "WebFetch https://www.marketwatch.com/economy-politics/calendar"
   }
 }

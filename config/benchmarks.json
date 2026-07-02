@@ -1,15 +1,20 @@
 {
-  "benchmarks": {
-    "US": { "ticker": "^GSPC", "name": "S&P 500", "currency": "USD" },
-    "US_tech": { "ticker": "^IXIC", "name": "NASDAQ Composite", "currency": "USD" },
-    "US_blue": { "ticker": "^DJI", "name": "Dow Jones Industrial", "currency": "USD" },
-    "CN_large": { "ticker": "000300.SS", "name": "CSI 300", "currency": "CNY" },
-    "CN_composite": { "ticker": "000001.SS", "name": "Shanghai Composite", "currency": "CNY" },
-    "CN_shenzhen": { "ticker": "399001.SZ", "name": "Shenzhen Component", "currency": "CNY" },
-    "HK": { "ticker": "^HSI", "name": "Hang Seng Index", "currency": "HKD" },
-    "HK_tech": { "ticker": "^HSTECH", "name": "Hang Seng TECH Index", "currency": "HKD" },
-    "global": { "ticker": "ACWI", "name": "MSCI ACWI", "currency": "USD" },
-    "crypto": { "ticker": "BTC", "name": "Bitcoin", "currency": "USD" }
-  },
-  "defaultPortfolioBenchmark": "^GSPC"
+  "US_equities": "^GSPC",
+  "US_tech": "^IXIC",
+  "US_large_cap": "SPY",
+  "US_growth": "QQQ",
+  "US_value": "VTV",
+  "CN_equities": "000300.SS",
+  "CN_large_cap": "510300.SS",
+  "CN_growth": "399006.SZ",
+  "HK_equities": "^HSI",
+  "HK_tech": "^HSTECH",
+  "crypto": "BTC",
+  "crypto_major": "ETH",
+  "global": "VT",
+  "bond_us_agg": "AGG",
+  "bond_cn": "511010.SS",
+  "commodity": "GSG",
+  "gold": "GC=F",
+  "oil": "CL=F"
 }

@@ -28,7 +28,7 @@ from web.routes import (
     get_stats, get_recent_news, get_news_by_id,
     post_feedback,
     get_profile, put_profile,
-    get_training_docs, post_training_url, post_training_text, delete_training_doc,
+    get_training_docs, post_training_url, post_training_text, post_training_file, delete_training_doc,
     get_filters, put_filters,
     get_alert_history, get_daily_digest,
     sse_events,
@@ -112,12 +112,18 @@ class WebDashboard:
         app.router.add_get("/api/training", get_training_docs)
         app.router.add_post("/api/training/url", post_training_url)
         app.router.add_post("/api/training/text", post_training_text)
+        app.router.add_post("/api/training/file", post_training_file)
         app.router.add_delete("/api/training/{id}", delete_training_doc)
         app.router.add_get("/api/filters", get_filters)
         app.router.add_put("/api/filters", put_filters)
         app.router.add_get("/api/alerts/history", get_alert_history)
         app.router.add_get("/api/daily", get_daily_digest)
         app.router.add_get("/api/events", sse_events)
+
+        # ---- Static files ----
+        static_dir = _HERE / "static"
+        if static_dir.is_dir():
+            app.router.add_static("/", static_dir, show_index=True)
 
         return app
 

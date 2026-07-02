@@ -63,6 +63,7 @@ body {
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
 .span-8 { grid-column: span 8; }
 .span-4 { grid-column: span 4; }
+.span-12 { grid-column: span 12; }
 
 /* ---- Panels ---- */
 .panel {
@@ -114,6 +115,32 @@ body {
 .badge-macro { background: rgba(139,92,246,0.15); color: var(--purple); }
 .badge-bullish { background: rgba(34,197,94,0.15); color: var(--green); }
 .badge-bearish { background: rgba(239,68,68,0.15); color: var(--red); }
+.badge-neutral { background: rgba(120,123,134,0.15); color: var(--text-secondary); }
+.badge-grade { font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 4px; font-family: var(--font-mono); }
+.badge-APlus { background: rgba(34,197,94,0.2); color: #22c55e; border: 1px solid rgba(34,197,94,0.4); }
+.badge-A { background: rgba(59,130,246,0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.4); }
+.badge-B { background: rgba(245,158,11,0.2); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+.badge-C { background: rgba(120,123,134,0.15); color: var(--text-secondary); }
+.badge-D { background: rgba(120,123,134,0.08); color: var(--text-muted); }
+
+/* ---- File Upload ---- */
+.file-upload-zone {
+    border: 2px dashed var(--border); border-radius: 8px;
+    padding: 20px; text-align: center; cursor: pointer;
+    transition: all 0.2s; margin-top: 8px;
+}
+.file-upload-zone:hover, .file-upload-zone.drag-over { border-color: var(--blue); background: rgba(59,130,246,0.05); }
+.file-upload-zone input { display: none; }
+.file-feedback {
+    margin-top: 10px; padding: 10px; border-radius: 6px;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    font-size: 12px;
+}
+.file-feedback .score { font-family: var(--font-mono); font-size: 18px; font-weight: 700; }
+.file-feedback .topics { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.badge-critical { background: rgba(239,68,68,0.2); color: var(--red); font-size: 12px; font-weight: 700; }
+.badge-important { background: rgba(245,158,11,0.2); color: var(--gold); font-size: 12px; font-weight: 700; }
+.badge-level { font-size: 11px; padding: 1px 6px; }
 
 /* ---- Buttons ---- */
 .btn {
@@ -127,7 +154,7 @@ body {
 .btn-red:hover { border-color: var(--red); color: var(--red); }
 .btn-blue:hover { border-color: var(--blue); color: var(--blue); }
 
-/* ---- Metric Cards ---- */
+/* ---- Metric Cards (2x2 subgrid) ---- */
 .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .m-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 14px; text-align: center; }
 .m-card-value { font-family: var(--font-mono); font-size: 24px; font-weight: 700; color: var(--text-primary); }
@@ -144,7 +171,7 @@ body {
 .form-input:focus { outline: none; border-color: var(--blue); }
 textarea.form-input { resize: vertical; min-height: 60px; }
 
-/* ---- Range ---- */
+/* ---- Range Slider ---- */
 input[type=range] { width: 100%; accent-color: var(--blue); }
 
 /* ---- Toast ---- */
@@ -159,12 +186,12 @@ input[type=range] { width: 100%; accent-color: var(--blue); }
 .toast.important { border-color: var(--gold); }
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-/* ---- Empty ---- */
+/* ---- Empty State ---- */
 .empty { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
 
 /* ---- Responsive ---- */
 @media (max-width: 1200px) { .grid { grid-template-columns: repeat(6, 1fr); } .span-8, .span-4 { grid-column: span 6; } }
-@media (max-width: 768px) { .grid { grid-template-columns: 1fr; } .span-8, .span-4 { grid-column: span 1; } }
+@media (max-width: 768px) { .grid { grid-template-columns: 1fr; } .span-8, .span-4 { grid-column: span 1; } .metrics { grid-template-columns: 1fr 1fr; } }
 </style>
 </head>
 <body>
@@ -185,7 +212,7 @@ input[type=range] { width: 100%; accent-color: var(--blue); }
 <div class="container">
 <div class="grid">
 
-    <!-- LEFT: News Feed -->
+    <!-- ============ LEFT: News Feed ============ -->
     <div class="span-8">
         <div class="panel">
             <div class="panel-header">
@@ -204,7 +231,7 @@ input[type=range] { width: 100%; accent-color: var(--blue); }
         </div>
     </div>
 
-    <!-- RIGHT: Stats + Training + Profile -->
+    <!-- ============ RIGHT: Stats + Training + Profile ============ -->
     <div class="span-4">
 
         <!-- Stats -->
@@ -237,6 +264,14 @@ input[type=range] { width: 100%; accent-color: var(--blue); }
                         <label class="form-label">Add URL (article, docs, framework)</label>
                         <input class="form-input" id="trainUrl" placeholder="https://..." style="margin-bottom:4px">
                         <button class="btn btn-sm btn-blue" onclick="Dashboard.ingestUrl()">Ingest URL</button>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Upload File (.docx / .pdf)</label>
+                        <div class="file-upload-zone" id="fileDropZone" onclick="document.getElementById('fileInput').click()">
+                            📎 Drop .docx / .pdf / .md / .txt here, or click to browse
+                            <input type="file" id="fileInput" accept=".docx,.pdf,.md,.txt,.markdown" onchange="Dashboard.uploadFile(this.files[0])">
+                        </div>
+                        <div id="fileFeedback"></div>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Add Text</label>
@@ -284,9 +319,28 @@ const Dashboard = {
     // ---- Init ----
     async init() {
         this.startClock();
+        this.setupDragDrop();
         await Promise.all([this.fetchStats(), this.fetchNews(), this.fetchFilters(), this.fetchTraining()]);
         this.connectSSE();
         setInterval(() => this.fetchStats(), 60000);
+    },
+    setupDragDrop() {
+        const zone = document.getElementById('fileDropZone');
+        if (!zone) return;
+        ['dragenter','dragover'].forEach(evt => {
+            zone.addEventListener(evt, e => { e.preventDefault(); zone.classList.add('drag-over'); });
+        });
+        ['dragleave','drop'].forEach(evt => {
+            zone.addEventListener(evt, e => { e.preventDefault(); zone.classList.remove('drag-over'); });
+        });
+        zone.addEventListener('drop', e => {
+            const file = e.dataTransfer.files[0];
+            if (file && (file.name.endsWith('.docx')||file.name.endsWith('.pdf'))) {
+                this.uploadFile(file);
+            } else {
+                document.getElementById('fileFeedback').innerHTML = '<div class="file-feedback" style="border-color:var(--red)">Only .docx and .pdf files supported</div>';
+            }
+        });
     },
 
     // ---- Clock ----
@@ -373,6 +427,50 @@ const Dashboard = {
         } catch(e) { this.showToast('Delete failed'); }
     },
     async refreshTraining() { await this.fetchTraining(); },
+    async uploadFile(file) {
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('file', file);
+        const fb = document.getElementById('fileFeedback');
+        fb.innerHTML = '⏳ Processing...';
+        try {
+            const r = await fetch('/api/training/file', {method:'POST', body: formData});
+            const result = await r.json();
+            if (result.ok) {
+                const quality = result.quality_score||0;
+                const scoreColor = quality >= 8 ? 'var(--green)' : quality >= 6 ? 'var(--gold)' : 'var(--red)';
+                fb.innerHTML = `
+                    <div class="file-feedback">
+                        <strong>✅ ${this.esc(result.filename||file.name)}</strong>
+                        <div style="margin-top:4px"><span class="score" style="color:${scoreColor}">${quality}/10</span> quality score</div>
+                        <div>${result.word_count||0} words extracted · ${result.doc_type||'?'}</div>
+                        ${result.topics ? `<div class="topics">${(result.topics||[]).map(t=>`<span class="badge badge-macro">${t}</span>`).join('')}</div>` : ''}
+                        <div style="margin-top:6px;color:var(--text-muted);font-size:11px">${this.esc((result.summary||'').substring(0,150))}...</div>
+                    </div>`;
+                this.fetchTraining();
+            } else {
+                fb.innerHTML = `<div class="file-feedback" style="border-color:var(--red)">❌ ${this.esc(result.error||'Unknown error')}</div>`;
+            }
+        } catch(e) {
+            fb.innerHTML = `<div class="file-feedback" style="border-color:var(--red)">❌ Upload failed: ${e.message}</div>`;
+        }
+    },
+    gradeBadge(item) {
+        // Composite grade: priority(40%) + sentiment magnitude(20%) + relevance(20%) + tickers(10%) + breaking(10%)
+        const score = item.priority_score||0;
+        const sentMag = Math.abs(item.sentiment_score||0);
+        const relevance = (item.relevance_score||0)/10; // normalize from 0-10
+        const hasTickers = (item.tickers_found||'').length > 0 ? 1 : 0;
+        const breaking = item.is_breaking ? 1 : 0;
+        const composite = score*0.4 + sentMag*0.2 + relevance*0.2 + hasTickers*0.1 + breaking*0.1;
+        let grade, cls;
+        if (composite >= 0.75 || (item.macro_tags||'').includes('STRATEGIC_')) { grade='A+'; cls='badge-APlus'; }
+        else if (composite >= 0.6) { grade='A'; cls='badge-A'; }
+        else if (composite >= 0.4) { grade='B'; cls='badge-B'; }
+        else if (composite >= 0.2) { grade='C'; cls='badge-C'; }
+        else { grade='D'; cls='badge-D'; }
+        return `<span class="badge badge-grade ${cls}" title="Composite: ${composite.toFixed(2)}">${grade}</span>`;
+    },
     async saveFilters() {
         try {
             const tickers = document.getElementById('filterTickers').value.split(',').map(s=>s.trim()).filter(Boolean);
@@ -400,6 +498,7 @@ const Dashboard = {
             const item = JSON.parse(e.data);
             this.news.unshift(item);
             this.news.sort((a,b) => (b.priority_score||0) - (a.priority_score||0));
+            // Keep max 200
             if (this.news.length > 200) this.news.length = 200;
             this.renderNewsFeed();
             const level = Dashboard.priorityLevel(item.priority_score||0);
@@ -447,6 +546,7 @@ const Dashboard = {
                 <div class="news-card ${level}">
                     <div class="news-title" ${url ? `onclick="window.open('${this.esc(url)}','_blank')"` : ''}>${this.esc(item.title||'(no title)')}</div>
                     <div class="news-meta">
+                        ${this.gradeBadge(item)}
                         <span class="badge badge-source">${this.esc(item.source||'?')}</span>
                         <span>${time}</span>
                         ${tickers.map(t => `<span class="badge badge-ticker">$${this.esc(t)}</span>`).join('')}
@@ -515,10 +615,6 @@ const Dashboard = {
         const d = document.createElement('div');
         d.textContent = s||'';
         return d.innerHTML;
-    },
-
-    priorityLevel(score) {
-        return score >= 0.9 ? 'critical' : score >= 0.7 ? 'important' : 'normal';
     }
 };
 

@@ -49,9 +49,9 @@ class DispatchResult:
 # Thresholds
 # ---------------------------------------------------------------------------
 
-CRITICAL_PRIORITY = 0.9       # PriorityScorer scores >= this → CRITICAL
-IMPORTANT_PRIORITY = 0.7      # "" >= this → IMPORTANT
-STRATEGIC_CRITICAL_CONF = 0.85  # Strategic match confidence >= this → CRITICAL
+CRITICAL_PRIORITY = 0.65      # PriorityScorer scores >= this → CRITICAL
+IMPORTANT_PRIORITY = 0.50     # "" >= this → IMPORTANT
+STRATEGIC_CRITICAL_CONF = 0.70  # Strategic match confidence >= this → CRITICAL
 GOV_INTERVENTION_CRITICAL = True  # Any gov_intervention match → auto CRITICAL
 
 # ---------------------------------------------------------------------------
@@ -123,7 +123,7 @@ class AlertDispatcher:
         # --- auto-CRITICAL: high-confidence NVIDIA strategic event ---
         nvda_critical = [
             m for m in strategic_matches
-            if m.category in ("nvda_investment", "nvda_endorsement")
+            if m.category in ("nvda_investment", "nvda_endorsement", "nvda_competitive_threat")
             and m.confidence >= STRATEGIC_CRITICAL_CONF
         ]
         if nvda_critical:
@@ -131,6 +131,8 @@ class AlertDispatcher:
             return AlertLevel.CRITICAL, f"nvda strategic event (conf={top:.2f})"
 
         # --- score-based classification ---
+        # NOTE: priority alone can trigger CRITICAL for systemic events (bailouts, wars, etc.)
+        # but earnings drama / CEO commentary without strategic signal stays at IMPORTANT.
         if priority_score >= CRITICAL_PRIORITY:
             return AlertLevel.CRITICAL, f"priority_score={priority_score:.2f} >= {CRITICAL_PRIORITY}"
         elif priority_score >= IMPORTANT_PRIORITY:

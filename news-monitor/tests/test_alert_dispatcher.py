@@ -71,7 +71,7 @@ def test_classify_nvda_endorsement_below_threshold(dispatcher):
     """Low-confidence nvda_endorsement → NOT critical (falls to score)."""
     matches = [StrategicMatch("nvda_endorsement", "Jensen Huang says nice thing", 0.70)]
     level, reason = dispatcher.classify(0.5, matches)
-    assert level == AlertLevel.NORMAL
+    assert level == AlertLevel.NORMAL  # score 0.5 < 0.7, nvda conf 0.70 < 0.85
 
 
 def test_classify_gov_trumps_score(dispatcher):
@@ -98,6 +98,7 @@ def test_classify_none_matches(dispatcher):
 
 @pytest.mark.asyncio
 async def test_dispatch_normal_calls_telegram_silent(dispatcher, sample_item):
+    """NORMAL items only get Telegram silent push."""
     push_calls = []
 
     async def mock_push(item, disable_notification=True):
@@ -109,11 +110,13 @@ async def test_dispatch_normal_calls_telegram_silent(dispatcher, sample_item):
     )
     assert result.level == AlertLevel.NORMAL
     assert "telegram_silent" in result.channels_used
-    assert push_calls == [True]
+    assert push_calls == [True]  # disable_notification=True
 
 
 @pytest.mark.asyncio
 async def test_dispatch_important_no_pushover(dispatcher, sample_item):
+    """IMPORTANT without Pushover config → Telegram alert only."""
+    # Ensure Pushover is disabled
     dispatcher._pushover_token = ""
     dispatcher._pushover_user = ""
 
@@ -127,11 +130,12 @@ async def test_dispatch_important_no_pushover(dispatcher, sample_item):
         telegram_push_fn=mock_push,
     )
     assert result.level == AlertLevel.IMPORTANT
-    assert push_calls == [False]
+    assert push_calls == [False]  # disable_notification=False for IMPORTANT
 
 
 @pytest.mark.asyncio
 async def test_dispatch_critical_triple_push(dispatcher, sample_item):
+    """CRITICAL items get triple push (3 Telegram messages)."""
     dispatcher._pushover_token = ""
     dispatcher._pushover_user = ""
 
@@ -147,7 +151,7 @@ async def test_dispatch_critical_triple_push(dispatcher, sample_item):
     assert result.level == AlertLevel.CRITICAL
     assert "telegram_triple" in result.channels_used
     assert len(push_calls) == 3
-    assert all(not dn for dn in push_calls)
+    assert all(not dn for dn in push_calls)  # all 3 → disable_notification=False
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +161,7 @@ async def test_dispatch_critical_triple_push(dispatcher, sample_item):
 
 @pytest.mark.asyncio
 async def test_pushover_emergency_payload():
+    """Verify Pushover emergency message has correct priority/sound fields."""
     dispatcher = AlertDispatcher()
     dispatcher._pushover_token = "test_token"
     dispatcher._pushover_user = "test_user"
@@ -189,6 +194,7 @@ async def test_pushover_emergency_payload():
 
 @pytest.mark.asyncio
 async def test_pushover_high_payload():
+    """Verify Pushover high priority message structure."""
     dispatcher = AlertDispatcher()
     dispatcher._pushover_token = "test_token"
     dispatcher._pushover_user = "test_user"
@@ -210,6 +216,7 @@ async def test_pushover_high_payload():
 
 @pytest.mark.asyncio
 async def test_pushover_http_error_handled():
+    """HTTP error should not raise, just log and return False."""
     dispatcher = AlertDispatcher()
     dispatcher._pushover_token = "test"
     dispatcher._pushover_user = "test"
@@ -248,7 +255,7 @@ def test_pushover_partial_not_available(dispatcher):
 
 
 # ---------------------------------------------------------------------------
-# DispatchResult / AlertLevel
+# DispatchResult
 # ---------------------------------------------------------------------------
 
 
@@ -260,6 +267,11 @@ def test_dispatch_result_repr():
     )
     assert result.level == AlertLevel.CRITICAL
     assert len(result.channels_used) == 2
+
+
+# ---------------------------------------------------------------------------
+# Alert level values
+# ---------------------------------------------------------------------------
 
 
 def test_alert_level_values():
@@ -274,14 +286,17 @@ def test_alert_level_values():
 
 
 def test_end_to_end_classification_with_real_detector(strategic):
+    """Full integration: StrategicDetector → AlertDispatcher.classify."""
     dispatcher = AlertDispatcher()
 
+    # gov_intervention text → should be CRITICAL
     text = "美国政府通过CHIPS Act向英特尔注资85亿美元"
     matches = strategic.detect(text)
     level, reason = dispatcher.classify(0.5, matches)
     assert level == AlertLevel.CRITICAL
     assert "gov_intervention" in reason
 
+    # Normal text → NORMAL
     text2 = "Apple reports quarterly earnings, stock up 3%"
     matches2 = strategic.detect(text2)
     level2, reason2 = dispatcher.classify(0.5, matches2)

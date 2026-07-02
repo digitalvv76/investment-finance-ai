@@ -1,38 +1,30 @@
 {
-  "moving_averages": {
-    "short_term": [5, 10, 20],
-    "medium_term": [50, 60],
-    "long_term": [100, 200],
-    "default_combo": [5, 20, 50, 200]
+  "trend": {
+    "moving_averages": [20, 50, 200],
+    "macd": {"fast": 12, "slow": 26, "signal": 9}
   },
-  "rsi": {
-    "period": 14,
-    "oversold": 30,
-    "overbought": 70,
-    "extreme_oversold": 20,
-    "extreme_overbought": 80
+  "momentum": {
+    "rsi": {"period": 14, "oversold": 30, "overbought": 70},
+    "stochastic": {"k": 14, "d": 3}
   },
-  "macd": {
-    "fast": 12,
-    "slow": 26,
-    "signal": 9
-  },
-  "bollinger_bands": {
-    "period": 20,
-    "stddev": 2
-  },
-  "atr": {
-    "period": 14
+  "volatility": {
+    "bollinger": {"period": 20, "stddev": 2},
+    "atr": {"period": 14}
   },
   "volume": {
-    "average_period": 20,
-    "unusual_multiplier": 2.0,
-    "extreme_multiplier": 3.0
+    "volume_ratio": {"period": 20}
   },
-  "crypto_specific": {
-    "rsi_period": 14,
-    "volume_ma_period": 20,
-    "dominance_threshold_btc": 40,
-    "dominance_threshold_eth": 15
+  "risk": {
+    "var_confidence": 0.95,
+    "max_position_size_pct": 5,
+    "max_sector_exposure_pct": 30,
+    "min_cash_reserve_pct": 5,
+    "stop_loss_atr_multiple": 2,
+    "kelly_fraction": 0.5
+  },
+  "position_sizing": {
+    "method": "kelly_fractional",
+    "max_risk_per_trade_pct": 2,
+    "max_portfolio_heat_pct": 25
   }
 }

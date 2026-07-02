@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Tests & CI
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Data (mounted as volumes)
+data/
+logs/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs (not needed at runtime)
+docs/
+*.md
+!README.md
+
+# Config (keep)
+!config/
+!requirements.txt

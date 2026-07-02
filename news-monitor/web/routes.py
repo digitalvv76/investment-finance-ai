@@ -126,6 +126,7 @@ async def post_feedback(request: web.Request) -> web.Response:
     fb = FeedbackRecord(news_id=int(news_id), reaction=reaction)
     fid = db.insert_feedback(fb)
 
+    # Trigger adaptation cycle in background
     if learner and reaction in ("content_good", "thumbs_up", "thumbs_down"):
         asyncio.create_task(_run_adaptation(learner))
 
@@ -195,6 +196,7 @@ async def post_training_url(request: web.Request) -> web.Response:
 
     title = body.get("title", "").strip()
 
+    # Run in background — URL fetch + LLM summarization can take 10-30s
     async def _ingest():
         try:
             doc_id = await trainer.ingest_url(url, title=title)
@@ -226,12 +228,23 @@ async def post_training_text(request: web.Request) -> web.Response:
     return _json({"id": doc_id, "ok": True})
 
 
+async def delete_training_doc(request: web.Request) -> web.Response:
+    trainer = _get_trainer(request)
+    if not trainer:
+        return _error("Trainer not available", status=503)
+
+    doc_id = int(request.match_info["id"])
+    trainer.delete_doc(doc_id)
+    return _json({"ok": True})
+
+
 async def post_training_file(request: web.Request) -> web.Response:
     """Upload a .docx or .pdf file for training."""
     trainer = _get_trainer(request)
     if not trainer:
         return _error("Trainer not available", status=503)
 
+    # Read multipart form data
     reader = await request.multipart()
     field = await reader.next()
     if not field or field.name != "file":
@@ -239,9 +252,10 @@ async def post_training_file(request: web.Request) -> web.Response:
 
     filename = field.filename or "upload"
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-    if ext not in ('docx', 'pdf'):
-        return _error(f"Unsupported file type: .{ext}. Use .docx or .pdf")
+    if ext not in ('docx', 'pdf', 'md', 'txt', 'markdown'):
+        return _error(f"Unsupported file type: .{ext}. Use .docx, .pdf, .md, or .txt")
 
+    # Write to temp file
     import tempfile, os as _os
     suffix = f".{ext}"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -263,16 +277,6 @@ async def post_training_file(request: web.Request) -> web.Response:
             _os.unlink(tmp_path)
         except Exception:
             pass
-
-
-async def delete_training_doc(request: web.Request) -> web.Response:
-    trainer = _get_trainer(request)
-    if not trainer:
-        return _error("Trainer not available", status=503)
-
-    doc_id = int(request.match_info["id"])
-    trainer.delete_doc(doc_id)
-    return _json({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +337,7 @@ async def get_alert_history(request: web.Request) -> web.Response:
     db = _get_db(request)
     limit = min(int(request.query.get("limit", 50)), 200)
 
+    # Get fast_pushed and deep_pushed items
     fast = db.get_news_by_status("fast_pushed", limit=limit // 2)
     deep = db.get_news_by_status("deep_pushed", limit=limit // 2)
 
@@ -389,6 +394,7 @@ async def sse_events(request: web.Request) -> web.StreamResponse:
     sse_mgr = _get_sse(request)
     cid, queue = await sse_mgr.subscribe()
 
+    # Initial heartbeat
     await response.write(b": ok\n\n")
 
     try:
@@ -397,6 +403,7 @@ async def sse_events(request: web.Request) -> web.StreamResponse:
                 message = await asyncio.wait_for(queue.get(), timeout=30.0)
                 await response.write(message.encode("utf-8"))
             except asyncio.TimeoutError:
+                # Keepalive ping
                 await response.write(b": ping\n\n")
     except (ConnectionResetError, ConnectionAbortedError, asyncio.CancelledError):
         pass

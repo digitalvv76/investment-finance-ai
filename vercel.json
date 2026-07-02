@@ -1,7 +1,9 @@
 {
   "rewrites": [
     { "source": "/datetime", "destination": "/datetime.html" },
-    { "source": "/briefing", "destination": "/briefing.html" }
+    { "source": "/briefing", "destination": "/briefing.html" },
+    { "source": "/reports/nvda", "destination": "/nvda-report.html" },
+    { "source": "/nvda", "destination": "/nvda-report.html" }
   ],
   "cleanUrls": true,
   "trailingSlash": false

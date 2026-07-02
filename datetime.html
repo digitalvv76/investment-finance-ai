@@ -21,6 +21,7 @@
             color: #ffffff;
         }
 
+        /* 星空背景粒子 */
         .stars {
             position: fixed;
             top: 0;
@@ -115,6 +116,7 @@
             border-radius: 1px;
         }
 
+        /* 响应式 */
         @media (max-width: 768px) {
             .container {
                 padding: 40px 32px;
@@ -138,8 +140,10 @@
 </head>
 <body>
 
+    <!-- 星空背景 -->
     <div class="stars" id="stars"></div>
 
+    <!-- 主容器 -->
     <div class="container">
         <div class="label">当前时间</div>
         <div class="time">
@@ -151,6 +155,7 @@
     </div>
 
     <script>
+        // 生成星空背景
         function createStars() {
             const container = document.getElementById('stars');
             const fragment = document.createDocumentFragment();
@@ -169,26 +174,32 @@
             container.appendChild(fragment);
         }
 
+        // 格式化数字补零
         function pad(n) {
             return n.toString().padStart(2, '0');
         }
 
+        // 更新日期和时间
         function updateClock() {
             const now = new Date();
 
+            // 时间
             document.getElementById('hours').textContent = pad(now.getHours());
             document.getElementById('minutes').textContent = pad(now.getMinutes());
             document.getElementById('seconds').textContent = ':' + pad(now.getSeconds());
 
+            // 日期
             const y = now.getFullYear();
             const m = pad(now.getMonth() + 1);
             const d = pad(now.getDate());
             document.getElementById('date').textContent = `${y}年${m}月${d}日`;
 
+            // 星期
             const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
             document.getElementById('weekday').textContent = `星期${weekdays[now.getDay()]}`;
         }
 
+        // 初始化
         createStars();
         updateClock();
         setInterval(updateClock, 1000);

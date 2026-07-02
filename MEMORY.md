@@ -1,0 +1,1 @@
+- [Session Workflow](.claude/memory/session-workflow.md) — Every session must end with HISTORY.md update + git push

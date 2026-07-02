@@ -1,20 +1,45 @@
-# Watchlist State
+---
+name: watchlist-state
+description: Watchlist ticker snapshot — written by stock-research skill, read by daily-briefing
+metadata:
+  type: project
+  updated: 2026-06-30
+---
 
-## US Equities
-AAPL, MSFT, NVDA, GOOGL, AMZN, META, TSLA
+# 🔭 关注列表状态
 
-## China A-Shares
-600519 (Kweichow Moutai), 000858 (Wuliangye), 300750 (CATL), 601318 (Ping An)
+## 美股
+| Ticker | 最新价 | 日涨跌 | RSI(14) | vs 50MA | 信号 |
+|--------|--------|--------|---------|---------|------|
+| AAPL | — | — | — | — | 待更新 |
+| MSFT | — | — | — | — | 待更新 |
+| NVDA | $200.09 | +2.63% | 43 (偏弱) | 低于 ($209) | ⚠️ 短期承压, FOMC日 |
+| GOOGL | — | — | — | — | 待更新 |
+| AMZN | — | — | — | — | 待更新 |
+| META | — | — | — | — | 待更新 |
+| TSLA | — | — | — | — | 待更新 |
 
-## Hong Kong
-0700 (Tencent), 9988 (Alibaba), 3690 (Meituan)
+## A股
+| Ticker | 最新价 | 日涨跌 | RSI(14) | vs 50MA | 信号 |
+|--------|--------|--------|---------|---------|------|
+| 600519 | — | — | — | — | 待更新 |
+| 000858 | — | — | — | — | 待更新 |
+| 300750 | — | — | — | — | 待更新 |
+| 601318 | — | — | — | — | 待更新 |
 
-## Crypto
-BTC, ETH, SOL
+## 港股
+| Ticker | 最新价 | 日涨跌 | RSI(14) | vs 50MA | 信号 |
+|--------|--------|--------|---------|---------|------|
+| 0700 | — | — | — | — | 待更新 |
+| 9988 | — | — | — | — | 待更新 |
+| 3690 | — | — | — | — | 待更新 |
 
-## Indices
-- US: ^GSPC (S&P 500), ^IXIC (NASDAQ), ^DJI (Dow Jones)
-- China: 000001.SS (Shanghai Composite), 399001.SZ (Shenzhen Component), 000300.SS (CSI 300)
-- HK: ^HSI (Hang Seng), ^HSTECH (Hang Seng Tech)
+## 加密货币
+| Coin | 最新价 | 24h涨跌 | 7d涨跌 | 30d涨跌 |
+|------|--------|---------|--------|---------|
+| BTC | — | — | — | — |
+| ETH | — | — | — | — |
+| SOL | — | — | — | — |
 
-Last updated: 2026-06-30
+---
+*最后更新: 2026-07-01 — NVDA refreshed via /stock-research*

@@ -1,18 +1,32 @@
 {
-  "ttl": {
-    "realtime_quote": 300,
-    "daily_ohlcv": 14400,
-    "historical_data": 86400,
-    "sec_filings": 604800,
-    "options_chain": 900,
-    "sentiment_data": 3600,
-    "fundamentals": 86400,
-    "insider_trades": 86400,
-    "institutional_holdings": 86400,
-    "economic_indicators": 86400,
-    "crypto_price": 300,
-    "forex_rate": 14400
+  "market_data": {
+    "intraday": {"ttl_seconds": 300, "description": "5 minutes for real-time quotes"},
+    "daily": {"ttl_seconds": 14400, "description": "4 hours for daily OHLCV"},
+    "historical": {"ttl_seconds": 86400, "description": "24 hours for historical data"}
   },
-  "maxCacheSizeMB": 500,
-  "cacheDir": "data/cache"
+  "fundamentals": {
+    "company_overview": {"ttl_seconds": 86400, "description": "24 hours for company fundamentals"},
+    "financial_statements": {"ttl_seconds": 86400, "description": "24 hours for income/balance/cashflow"},
+    "sec_filings": {"ttl_seconds": 604800, "description": "1 week for SEC filings"},
+    "insider_trades": {"ttl_seconds": 86400, "description": "24 hours for insider transactions"}
+  },
+  "macro": {
+    "economic_indicators": {"ttl_seconds": 86400, "description": "24 hours for FRED/economic data"},
+    "fed_data": {"ttl_seconds": 86400, "description": "24 hours for Federal Reserve data"}
+  },
+  "sentiment": {
+    "reddit": {"ttl_seconds": 3600, "description": "1 hour for Reddit mentions/sentiment"},
+    "news": {"ttl_seconds": 7200, "description": "2 hours for news articles"},
+    "fear_greed": {"ttl_seconds": 3600, "description": "1 hour for Fear & Greed Index"}
+  },
+  "options": {
+    "chain": {"ttl_seconds": 900, "description": "15 minutes for options chains"},
+    "greeks": {"ttl_seconds": 300, "description": "5 minutes for options Greeks"},
+    "implied_move": {"ttl_seconds": 900, "description": "15 minutes for implied move calculations"}
+  },
+  "crypto": {
+    "price": {"ttl_seconds": 300, "description": "5 minutes for crypto prices"},
+    "history": {"ttl_seconds": 14400, "description": "4 hours for crypto OHLCV"},
+    "global": {"ttl_seconds": 3600, "description": "1 hour for global crypto market stats"}
+  }
 }

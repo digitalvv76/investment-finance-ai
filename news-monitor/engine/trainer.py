@@ -35,7 +35,6 @@ class Trainer:
     Supports:
     - URLs: fetches page content, extracts text, summarizes via LLM
     - Text: directly stores user-provided text/summaries
-    - Files: extracts .docx/.pdf content with quality scoring
     - Web search: future support for topic-based research
     """
 
@@ -66,11 +65,13 @@ class Trainer:
 
         Returns the training doc ID.
         """
+        # Fetch the page
         content = await self._fetch_url(url)
         if not content:
             logger.warning("Could not fetch URL: %s", url)
             return 0
 
+        # Generate summary via LLM
         summary = await self._summarize(content)
         if not summary:
             summary = content[:500]
@@ -102,7 +103,7 @@ class Trainer:
         return doc_id
 
     async def ingest_file(self, file_path: str, filename: str = "") -> dict:
-        """Ingest a .docx or .pdf file for AI training.
+        """Ingest a .docx, .pdf, .md, or .txt file for AI training.
 
         Returns a feedback dict with:
             {id, ok, word_count, summary, topics, quality_score, filename}
@@ -110,14 +111,18 @@ class Trainer:
         import os as _os
         ext = _os.path.splitext(file_path)[1].lower()
 
+        # Extract text based on file type
         if ext == '.docx':
             text = self._extract_docx(file_path)
             doc_type = "docx"
         elif ext == '.pdf':
             text = self._extract_pdf(file_path)
             doc_type = "pdf"
+        elif ext in ('.md', '.txt', '.markdown'):
+            text = self._extract_text(file_path)
+            doc_type = ext.lstrip('.')
         else:
-            raise ValueError(f"Unsupported file type: {ext}. Use .docx or .pdf")
+            raise ValueError(f"Unsupported file type: {ext}. Use .docx, .pdf, .md, or .txt")
 
         if not text or len(text.strip()) < 20:
             return {
@@ -130,20 +135,24 @@ class Trainer:
         word_count = len(text.split())
         title = filename or file_path
 
+        # Generate LLM summary
         summary = await self._summarize(text)
         if not summary:
             summary = text[:500]
 
+        # Extract key topics from the text
         topics = self._extract_topics(text)
 
+        # Store
         doc_id = self.db.add_training_doc(
             doc_type=doc_type,
             source=f"file:{filename or file_path}",
             title=title[:250],
-            content=text[:8000],
+            content=text[:8000],   # Allow more content for files
             summary=summary,
         )
 
+        # Compute quality score
         quality_score = self._compute_quality(text, summary, topics)
 
         logger.info(
@@ -165,6 +174,20 @@ class Trainer:
     # ------------------------------------------------------------------
     # File extraction helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_text(file_path: str) -> str:
+        """Extract text from a plain-text file (.md, .txt, .markdown)."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except UnicodeDecodeError:
+            try:
+                with open(file_path, 'r', encoding='gbk') as f:
+                    return f.read()
+            except Exception as e:
+                logger.error("Text extraction failed: %s", e)
+                return ""
 
     @staticmethod
     def _extract_docx(file_path: str) -> str:
@@ -220,9 +243,10 @@ class Trainer:
     @staticmethod
     def _compute_quality(text: str, summary: str, topics: list[str]) -> float:
         """Compute a quality score (0-10) for ingested content."""
-        score = 5.0
+        score = 5.0  # baseline
 
         word_count = len(text.split())
+        # Length bonus (optimal: 200-2000 words)
         if 200 <= word_count <= 2000:
             score += 2.0
         elif 50 <= word_count < 200:
@@ -230,9 +254,11 @@ class Trainer:
         elif word_count > 2000:
             score += 1.5
 
+        # Topic relevance
         if topics:
             score += min(len(topics) * 0.5, 2.0)
 
+        # Summary quality (rough heuristic: should be shorter than original)
         if summary and len(summary) < len(text) * 0.8:
             score += 0.5
 
@@ -271,11 +297,12 @@ class Trainer:
                         return ""
                     html = await resp.text()
 
+            # Simple text extraction: remove scripts, styles, HTML tags
             text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL | re.IGNORECASE)
             text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
             text = re.sub(r'<[^>]+>', ' ', text)
             text = re.sub(r'\s+', ' ', text).strip()
-            return text[:10000]
+            return text[:10000]  # Cap at 10k chars
         except Exception as e:
             logger.error("URL fetch failed: %s", e)
             return ""
@@ -290,14 +317,18 @@ class Trainer:
 
         try:
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: client.chat.completions.create(
-                    model="deepseek-chat",
-                    max_tokens=400,
-                    temperature=0.3,
-                    messages=[{"role": "user", "content": prompt}],
-                )
+            response = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: client.chat.completions.create(
+                        model="deepseek-chat",
+                        max_tokens=400,
+                        temperature=0.3,
+                        messages=[{"role": "user", "content": prompt}],
+                        timeout=30,  # 30s timeout per request
+                    )
+                ),
+                timeout=45,  # 45s hard timeout for the whole operation
             )
             return response.choices[0].message.content.strip()
         except Exception as e:

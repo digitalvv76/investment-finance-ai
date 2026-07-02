@@ -1,0 +1,57 @@
+# Data source definitions
+
+tier_1_rss:  # RSS/Atom feeds — no browser needed
+  # NOTE: Yahoo Finance RSS decommissioned (HTTP 403).
+  # NOTE: Investing.com blocked by WAF from residential IPs.
+  # Verified working feeds as of 2026-07-01:
+  - name: "CNBC Top News"
+    url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114"
+    category: "markets"
+  - name: "MarketWatch"
+    url: "https://feeds.content.dowjones.io/public/rss/mw_topstories"
+    category: "markets"
+  - name: "WSJ Markets"
+    url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"
+    category: "markets"
+    delay_seconds: 3
+  - name: "Seeking Alpha Market Outlook"
+    url: "https://seekingalpha.com/feed.xml"
+    category: "analysis"
+  - name: "CNBC Economy"
+    url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258"
+    category: "macro"
+
+tier_2_playwright:  # Browser-based scraping
+  # Bloomberg blocks headless browsers with anti-bot detection.
+  # ZeroHedge works with updated selectors.
+  - name: "ZeroHedge"
+    url: "https://www.zerohedge.com/"
+    selectors:
+      headline: "h2, [class*='title'], [class*='Title']"
+      link: "a[href^='/']"
+    frequency_tier: "fast"
+
+tier_3_api_triggers:  # API-based event triggers (no scraping)
+  - name: "SEC EDGAR 8-K"
+    type: "edgar"
+    endpoint: "mcp__stock-scanner__edgar_company_filings"
+    form_types: ["8-K"]
+    frequency_tier: "heartbeat"
+
+  - name: "FRED Economic Releases"
+    type: "fred"
+    endpoint: "mcp__stock-scanner__fred_economic_calendar"
+    frequency_tier: "normal"
+
+  - name: "Alpha Vantage News"
+    type: "alpha_vantage"
+    endpoint: "mcp__finance__get_company_overview"  # used as news trigger check
+    frequency_tier: "normal"
+
+twitter_accounts:  # For Tier 2 scraping (read-only public view)
+  - "@elerianm"
+  - "@lisaabramowicz1"
+  - "@bespokeinvest"
+  - "@Newsquawk"
+  - "@zerohedge"
+  - "@Fxhedgers"

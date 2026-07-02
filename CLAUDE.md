@@ -57,7 +57,6 @@ calss1/
 ├── scripts/                # Python 工具脚本
 │   ├── init_project.py     # 一键初始化
 │   └── verify_mcp.py       # MCP 连通性检查
-├── HISTORY.md              # 跨会话操作日志
 ├── .env.example            # API Key 模板
 ├── .gitignore
 └── CLAUDE.md              # 本文件
@@ -144,10 +143,6 @@ calss1/
 - `main` — 稳定配置
 - 功能分支命名: `feature/<name>` 或 `fix/<name>`
 - 提交信息格式: `[Phase] 简短描述`
-
-**每次开发会话结束必须：**
-1. 更新 HISTORY.md
-2. `git push origin main`（HTTPS 不通时用 GitHub MCP `push_files` 回退）
 
 ## 自动化调度
 

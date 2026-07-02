@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>每日投资简报 — Investment Finance AI</title>
+
+    <!-- TradingView Lightweight Charts -->
     <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+
     <style>
         :root {
             --bg-primary: #0c0d14;
@@ -24,7 +27,9 @@
             --cyan: #06b6d4;
             --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
         }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
             background: var(--bg-primary);
             color: var(--text-primary);
@@ -32,6 +37,8 @@
             min-height: 100vh;
             line-height: 1.5;
         }
+
+        /* ===== TOP STATUS BAR ===== */
         .status-bar {
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border);
@@ -42,9 +49,17 @@
             font-size: 13px;
             position: sticky; top: 0; z-index: 100;
         }
-        .status-bar .brand { font-weight: 700; color: var(--text-primary); letter-spacing: 1px; }
+        .status-bar .brand {
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: 1px;
+        }
         .status-bar .brand span { color: var(--blue); }
-        .status-bar .clock { font-family: var(--font-mono); color: var(--text-secondary); font-size: 13px; }
+        .status-bar .clock {
+            font-family: var(--font-mono);
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
         .status-bar .live-dot {
             width: 8px; height: 8px;
             background: var(--green);
@@ -56,6 +71,8 @@
             0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,.4); }
             50% { opacity: .7; box-shadow: 0 0 0 6px rgba(34,197,94,0); }
         }
+
+        /* ===== TICKER TAPE ===== */
         .ticker-wrap {
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border);
@@ -86,6 +103,8 @@
         .ticker-item .price { color: var(--text-secondary); }
         .ticker-item .chg-up { color: var(--green); }
         .ticker-item .chg-down { color: var(--red); }
+
+        /* ===== MAIN GRID ===== */
         .dashboard {
             max-width: 1440px;
             margin: 0 auto;
@@ -94,6 +113,7 @@
             grid-template-columns: repeat(12, 1fr);
             gap: 14px;
         }
+
         .panel {
             background: var(--bg-panel);
             border: 1px solid var(--border);
@@ -120,7 +140,12 @@
             border-radius: 4px;
             font-weight: 500;
         }
-        .badge-live { background: rgba(34,197,94,.12); color: var(--green); }
+        .badge-live {
+            background: rgba(34,197,94,.12);
+            color: var(--green);
+        }
+
+        /* Panel sizes */
         .span-3 { grid-column: span 3; }
         .span-4 { grid-column: span 4; }
         .span-5 { grid-column: span 5; }
@@ -128,6 +153,8 @@
         .span-7 { grid-column: span 7; }
         .span-8 { grid-column: span 8; }
         .span-12 { grid-column: span 12; }
+
+        /* ===== INDEX CARDS ===== */
         .indices-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -139,12 +166,33 @@
             border-radius: 6px;
             padding: 12px 14px;
         }
-        .index-card .name { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
-        .index-card .value { font-family: var(--font-mono); font-size: 20px; font-weight: 600; }
-        .index-card .change { font-family: var(--font-mono); font-size: 12px; margin-top: 3px; }
+        .index-card .name {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        .index-card .value {
+            font-family: var(--font-mono);
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .index-card .change {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            margin-top: 3px;
+        }
         .up { color: var(--green); }
         .down { color: var(--red); }
-        .fg-container { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+
+        /* ===== FEAR & GREED GAUGE ===== */
+        .fg-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
         .fg-gauge {
             position: relative;
             width: 100%;
@@ -169,9 +217,20 @@
             box-shadow: 0 0 8px rgba(255,255,255,.4);
             transition: left 1s ease;
         }
-        .fg-value { font-family: var(--font-mono); font-size: 36px; font-weight: 700; line-height: 1; }
-        .fg-label { font-size: 14px; font-weight: 600; }
-        .fg-sub { font-size: 11px; color: var(--text-muted); }
+        .fg-value {
+            font-family: var(--font-mono);
+            font-size: 36px;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .fg-label {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .fg-sub {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
         .fg-indicators {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -180,16 +239,38 @@
             margin-top: 8px;
             font-size: 10px;
         }
-        .fg-indicator { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+        .fg-indicator {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,.04);
+        }
         .fg-indicator .fi-name { color: var(--text-muted); }
         .fg-indicator .fi-val { font-family: var(--font-mono); }
+
         .extreme-fear { color: #ef4444; }
         .fear { color: #f59e0b; }
         .neutral { color: #eab308; }
         .greed { color: #84cc16; }
         .extreme-greed { color: #22c55e; }
-        .chart-container { width: 100%; height: 280px; position: relative; }
-        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+        /* ===== CHART CONTAINER ===== */
+        .chart-container {
+            width: 100%;
+            height: 280px;
+            position: relative;
+        }
+        .tv-chart {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ===== DATA TABLE ===== */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
         .data-table th {
             text-align: left;
             font-size: 10px;
@@ -200,27 +281,120 @@
             border-bottom: 1px solid var(--border);
             font-weight: 500;
         }
-        .data-table td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.03); font-family: var(--font-mono); font-size: 13px; }
-        .data-table tr:hover td { background: var(--bg-hover); }
-        .data-table .ticker-sym { font-weight: 600; color: var(--text-primary); font-family: 'Inter', sans-serif; }
-        .macro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .macro-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 14px; }
-        .macro-card .m-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
-        .macro-card .m-value { font-family: var(--font-mono); font-size: 22px; font-weight: 600; margin-top: 3px; }
-        .macro-card .m-date { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
-        .event-list { list-style: none; }
-        .event-list li { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.03); font-size: 13px; display: flex; align-items: flex-start; gap: 10px; }
-        .event-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+        .data-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255,255,255,.03);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+        .data-table tr:hover td {
+            background: var(--bg-hover);
+        }
+        .data-table .ticker-sym {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* ===== MACRO CARDS ===== */
+        .macro-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .macro-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 14px;
+        }
+        .macro-card .m-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .macro-card .m-value {
+            font-family: var(--font-mono);
+            font-size: 22px;
+            font-weight: 600;
+            margin-top: 3px;
+        }
+        .macro-card .m-date {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* ===== EVENT LIST ===== */
+        .event-list {
+            list-style: none;
+        }
+        .event-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,.03);
+            font-size: 13px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .event-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
         .event-dot.high { background: var(--red); }
         .event-dot.med { background: var(--gold); }
         .event-dot.low { background: var(--text-muted); }
-        .event-date { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); min-width: 50px; }
-        .alloc-bar-wrap { height: 8px; border-radius: 4px; background: var(--bg-secondary); display: flex; overflow: hidden; margin: 10px 0; }
-        .alloc-bar-wrap .seg { height: 100%; transition: width .5s; }
-        .alloc-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; }
-        .alloc-legend span { display: inline-flex; align-items: center; gap: 4px; }
-        .alloc-legend .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
-        .terminal-footer { text-align: center; padding: 24px; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 16px; }
+        .event-date {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-muted);
+            min-width: 50px;
+        }
+
+        /* ===== PORTFOLIO BAR ===== */
+        .alloc-bar-wrap {
+            height: 8px;
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            display: flex;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .alloc-bar-wrap .seg {
+            height: 100%;
+            transition: width .5s;
+        }
+        .alloc-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 11px;
+        }
+        .alloc-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .alloc-legend .dot {
+            width: 8px; height: 8px;
+            border-radius: 2px;
+            display: inline-block;
+        }
+
+        /* ===== FOOTER ===== */
+        .terminal-footer {
+            text-align: center;
+            padding: 24px;
+            font-size: 11px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 16px;
+        }
+
+        /* Responsive */
         @media (max-width: 1200px) {
             .dashboard { grid-template-columns: repeat(6, 1fr); }
             .span-3, .span-4, .span-5, .span-6, .span-7, .span-8 { grid-column: span 6; }
@@ -235,61 +409,140 @@
     </style>
 </head>
 <body>
+
+<!-- STATUS BAR -->
 <header class="status-bar">
     <div class="brand"><span>◆</span> INVESTMENT FINANCE AI</div>
     <div class="clock" id="status-clock">--</div>
     <div><span class="live-dot"></span> <span style="color:var(--green);font-size:12px;">LIVE</span></div>
 </header>
+
+<!-- TICKER TAPE -->
 <div class="ticker-wrap">
-    <div class="ticker-track" id="ticker-track"></div>
+    <div class="ticker-track" id="ticker-track">
+        <!-- Filled by JS -->
+    </div>
 </div>
+
+<!-- DASHBOARD -->
 <div class="dashboard">
+
+    <!-- ROW 1: Market Overview -->
     <div class="panel span-6">
-        <div class="panel-header"><span class="panel-title">🌍 全球市场概览</span><span class="panel-badge badge-live">LIVE</span></div>
-        <div class="indices-grid" id="indices-grid"></div>
+        <div class="panel-header">
+            <span class="panel-title">🌍 全球市场概览</span>
+            <span class="panel-badge badge-live">LIVE</span>
+        </div>
+        <div class="indices-grid" id="indices-grid">
+            <!-- Filled by JS -->
+        </div>
     </div>
+
+    <!-- ROW 1: Fear & Greed -->
     <div class="panel span-3">
-        <div class="panel-header"><span class="panel-title">😨 恐惧贪婪指数</span><span class="panel-badge" style="background:rgba(245,158,11,.12);color:var(--gold)">CNN</span></div>
-        <div class="fg-container" id="fg-widget"></div>
+        <div class="panel-header">
+            <span class="panel-title">😨 恐惧贪婪指数</span>
+            <span class="panel-badge" style="background:rgba(245,158,11,.12);color:var(--gold)">CNN</span>
+        </div>
+        <div class="fg-container" id="fg-widget">
+            <!-- Filled by JS -->
+        </div>
     </div>
+
+    <!-- ROW 1: Crypto Fear & Greed -->
     <div class="panel span-3">
-        <div class="panel-header"><span class="panel-title">🪙 加密恐惧贪婪</span><span class="panel-badge" style="background:rgba(239,68,68,.12);color:var(--red)">ALT</span></div>
-        <div class="fg-container" id="cfg-widget"></div>
+        <div class="panel-header">
+            <span class="panel-title">🪙 加密恐惧贪婪</span>
+            <span class="panel-badge" style="background:rgba(239,68,68,.12);color:var(--red)">ALT</span>
+        </div>
+        <div class="fg-container" id="cfg-widget">
+            <!-- Filled by JS -->
+        </div>
     </div>
+
+    <!-- ROW 2: SPX Chart -->
     <div class="panel span-6">
-        <div class="panel-header"><span class="panel-title">📈 S&P 500 · SPX</span><span style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted);" id="spx-price">--</span></div>
+        <div class="panel-header">
+            <span class="panel-title">📈 S&P 500 · SPX</span>
+            <span style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted);" id="spx-price">--</span>
+        </div>
         <div class="chart-container" id="spx-chart"></div>
     </div>
+
+    <!-- ROW 2: BTC Chart -->
     <div class="panel span-6">
-        <div class="panel-header"><span class="panel-title">₿ Bitcoin · BTC/USD</span><span style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted);" id="btc-price">--</span></div>
+        <div class="panel-header">
+            <span class="panel-title">₿ Bitcoin · BTC/USD</span>
+            <span style="font-family:var(--font-mono);font-size:13px;color:var(--text-muted);" id="btc-price">--</span>
+        </div>
         <div class="chart-container" id="btc-chart"></div>
     </div>
+
+    <!-- ROW 3: Watchlist -->
     <div class="panel span-7">
-        <div class="panel-header"><span class="panel-title">🔭 关注列表</span><span class="panel-badge badge-live">DATA</span></div>
+        <div class="panel-header">
+            <span class="panel-title">🔭 关注列表</span>
+            <span class="panel-badge badge-live">DATA</span>
+        </div>
         <table class="data-table" id="watchlist-table">
-            <thead><tr><th>标的</th><th>最新价</th><th>涨跌</th><th>涨跌幅</th><th>RSI(14)</th><th>信号</th></tr></thead>
-            <tbody id="watchlist-body"></tbody>
+            <thead>
+                <tr>
+                    <th>标的</th><th>最新价</th><th>涨跌</th><th>涨跌幅</th><th>RSI(14)</th><th>信号</th>
+                </tr>
+            </thead>
+            <tbody id="watchlist-body">
+                <!-- Filled by JS -->
+            </tbody>
         </table>
     </div>
+
+    <!-- ROW 3: Macro Indicators -->
     <div class="panel span-5">
-        <div class="panel-header"><span class="panel-title">🏛 宏观指标</span><span style="font-size:10px;color:var(--text-muted);">FRED x CNN</span></div>
-        <div class="macro-grid" id="macro-grid"></div>
+        <div class="panel-header">
+            <span class="panel-title">🏛 宏观指标</span>
+            <span style="font-size:10px;color:var(--text-muted);">FRED x CNN</span>
+        </div>
+        <div class="macro-grid" id="macro-grid">
+            <!-- Filled by JS -->
+        </div>
     </div>
+
+    <!-- ROW 4: Economic Calendar -->
     <div class="panel span-5">
-        <div class="panel-header"><span class="panel-title">📅 经济事件日历</span></div>
-        <ul class="event-list" id="event-list"></ul>
+        <div class="panel-header">
+            <span class="panel-title">📅 经济事件日历</span>
+        </div>
+        <ul class="event-list" id="event-list">
+            <!-- Filled by JS -->
+        </ul>
     </div>
+
+    <!-- ROW 4: Portfolio Summary -->
     <div class="panel span-7">
-        <div class="panel-header"><span class="panel-title">💰 投资组合概览</span><span class="panel-badge" style="background:rgba(239,68,68,.12);color:var(--red)">未配置</span></div>
-        <div id="portfolio-widget"></div>
+        <div class="panel-header">
+            <span class="panel-title">💰 投资组合概览</span>
+            <span class="panel-badge" style="background:rgba(239,68,68,.12);color:var(--red)">未配置</span>
+        </div>
+        <div id="portfolio-widget">
+            <!-- Filled by JS -->
+        </div>
     </div>
+
 </div>
+
 <footer class="terminal-footer">
     <p>⚠️ 以上信息仅供教育研究 · 不构成投资建议 · Powered by Claude Code × 8 MCP 金融数据源</p>
     <p style="margin-top:4px;">数据来源: Yahoo Finance · TradingView · FRED · SEC EDGAR · CoinGecko · CBOE · Reddit</p>
-    <p style="margin-top:8px;"><a href="/" style="color:var(--blue);text-decoration:none;">← 返回首页</a></p>
+    <p style="margin-top:8px;">
+        <a href="/nvda-report" style="color:var(--green);text-decoration:none;">📄 NVDA 深度研报</a> ·
+        <a href="/" style="color:var(--blue);text-decoration:none;">← 返回首页</a>
+    </p>
 </footer>
+
 <script>
+// ============================================================
+// EMBEDDED BRIEFING DATA (updated each time /daily-briefing runs)
+// ============================================================
 const BRIEFING = {
     date: "2026-07-01",
     generated: "2026-07-01T08:00:00+08:00",
@@ -329,22 +582,25 @@ const BRIEFING = {
     },
     watchlist: {
         US: [
-            { sym: "AAPL", name: "Apple" },
-            { sym: "MSFT", name: "Microsoft" },
-            { sym: "NVDA", name: "NVIDIA" },
-            { sym: "GOOGL", name: "Alphabet" },
-            { sym: "AMZN", name: "Amazon" },
-            { sym: "META", name: "Meta" },
-            { sym: "TSLA", name: "Tesla" }
+            { sym: "AAPL", name: "Apple", price: null, changePct: null },
+            { sym: "MSFT", name: "Microsoft", price: null, changePct: null },
+            { sym: "NVDA", name: "NVIDIA", price: null, changePct: null },
+            { sym: "GOOGL", name: "Alphabet", price: null, changePct: null },
+            { sym: "AMZN", name: "Amazon", price: null, changePct: null },
+            { sym: "META", name: "Meta", price: null, changePct: null },
+            { sym: "TSLA", name: "Tesla", price: null, changePct: null }
         ],
         crypto: [
-            { sym: "BTC", name: "Bitcoin" },
-            { sym: "ETH", name: "Ethereum" },
-            { sym: "SOL", name: "Solana" }
+            { sym: "BTC", name: "Bitcoin", price: null, changePct: null },
+            { sym: "ETH", name: "Ethereum", price: null, changePct: null },
+            { sym: "SOL", name: "Solana", price: null, changePct: null }
         ]
     }
 };
 
+// ============================================================
+// STATUS BAR CLOCK
+// ============================================================
 function updateClock() {
     const now = new Date();
     const opts = { year:'numeric', month:'2-digit', day:'2-digit',
@@ -356,6 +612,9 @@ function updateClock() {
 updateClock();
 setInterval(updateClock, 1000);
 
+// ============================================================
+// TICKER TAPE
+// ============================================================
 function buildTicker() {
     const items = [
         { sym: 'SPX', price: '--', chg: '--', up: null },
@@ -369,19 +628,27 @@ function buildTicker() {
         { sym: 'MSFT', price: '--', chg: '--', up: null },
         { sym: 'TSLA', price: '--', chg: '--', up: null },
         { sym: '10Y', price: '4.38%', chg: '--', up: null },
-        { sym: 'F&G', price: '31', chg: 'FEAR', up: false }
+        { sym: 'F&G', price: '31', chg: 'FEAR', up: false },
     ];
+    // Duplicate for seamless loop
     const all = [...items, ...items];
     const track = document.getElementById('ticker-track');
     track.innerHTML = all.map(i => {
         let chgClass = '';
         if (i.up === true) chgClass = 'chg-up';
         else if (i.up === false) chgClass = 'chg-down';
-        return '<div class="ticker-item"><span class="sym">' + i.sym + '</span><span class="price">' + i.price + '</span><span class="' + chgClass + '">' + i.chg + '</span></div>';
+        return `<div class="ticker-item">
+            <span class="sym">${i.sym}</span>
+            <span class="price">${i.price}</span>
+            <span class="${chgClass}">${i.chg}</span>
+        </div>`;
     }).join('');
 }
 buildTicker();
 
+// ============================================================
+// INDICES GRID
+// ============================================================
 function buildIndices() {
     const indices = [
         { name: 'S&P 500', sym: 'SPX', value: '--', chg: '--', up: null },
@@ -389,16 +656,23 @@ function buildIndices() {
         { name: 'DOW JONES', sym: 'DJI', value: '--', chg: '--', up: null },
         { name: 'VIX', sym: 'VIX', value: '--', chg: '--', up: null },
         { name: 'BTC/USD', sym: 'BTC', value: '--', chg: '--', up: null },
-        { name: 'ETH/USD', sym: 'ETH', value: '--', chg: '--', up: null }
+        { name: 'ETH/USD', sym: 'ETH', value: '--', chg: '--', up: null },
     ];
     const grid = document.getElementById('indices-grid');
     grid.innerHTML = indices.map(i => {
         const cls = i.up === true ? 'up' : (i.up === false ? 'down' : '');
-        return '<div class="index-card"><div class="name">' + i.name + '</div><div class="value">' + i.value + '</div><div class="change ' + cls + '">' + i.chg + '</div></div>';
+        return `<div class="index-card">
+            <div class="name">${i.name}</div>
+            <div class="value">${i.value}</div>
+            <div class="change ${cls}">${i.chg}</div>
+        </div>`;
     }).join('');
 }
 buildIndices();
 
+// ============================================================
+// FEAR & GREED GAUGE
+// ============================================================
 function getFearGreedRating(score) {
     if (score <= 20) return { text: '极度恐惧', cls: 'extreme-fear' };
     if (score <= 40) return { text: '恐惧', cls: 'fear' };
@@ -407,21 +681,35 @@ function getFearGreedRating(score) {
     return { text: '极度贪婪', cls: 'extreme-greed' };
 }
 
-function buildFearGreed(containerId, data) {
+function buildFearGreed(containerId, data, title) {
     const rating = getFearGreedRating(data.score);
     const container = document.getElementById(containerId);
     let indicatorRows = '';
     if (data.indicators) {
         indicatorRows = data.indicators.map(ind => {
             const ir = getFearGreedRating(ind.score);
-            return '<div class="fg-indicator"><span class="fi-name">' + ind.name + '</span><span class="fi-val ' + ir.cls + '">' + ind.score + '</span></div>';
+            return `<div class="fg-indicator">
+                <span class="fi-name">${ind.name}</span>
+                <span class="fi-val ${ir.cls}">${ind.score}</span>
+            </div>`;
         }).join('');
     }
-    container.innerHTML = '<div class="fg-value ' + rating.cls + '">' + data.score + '</div><div class="fg-label ' + rating.cls + '">' + rating.text + '</div><div class="fg-gauge"><div class="fg-needle" style="left:' + data.score + '%;"></div></div><div class="fg-sub">前值: ' + (data.prevClose || '--') + ' · 1月前: ' + (data.prev1Month || '--') + '</div>' + (indicatorRows ? '<div class="fg-indicators">' + indicatorRows + '</div>' : '');
+    container.innerHTML = `
+        <div class="fg-value ${rating.cls}">${data.score}</div>
+        <div class="fg-label ${rating.cls}">${rating.text}</div>
+        <div class="fg-gauge">
+            <div class="fg-needle" style="left:${data.score}%;"></div>
+        </div>
+        <div class="fg-sub">前值: ${data.prevClose || '--'} · 1月前: ${data.prev1Month || '--'}</div>
+        ${indicatorRows ? `<div class="fg-indicators">${indicatorRows}</div>` : ''}
+    `;
 }
 buildFearGreed('fg-widget', BRIEFING.sentiment.stocks);
 buildFearGreed('cfg-widget', BRIEFING.sentiment.crypto);
 
+// ============================================================
+// WATCHLIST TABLE
+// ============================================================
 function buildWatchlist() {
     const allStocks = [
         ...BRIEFING.watchlist.US.map(s => ({ ...s, type: 'stock' })),
@@ -429,53 +717,127 @@ function buildWatchlist() {
     ];
     const tbody = document.getElementById('watchlist-body');
     tbody.innerHTML = allStocks.map(s => {
-        const price = '<span style="color:var(--text-muted);">待更新</span>';
-        const na = '<span style="color:var(--text-muted);">—</span>';
-        return '<tr><td><span class="ticker-sym">' + s.sym + '</span> <span style="color:var(--text-muted);font-size:11px;">' + s.name + '</span></td><td>' + price + '</td><td>' + na + '</td><td>' + na + '</td><td style="color:var(--text-muted);">—</td><td><span style="background:rgba(255,255,255,.04);padding:2px 8px;border-radius:4px;font-size:11px;color:var(--text-muted);">待扫描</span></td></tr>';
+        const price = s.price ? `$${s.price.toLocaleString()}` : '<span style="color:var(--text-muted);">待更新</span>';
+        const chgPct = s.changePct !== null
+            ? `<span class="${s.changePct >= 0 ? 'up' : 'down'}">${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}%</span>`
+            : '<span style="color:var(--text-muted);">—</span>';
+        const chgColor = s.changePct !== null ? (s.changePct >= 0 ? 'up' : 'down') : '';
+        const chgVal = s.changePct !== null ? `${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}%` : '—';
+        return `<tr>
+            <td><span class="ticker-sym">${s.sym}</span> <span style="color:var(--text-muted);font-size:11px;">${s.name}</span></td>
+            <td>${price}</td>
+            <td class="${chgColor}">${chgVal}</td>
+            <td class="${chgColor}">${s.changePct !== null ? (s.changePct >= 0 ? '+' : '') + s.changePct.toFixed(2) + '%' : '—'}</td>
+            <td style="color:var(--text-muted);">—</td>
+            <td><span style="background:rgba(255,255,255,.04);padding:2px 8px;border-radius:4px;font-size:11px;color:var(--text-muted);">待扫描</span></td>
+        </tr>`;
     }).join('');
 }
 buildWatchlist();
 
+// ============================================================
+// MACRO GRID
+// ============================================================
 function buildMacro() {
     const grid = document.getElementById('macro-grid');
-    grid.innerHTML = BRIEFING.macro.map(m => '<div class="macro-card"><div class="m-label">' + m.label + ' · ' + m.source + '</div><div class="m-value">' + m.value + '</div><div class="m-date">' + m.date + '</div></div>').join('');
+    grid.innerHTML = BRIEFING.macro.map(m => `
+        <div class="macro-card">
+            <div class="m-label">${m.label} · ${m.source}</div>
+            <div class="m-value">${m.value}</div>
+            <div class="m-date">${m.date}</div>
+        </div>
+    `).join('');
 }
 buildMacro();
 
+// ============================================================
+// EVENT LIST
+// ============================================================
 function buildEvents() {
     const list = document.getElementById('event-list');
     list.innerHTML = BRIEFING.events.map(e => {
         const impactCls = e.impact === 'high' ? 'high' : (e.impact === 'med' ? 'med' : 'low');
-        return '<li><div class="event-dot ' + impactCls + '"></div><span class="event-date">' + e.date.slice(5) + '</span><div><div style="font-weight:500;">' + e.name + '</div><div style="font-size:11px;color:var(--text-muted);">' + (e.note || '') + '</div></div></li>';
+        return `<li>
+            <div class="event-dot ${impactCls}"></div>
+            <span class="event-date">${e.date.slice(5)}</span>
+            <div>
+                <div style="font-weight:500;">${e.name}</div>
+                <div style="font-size:11px;color:var(--text-muted);">${e.note || ''}</div>
+            </div>
+        </li>`;
     }).join('');
 }
 buildEvents();
 
+// ============================================================
+// PORTFOLIO WIDGET
+// ============================================================
 function buildPortfolio() {
     const p = BRIEFING.portfolio;
     const widget = document.getElementById('portfolio-widget');
-    const segs = Object.entries(p.target).map(([k, v]) => '<div class="seg" style="width:' + v.pct + '%;background:' + v.color + ';" title="' + k + ' 目标' + v.pct + '%"></div>').join('');
-    const legend = Object.entries(p.target).map(([k, v]) => '<span><span class="dot" style="background:' + v.color + ';"></span> ' + k + ' 目标' + v.pct + '% (实际' + v.actual + '%)</span>').join('');
-    widget.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><div><div style="font-family:var(--font-mono);font-size:28px;font-weight:700;">$' + p.total.toLocaleString() + '</div><div style="font-size:11px;color:var(--text-muted);">总资产</div></div><div style="text-align:right;"><div style="font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--gold);">$' + p.cash.toLocaleString() + '</div><div style="font-size:11px;color:var(--text-muted);">可用现金 (' + Math.round(p.cash/p.total*100) + '%)</div></div><div style="text-align:right;"><div style="font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--red);">⚠️</div><div style="font-size:11px;color:var(--red);">严重偏离目标</div></div></div><div class="alloc-bar-wrap">' + segs + '</div><div class="alloc-legend">' + legend + '</div>';
+    const segs = Object.entries(p.target).map(([k, v]) =>
+        `<div class="seg" style="width:${v.pct}%;background:${v.color};" title="${k} 目标${v.pct}%"></div>`
+    ).join('');
+    const legend = Object.entries(p.target).map(([k, v]) =>
+        `<span><span class="dot" style="background:${v.color};"></span> ${k} 目标${v.pct}% (实际${v.actual}%)</span>`
+    ).join('');
+
+    widget.innerHTML = `
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <div>
+                <div style="font-family:var(--font-mono);font-size:28px;font-weight:700;">$${p.total.toLocaleString()}</div>
+                <div style="font-size:11px;color:var(--text-muted);">总资产</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--gold);">$${p.cash.toLocaleString()}</div>
+                <div style="font-size:11px;color:var(--text-muted);">可用现金 (${Math.round(p.cash/p.total*100)}%)</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--red);">⚠️</div>
+                <div style="font-size:11px;color:var(--red);">严重偏离目标</div>
+            </div>
+        </div>
+        <div class="alloc-bar-wrap">${segs}</div>
+        <div class="alloc-legend">${legend}</div>
+    `;
 }
 buildPortfolio();
 
+// ============================================================
+// CHARTS — Lightweight Charts (TradingView library)
+// ============================================================
 function createChart(containerId, symbol, color) {
     const el = document.getElementById(containerId);
     const chart = window.LightweightCharts.createChart(el, {
-        layout: { background: { type: 'solid', color: '#181b26' }, textColor: '#787b86', fontSize: 11, fontFamily: 'Inter, sans-serif' },
-        grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
+        layout: {
+            background: { type: 'solid', color: '#181b26' },
+            textColor: '#787b86',
+            fontSize: 11,
+            fontFamily: 'Inter, sans-serif',
+        },
+        grid: {
+            vertLines: { color: 'rgba(255,255,255,0.04)' },
+            horzLines: { color: 'rgba(255,255,255,0.04)' },
+        },
         crosshair: { mode: 0 },
         rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)', scaleMargins: { top: 0.1, bottom: 0.1 } },
         timeScale: { borderColor: 'rgba(255,255,255,0.1)', timeVisible: true },
-        width: el.clientWidth, height: el.clientHeight
+        width: el.clientWidth,
+        height: el.clientHeight,
     });
+
     const areaSeries = chart.addAreaSeries({
-        lineColor: color, topColor: color + '40', bottomColor: color + '05', lineWidth: 2, priceLineVisible: false
+        lineColor: color,
+        topColor: color + '40',
+        bottomColor: color + '05',
+        lineWidth: 2,
+        priceLineVisible: false,
     });
+
     return { chart, areaSeries };
 }
 
+// Generate sample historical data for demo (will show chart structure)
 function generateSampleData(basePrice, days, volatility) {
     const data = [];
     let price = basePrice;
@@ -485,30 +847,51 @@ function generateSampleData(basePrice, days, volatility) {
         d.setDate(d.getDate() - i);
         const change = (Math.random() - 0.48) * volatility * price;
         price = Math.max(price + change, basePrice * 0.7);
-        data.push({ time: d.toISOString().slice(0, 10), value: parseFloat(price.toFixed(2)) });
+        data.push({
+            time: d.toISOString().slice(0, 10),
+            value: parseFloat(price.toFixed(2)),
+        });
     }
     return data;
 }
 
+// Initialize SPX chart
 (function() {
     const { chart: spxChart, areaSeries: spxSeries } = createChart('spx-chart', 'SPX', '#3b82f6');
     const spxData = generateSampleData(5800, 90, 0.012);
     spxSeries.setData(spxData);
-    document.getElementById('spx-price').textContent = '收盘 ' + spxData[spxData.length - 1].value.toLocaleString();
+    document.getElementById('spx-price').textContent =
+        '收盘 ' + spxData[spxData.length - 1].value.toLocaleString();
+
+    // Handle resize
     const spxEl = document.getElementById('spx-chart');
-    new ResizeObserver(() => { spxChart.applyOptions({ width: spxEl.clientWidth, height: spxEl.clientHeight }); }).observe(spxEl);
+    new ResizeObserver(() => {
+        spxChart.applyOptions({ width: spxEl.clientWidth, height: spxEl.clientHeight });
+    }).observe(spxEl);
 })();
 
+// Initialize BTC chart
 (function() {
     const { chart: btcChart, areaSeries: btcSeries } = createChart('btc-chart', 'BTC', '#f7931a');
     const btcData = generateSampleData(85000, 90, 0.025);
     btcSeries.setData(btcData);
-    document.getElementById('btc-price').textContent = '$' + btcData[btcData.length - 1].value.toLocaleString();
+    document.getElementById('btc-price').textContent =
+        '$' + btcData[btcData.length - 1].value.toLocaleString();
+
     const btcEl = document.getElementById('btc-chart');
-    new ResizeObserver(() => { btcChart.applyOptions({ width: btcEl.clientWidth, height: btcEl.clientHeight }); }).observe(btcEl);
+    new ResizeObserver(() => {
+        btcChart.applyOptions({ width: btcEl.clientWidth, height: btcEl.clientHeight });
+    }).observe(btcEl);
 })();
 
-console.log('Investment Finance AI Briefing Dashboard loaded - 2026-07-01');
+// ============================================================
+// LIVE PRICE POLLING (brief attempt — most free APIs blocked)
+// ============================================================
+// For now, the embedded data drives the display.
+// In a production setup, a backend would push live prices via WebSocket.
+console.log('📊 Investment Finance AI Briefing Dashboard loaded — ' + BRIEFING.date);
+console.log('📡 Data: FRED (CPI/FedFunds/10Y/Unemployment) + CNN Fear & Greed + CoinGecko');
 </script>
+
 </body>
 </html>

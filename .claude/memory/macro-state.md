@@ -1,24 +1,33 @@
-# Macro State
+# 🌍 宏观环境评估 (Macro Assessment)
 
-Latest macroeconomic indicators and market conditions.
+## 市场情绪 (2026-07-01)
+- **CNN 恐惧贪婪指数**: 31 (😨 恐惧) — 上月 60 (贪婪)，显著恶化
+  - 垃圾债需求: 12 (极度恐惧)
+  - 避险需求: 22 (极度恐惧)
+  - 市场宽度: 16 (极度恐惧)
+  - VIX: 50 (中性)
+- **加密恐惧贪婪**: 11 (😱 极度恐惧)
 
-## Market Regime
-- Current: Unknown (needs refresh)
-- Last assessment: N/A
+## 关键利率
+- 美联储基金利率: **3.63%** (2026-06-29)
+- 美国 10Y 国债收益率: **4.38%** (2026-06-29)
 
-## Key Indicators
+## 通胀
+- CPI (SA): 333.979 (2026-05)
+- 核心 PCE: 待获取
 
-| Indicator | Value | Trend |
-|---|---|---|
-| Fed Funds Rate | TBD | — |
-| US CPI YoY | TBD | — |
-| US Unemployment | TBD | — |
-| US 10Y Yield | TBD | — |
-| VIX | TBD | — |
-| Fear & Greed | TBD | — |
+## 劳动力市场
+- 失业率: **4.3%** (2026-05)
+- 非农就业: 待获取
 
-## Economic Calendar
+## 中国市场
+- PMI: 待获取
+- M2 供应: 待获取
+- LPR: 待获取
 
-Next key events: Run `/daily-briefing` to populate.
+## 今日事件
+- 🔴 FOMC 新闻发布 (2026-07-01)
+- H.15 Selected Interest Rates 发布
 
-Last updated: 2026-06-30
+---
+*最后更新: 2026-07-01 — 来源: FRED (fred_indicator) + CNN Fear & Greed + CoinGecko*

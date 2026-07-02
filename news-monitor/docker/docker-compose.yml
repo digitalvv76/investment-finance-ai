@@ -1,0 +1,39 @@
+# Financial News Monitor — Docker Compose
+# Start: docker-compose -f docker/docker-compose.yml up -d
+# Stop:  docker-compose -f docker/docker-compose.yml down
+# Logs:  docker-compose -f docker/docker-compose.yml logs -f
+
+version: "3.9"
+
+services:
+  news-monitor:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: news-monitor
+    restart: unless-stopped
+
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - FRED_API_KEY=${FRED_API_KEY:-}
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
+      - TZ=America/New_York
+
+    volumes:
+      # Persist data across container restarts
+      - news_data:/app/data
+      - news_logs:/app/logs
+      # Mount watchlist for ticker tracking
+      - ../.claude/memory/watchlist-state.md:/app/.claude/memory/watchlist-state.md:ro
+      - ../.claude/memory/portfolio-state.md:/app/.claude/memory/portfolio-state.md:ro
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  news_data:
+  news_logs:

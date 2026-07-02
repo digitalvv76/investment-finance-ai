@@ -2,46 +2,42 @@
   "mcpServers": {
     "yfinance": {
       "command": "uvx",
-      "args": ["mcp-yfinance"],
-      "env": {}
+      "args": ["yahoo-finance-mcp-server"]
     },
-    "stock-scanner": {
-      "command": "npx",
-      "args": ["-y", "@stock-scanner/mcp"],
-      "env": {}
-    },
-    "finance": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/finance-mcp"],
-      "env": {
-        "ALPHA_VANTAGE_API_KEY": "${ALPHA_VANTAGE_API_KEY}"
-      }
+    "cn-finance": {
+      "command": "uvx",
+      "args": ["cn-financial-mcp"],
+      "_note": "Package not yet available on PyPI (2026-06-30). Use stock-scanner tradingview_scan with exchange=SHA/SHE for A-shares as fallback."
     },
     "coingecko": {
       "command": "npx",
-      "args": ["-y", "@coingecko/coingecko-mcp"],
-      "env": {}
+      "args": ["-y", "@coingecko/coingecko-mcp"]
     },
     "fred": {
       "command": "npx",
-      "args": ["-y", "@anthropic/fred-mcp"],
+      "args": ["-y", "fred-mcp-server"],
       "env": {
         "FRED_API_KEY": "${FRED_API_KEY}"
       }
     },
+    "finance": {
+      "command": "npx",
+      "args": ["-y", "finance-mcp-server"],
+      "env": {
+        "ALPHA_VANTAGE_API_KEY": "${ALPHA_VANTAGE_API_KEY}"
+      }
+    },
+    "stock-scanner": {
+      "command": "npx",
+      "args": ["-y", "stock-scanner-mcp", "--enable-workspace"]
+    },
     "sec-edgar": {
       "command": "uvx",
-      "args": ["sec-edgar-mcp"],
-      "env": {}
-    },
-    "cn-finance": {
-      "command": "uvx",
-      "args": ["cn-finance-mcp"],
-      "env": {}
+      "args": ["sec-edgar-mcp"]
     },
     "crypto-trade": {
       "command": "npx",
-      "args": ["-y", "crypto-trade-mcp"],
+      "args": ["-y", "crypto-mcp-server"],
       "env": {
         "BINANCE_API_KEY": "${BINANCE_API_KEY}",
         "BINANCE_SECRET_KEY": "${BINANCE_SECRET_KEY}"

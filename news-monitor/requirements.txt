@@ -1,0 +1,24 @@
+# requirements.txt — Financial News Monitor
+# Core
+aiohttp>=3.9.0
+python-telegram-bot>=21.0
+pyyaml>=6.0
+
+# Collection
+feedparser>=6.0.0
+playwright>=1.40.0
+
+# Analysis
+spacy>=3.7.0
+vaderSentiment>=3.3.0
+sentence-transformers>=2.2.0
+
+# Storage
+chromadb>=0.4.0
+
+# LLM (at least one required for deep analysis)
+anthropic>=0.30.0       # Anthropic Claude
+openai>=1.0.0           # DeepSeek (OpenAI-compatible API)
+
+# Utilities
+schedule>=1.2.0

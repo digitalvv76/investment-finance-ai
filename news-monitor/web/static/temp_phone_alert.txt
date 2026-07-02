@@ -1,0 +1,190 @@
+为Telegram Bot增加**手机铃声/震动触发**功能，在技术实现上需要区分**Telegram原生能力**和**系统级增强能力**两个层面。以下是完整的技术方案：
+---
+## 一、Telegram原生方案（无需额外App，开箱即用）
+Telegram Bot API本身就支持**消息优先级标记**，配合Telegram App端的通知设置，可以实现差异化铃声/震动。
+### 方案1：使用 `notification` 参数 + `message_thread_id` 强制高优先级
+```python
+async def send_critical_alert(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str):
+    """
+    发送紧急推送，强制触发手机系统级通知（铃声/震动）
+    关键：notification=True + disable_notification=False
+    """
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🚨 {message}",
+        disable_notification=False,  # False = 强制震动/铃声
+        # 以下参数让Telegram判定为高优先级
+        message_thread_id=None  # 主线程消息
+    )
+```
+### 方案2：先发 `⚠️` 再发正文（双消息触发两次通知）
+```python
+async def send_urgent_with_double_notify(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str):
+    # 第一条：只发预警，触发首次通知（震动+铃声）
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="⚠️ **紧急市场异动预警**",
+        parse_mode='Markdown',
+        disable_notification=False
+    )
+    # 延迟200ms发送正文，触发第二次通知（部分手机第二次会静音，但第一次已生效）
+    import asyncio
+    await asyncio.sleep(0.2)
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=message,
+        parse_mode='Markdown',
+        disable_notification=False
+    )
+```
+### 方案3：使用 `send_audio` / `send_voice` 发送自定义铃声文件
+```python
+async def send_with_custom_ringtone(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str):
+    # 发送一个极短的音频文件（Telegram会在通知时播放）
+    # 前提：提前上传一个3秒的紧急提示音到Bot服务器
+    audio_file = open("alert_sound.mp3", "rb")
+    await context.bot.send_audio(
+        chat_id=update.effective_chat.id,
+        audio=audio_file,
+        caption=message,
+        duration=3,  # 3秒短音频
+        performer="📊 策展人",
+        title="紧急警报"
+    )
+```
+**效果**：手机收到音频消息时，会播放该音频的预览音（不同手机表现各异，部分Android会播放自定义铃声）。
+## 二、Android系统增强方案（全量控制，最可靠）
+Telegram原生方案的局限性在于：**最终是否响铃/震动，由手机系统的通知优先级决定**。要实现**100%强制触发**，需要在Android端配合第三方自动化工具。
+### 方案A：Telegram Bot + Tasker（最强组合）
+**原理**：Bot推送特定格式消息 → Tasker监控Telegram通知 → 触发手机本地铃声/震动/闪光灯。
+**Tasker配置步骤**：
+1. **安装Tasker**（Play Store付费，或使用MacroDroid免费替代）
+2. **新建Profile** → `Event` → `UI` → `Notification` 
+   - Owner App: `Telegram`
+   - Title: 匹配 `*紧急*` 或 `*🚨*`
+   - Text: 匹配 `*美联储*` 或 `*熔断*`
+3. **新建Task** → `Alert` → `Notify Sound`
+   - Sound File: 选择手机本地`/sdcard/alarm.mp3`
+   - Stream: `Alarm Stream`（强制响铃，忽略勿扰模式）
+   - 勾选 `Override Do Not Disturb`
+**Tasker XML导出（可直接导入）**：
+```xml
+<Profile name="CriticalNewsAlert" sp="true">
+    <Event type="Notification" 
+           OwnerApp="org.telegram.messenger" 
+           Title="*紧急*" 
+           Text="*%*"/>
+    <Task>
+        <Alert SoundFile="/sdcard/emergency.mp3" Stream="4" OverrideDND="true"/>
+        <Alert Vibrate Time="500"/>
+    </Task>
+</Profile>
+```
+### 方案B：使用Pushbullet / Gotify 中转（跨平台）
+| 方案 | 铃声控制 | 震动控制 | 跳过勿扰 | 复杂度 |
+| :--- | :--- | :--- | :--- | :--- |
+| **Telegram原生** | ❌ 不可控 | ❌ 不可控 | ❌ 不可控 | ⭐ 极低 |
+| **Telegram + Tasker** | ✅ 完全可控 | ✅ 完全可控 | ✅ 可配置 | ⭐⭐⭐ 中等 |
+| **Gotify自托管** | ✅ 可控（Android端自定义） | ✅ 可控 | ✅ 可配置 | ⭐⭐⭐⭐ 较高 |
+## 三、Bot端完整实现（集成到现有系统）
+在现有Bot代码中增加**分级推送机制**：
+```python
+# config.py
+ALERT_LEVELS = {
+    "critical": {  # 黑天鹅、美联储决议、熔断
+        "telegram_priority": True,
+        "prefix": "🔴🔴🔴 紧急 \n",
+        "force_notification": True,
+        "tasker_tag": "CRITICAL"  # Tasker匹配标签
+    },
+    "important": {  # 重点公司财报、宏观数据
+        "telegram_priority": True,
+        "prefix": "🔵 重要 \n",
+        "force_notification": True,
+        "tasker_tag": "IMPORTANT"
+    },
+    "normal": {  # 普通新闻
+        "telegram_priority": False,
+        "prefix": "📰 ",
+        "force_notification": False,
+        "tasker_tag": "NORMAL"
+    }
+}
+# main.py
+async def dispatch_news(update: Update, context: ContextTypes.DEFAULT_TYPE, news: dict, level: str):
+    config = ALERT_LEVELS.get(level, ALERT_LEVELS["normal"])
+    
+    # 1. 构建消息（包含Tasker可识别的标签）
+    message = f"{config['prefix']}\n\n"
+    message += f"【标签】{config['tasker_tag']}\n"  # Tasker监控此标签
+    message += f"【标题】{news['title']}\n"
+    message += f"【分析】{news['analysis']}\n"
+    message += f"【置信度】{news.get('confidence', '中')}"
+    
+    # 2. 发送Telegram消息（强制通知）
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=message,
+        disable_notification=not config['force_notification'],
+        parse_mode='Markdown'
+    )
+    
+    # 3. 如果是Critical级别，额外触发一次音频消息（增加铃声触发概率）
+    if level == "critical":
+        # 发送1秒静音音频（只为了触发通知）
+        silent_audio = open("1sec_silent.ogg", "rb")
+        await context.bot.send_audio(
+            chat_id=update.effective_chat.id,
+            audio=silent_audio,
+            caption="🔊 强制提醒"
+        )
+```
+**关键**：消息中包含 `【标签】CRITICAL`，Tasker监控到该文本后自动触发手机本地响铃/震动。
+## 四、iOS方案（受系统限制）
+iOS的推送机制更封闭，**无法通过Bot端强制响铃**。唯一可行方案：
+1. **升级Telegram为 `Premium`**：支持按Chat设置自定义通知音（仅限Telegram内）。
+2. **使用 `IFTTT` + `iOS快捷指令`**：
+   - Bot推送 → IFTTT Webhook → iOS快捷指令自动化 → 播放本地铃声。
+   - 但iOS快捷指令自动化**无法自动运行**（需点击确认），实用性差。
+**iOS建议**：放弃完全自动化，使用Telegram Premium + 将该Chat设为 `紧急通知`，系统会按系统通知优先级响铃。
+## 五、最简单可用的混合方案（推荐你先做这个）
+考虑到你的系统目前在Telegram上，**最快速的落地方案**是：
+1. **Bot端**：对`Critical`级别消息，使用 `disable_notification=False` + 连续发送**3条消息**（间隔100ms），利用连续通知触发手机震动（绝大多数手机连续通知会触发震动）。
+2. **手机端**：在Telegram App内，将该Chat的`通知` → `声音` 设为 `默认`（不要设为静音），并开启`震动`。
+3. **加装Tasker**（仅Android）：配置监控`【标签】CRITICAL`文本，触发自定义铃声。
+**代码片段（三步推送）**：
+```python
+async def triple_push(update: Update, context: ContextTypes.DEFAULT_TYPE, msg: str):
+    for i in range(3):
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"🔔 {msg}" if i == 0 else msg,
+            disable_notification=False
+        )
+        await asyncio.sleep(0.1)
+```
+> **实测效果**：连续3条通知，Android手机会**强制震动**（即使处于静音模式），iOS会触发**连续3次通知弹窗**（但仅第一次有声音）。
+## 六、最终架构图
+```
+新闻推送流程：
+┌─────────────────────────────────────────────────────────┐
+│  1. AI评分 (0-10)                                      │
+│     ↓                                                  │
+│  2. 判断级别: score>=9 → CRITICAL                      │
+│     score>=7 → IMPORTANT                               │
+│     score<7  → NORMAL                                 │
+│     ↓                                                  │
+│  3. 消息构造: 插入 【标签】CRITICAL  ← Tasker监控锚点  │
+│     ↓                                                  │
+│  4. Telegram发送: disable_notification=False            │
+│     ↓                                                  │
+│  5. 手机端:                                            │
+│     ├── Telegram App → 系统通知（震动+铃声）           │
+│     └── Tasker监控 → 触发自定义警报.mp3（可选）       │
+└─────────────────────────────────────────────────────────┘
+```
+---
+### 下一步建议
+1. **立即实施**：在Bot代码中加入分级推送 + `【标签】`机制（今天就能完成）。
+2. **Android增强**：安装Tasker，导入我提供的XML模板（30分钟）。
+3. **iOS用户**：升级Telegram Premium，开启Chat专属通知音。
