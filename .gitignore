@@ -1,6 +1,5 @@
 # ====== Secrets ======
 .env
-.claude/settings.json
 
 # ====== Python ======
 __pycache__/
@@ -20,6 +19,8 @@ Thumbs.db
 Desktop.ini
 
 # ====== Claude Code ======
+.claude/settings.json
+.claude/settings.local.json
 .claude/cache/
 .claude/sessions/
 .claude/shell-snapshots/
@@ -30,6 +31,11 @@ Desktop.ini
 .claude/telemetry/
 .claude/logs/
 .claude/plans/
+
+# ====== Logs (generated) ======
+logs/
+news-monitor/logs/
+.playwright-mcp/
 
 # ====== Project Data (generated) ======
 data/cache/
@@ -47,3 +53,5 @@ scripts/*.pyc
 .idea/
 *.swp
 *.swo
+
+.vercel
