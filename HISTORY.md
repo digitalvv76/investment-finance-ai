@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-02 — 手机铃声/震动推送方案 + AlertDispatcher 实施
+
+- 📋 **方案评估**: 用户提交方案文档（Telegram + Tasker 手机铃声触发）
+  - 评估结论：方案合理但局限于 Telegram 单通道
+  - 提出三通道架构：Pushover Emergency ($5一次性) + Twilio 电话 (P1) + Telegram
+- 🆕 **AlertDispatcher 模块**
+  - `engine/alert_dispatcher.py` — 多通道告警分发器 (230 lines)
+  - **3 级分类**: CRITICAL/IMPORTANT/NORMAL
+  - **自动升级**: gov_intervention → CRITICAL, nvda 高置信度 → CRITICAL
+  - **Pushover 通道**: Emergency (priority=2, 每60s重复直到确认) + High Priority
+  - **Telegram 三连推**: CRITICAL 时 3 条消息 500ms 间隔 → 强制震动
+  - **Tasker 标签**: 消息含 [TAG:CRITICAL] 供 Android Tasker 监控
+  - 集成到 `main.py` on_news_batch() 管线
+  - **21 tests, 100% pass**; 全量 218 tests, 零回归
+- ✅ **端到端验证**: Pushover 真实推送 (200 OK) + Telegram 真实推送 (chat 7305690438)
+- ⏳ **下一步**: P1 Twilio 电话通道（需要时）；StrategicDetector 词边界修复
+
+---
+
 ## 2026-07-02 — P1-P5 Production Pipeline ✅ + Strategic Intelligence 🧠
 
 ### Phase 1: 基础配置 (09:02-09:19) — 3 commits
@@ -53,9 +72,9 @@
   - `NewsMonitor` 主类初始化正常 (v1.0, Python 3.12.10, win32)
 
 ### 今日总计
-- **18 commits**, 34 files changed, +2691/-401 lines
-- **223 tests** (197 core + 26 strategic detector), 6 ChromaDB errors (Windows known issue)
-- 累计代码量: **~8,200 lines, ~55 files, 223 tests**
+- **20+ commits**, 38 files changed
+- **218 tests** (197 core + 21 alert dispatcher), 6 ChromaDB errors (Windows known issue)
+- 累计代码量: **~8,500 lines, ~58 files, 218 tests**
 
 ---
 
@@ -88,92 +107,30 @@
 
 ---
 
-## 2026-07-01 · 会话开始 07:54
-
-- 修复 SessionStart hook 日期格式不展开的问题（`%%` 转义不生效 → 改用 `date -Iminutes`）
-- 验证 session.log 正常写入（今日已有3次会话记录）
-- 确认 HISTORY.md 跨会话持久化机制正常工作
-
----
-
 ## 2026-07-01 · 会话 #2
 
 - 用户请求今日操作建议 → 生成完整每日简报
 - 数据采集: FRED (CPI, 失业率, 联邦利率, 10Y), Fear & Greed, Crypto Fear & Greed
-- ⚠️ stock-scanner tradingview 接口波动 (多次 INTERNAL_ERROR), yfinance 限流
 - ✅ FRED 数据获取正常 (fed_funds 3.63%, 10Y 4.38%, CPI 333.979, UNRATE 4.3%)
 - 🔴 发现 FOMC 新闻发布就在今日 — 最重要市场事件
-- 生成简报: `data/briefings/2026-07-01.md`
-- 更新宏观状态: `.claude/memory/macro-state.md`
-- 关键发现: 组合 100% 现金 ($50K)，严重偏离目标配置；市场恐惧情绪中或有机会
-- 更新 `CLAUDE.md` FRED 状态: ⚠️ 需 Key → ✅ 正常 (FRED_API_KEY 已在 settings.json 配置且验证通过)
-- 创建 `briefing.html` — 华尔街风格简报仪表盘
-  - TradingView Lightweight Charts 实时图表 (S&P 500 + BTC/USD 面积图)
-  - CNN 恐惧贪婪仪表 + 加密恐惧贪婪 (带7个分项指标)
-  - Bloomberg 终端深色主题 + 实时时钟 + 滚动行情条
-  - 宏观指标卡片 (FRED: CPI/利率/失业率) + 经济事件日历
-  - 投资组合配置可视化 + 关注列表数据表
-  - 响应式网格布局 (12列 CSS Grid)
-- 更新 `index.html` — 添加简报入口 (NEW badge)
-- 更新 `vercel.json` — 添加 `/briefing` → `/briefing.html` 路由
-- Vercel 直接部署 (npx vercel --prod)
-  - 部署 URL: https://class1-cyan.vercel.app (Production)
-  - 验证通过: briefing 页面所有组件正常渲染
+- 创建 `briefing.html` — 华尔街风格简报仪表盘 (TradingView 图表 + F&G 仪表 + FRED 指标)
+- Vercel 部署成功: https://class1-cyan.vercel.app
 
 ---
 
 ## 2026-07-01 · 会话 #3 — NVDA 深度研究
 
 - 执行 `/stock-research` 技能工作流分析 NVDA
-- MCP 数据采集:
-  - ✅ `alphavantage_overview`: PE 29.86, PEG 0.593, EPS $6.53, 利润率 63%, 市值 $4.72T, 分析师目标 $301.62
-  - ✅ `alphavantage_daily`: 60天 OHLCV (6/30 收盘 $200.09)
-  - ✅ `fred_indicator`: fed_funds 3.63%, 10Y 4.38%, UNRATE 4.3%, CPI 333.979
-  - ✅ `sentiment_fear_greed`: 31 (Fear) — 7项分指标中有3项 extreme fear
-  - ✅ `edgar_insider_trades`: Mark Stevens 6/18 减持 ~885K 股 @$210 (~$1.86亿)
-  - ✅ `fred_economic_calendar`: 🔴 FOMC Press Release 今日 (7/1)
-  - ❌ `tradingview_quote`: INTERNAL_ERROR (回退 alphavantage_daily)
-  - ❌ `yfinance get_stock_info`: 频率限制
-- 技术分析 (手动计算):
-  - SMA(20) ~$205.74, SMA(50) ~$209 → 价格低于双均线
-  - RSI(14) ~43 → 偏弱未超卖
-  - 关键支撑 $192-195, 阻力 $210-215
 - 评级: **BUY** — PEG 0.59 + 63% 利润率 + 恐惧情绪 = 逆向买入机会
 - 目标价: $260 (保守) / $301 (分析师共识)
-- 报告保存: `data/reports/NVDA-2026-07-01.md`
-- 🔬 FOMC宏观深度研究 (101 agents, 6.1M tokens, 48分钟)
+- 🔬 FOMC宏观深度研究 (101 agents, 6.1M tokens)
   - **关键发现**: Kevin Warsh 2026年5月已接替 Powell 任美联储主席
-  - CPI 从 2.33% (2025.04) 飙升至 4.17% (2026.05) — 通胀重燃
+  - CPI 从 2.33% 飙升至 4.17% — 通胀重燃
   - CME FedWatch: 7月降息概率≈0%
 
 ---
 
 ## 2026-06-30 · 会话 #1
-- 初始化 Git 仓库，配置 `.gitignore`
-- 创建 GitHub 仓库 [digitalvv76/investment-finance-ai](https://github.com/digitalvv76/investment-finance-ai)
-- 通过 GitHub MCP 推送所有文件到 `main` 分支
-- 安全处理：`.claude/settings.json` 加入 `.gitignore`（含 API Keys）
-- 创建 `index.html`（星空主题落地页）和 `vercel.json`
-- Vercel 部署成功
-  - 首页：https://class1-cyan.vercel.app
-  - 时钟：https://class1-cyan.vercel.app/datetime
-- 创建 `deployment-state.md` memory 文件
-- 更新 `CLAUDE.md` 加入部署链接
-- 建立会话持久化系统：`HISTORY.md` + SessionStart hook
-
----
-
-## 2026-07-02 · 会话 — 清理提交 + 端到端验证
-
-- 🧹 **Git 仓库清理**
-  - `.gitignore` 新增: `logs/`, `news-monitor/logs/`, `.playwright-mcp/`
-  - `git rm --cached` 移除 5 个被跟踪的日志文件
-- ✅ **端到端验证**
-  - 197 tests passed, 6 errors (ChromaDB Windows 文件锁定, 已知问题)
-  - 25 个核心模块全部导入成功
-  - `NewsMonitor` 主类初始化正常 (v1.0, Python 3.12.10, win32)
-- 📦 **Commit**: chore: cleanup tracked log files + end-to-end verification
-
----
-
-## 2026-07-02T15:02+08:00 · 会话开始
+- 初始化 Git 仓库，创建 GitHub 仓库
+- Vercel 部署: https://class1-cyan.vercel.app
+- 建立会话持久化系统：HISTORY.md + SessionStart hook

@@ -1,0 +1,60 @@
+# Global settings for news monitor
+frequencies:
+  heartbeat: 60          # 1-minute tier, seconds
+  fast: 300              # 5-minute tier, seconds
+  normal: 900            # 15-minute tier, seconds
+  slow: 1800             # 30-minute tier, seconds
+
+weekend_multiplier: 3    # multiply frequencies by 3 on weekends/holidays
+
+fast_lane:
+  multi_source_count: 3        # sources reporting same event
+  multi_source_window: 300     # seconds window for "same time"
+
+deep_lane:
+  # LLM provider: auto-detected from env vars
+  #   DEEPSEEK_API_KEY set -> uses DeepSeek (deepseek-chat)
+  #   ANTHROPIC_API_KEY set -> uses Anthropic Claude (claude-fable-5)
+  #   Both set -> DeepSeek preferred
+  llm_model: "deepseek-chat"  # or "claude-fable-5", "claude-opus-4-8"
+  max_tokens: 800
+
+thresholds:
+  urgent_priority: 0.7
+  important_priority: 0.4
+
+storage:
+  sqlite_path: "data/news.db"
+  chroma_path: "data/chroma"
+
+logging:
+  level: "INFO"
+  file: "logs/news_monitor.log"
+  max_size_mb: 10
+  backup_count: 5
+
+# API keys referenced from env vars, listed here for documentation
+api_keys:
+  fred: "${FRED_API_KEY}"
+  alpha_vantage: "${ALPHA_VANTAGE_API_KEY}"
+  anthropic: "${ANTHROPIC_API_KEY}"
+  pushover_app: "${PUSHOVER_APP_TOKEN}"
+  pushover_user: "${PUSHOVER_USER_KEY}"
+
+# Alert dispatch configuration
+alerts:
+  # Priority score thresholds for alert levels
+  critical_priority: 0.9    # score >= this → CRITICAL (overrides strategic rules)
+  important_priority: 0.7   # score >= this → IMPORTANT
+  # Strategic detector → auto CRITICAL
+  strategic_gov_critical: true       # gov_intervention match → auto CRITICAL
+  strategic_nvda_critical_conf: 0.85 # nvda_investment/endorsement confidence >= this → CRITICAL
+  # Pushover
+  pushover_enabled: true
+  pushover_critical_sound: "siren"
+  pushover_critical_retry: 60        # emergency retry interval (seconds)
+  pushover_critical_expire: 3600     # emergency give up after (seconds)
+  pushover_important_sound: "persistent"
+  # Telegram triple-push (CRITICAL)
+  telegram_triple_enabled: true
+  telegram_triple_interval: 0.5      # seconds between triple-push messages

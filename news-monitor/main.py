@@ -1,0 +1,270 @@
+"""Financial News Monitor -- main entry point.
+
+Wires together the scheduler, fast-lane engine, deep-lane orchestrator,
+and Telegram bot into a single runnable process.  Callbacks flow through:
+
+    Scheduler -> Dedup -> FastLane (rule engine) -> DB update -> Telegram push
+                                                    |
+                                                    v
+                                              DeepLane (async, LLM-gated)
+"""
+import asyncio
+import logging
+import os
+import sys
+from pathlib import Path
+
+# Ensure the news-monitor package directory is importable when running
+# directly (``python main.py``) regardless of how the working directory
+# is set up.
+_pkg_root = Path(__file__).resolve().parent
+if str(_pkg_root) not in sys.path:
+    sys.path.insert(0, str(_pkg_root))
+
+from config.loader import ConfigLoader
+from storage.database import Database
+from storage.vector_store import VectorStore
+from collector.dedup import DedupManager
+from collector.scheduler import NewsScheduler
+from engine.fast_lane import FastLane
+from engine.deep_lane import DeepLane
+from engine.learner import Learner
+from engine.curator import Curator
+from engine.trainer import Trainer
+from engine.alert_dispatcher import AlertDispatcher, AlertLevel
+from engine.strategic_detector import StrategicDetector
+from bot.telegram_bot import NewsBot
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+from logging.handlers import RotatingFileHandler
+from pathlib import Path as _Path
+
+_log_dir = _Path("logs")
+_log_dir.mkdir(parents=True, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        RotatingFileHandler(
+            _log_dir / "news_monitor.log",
+            maxBytes=10 * 1024 * 1024,  # 10 MB
+            backupCount=5,
+            encoding="utf-8",
+        ),
+        logging.StreamHandler(sys.stdout),
+    ],
+)
+logger = logging.getLogger(__name__)
+
+# Startup banner
+logger.info("=" * 60)
+logger.info("Financial News Monitor v1.0 starting")
+logger.info("Python: %s | Platform: %s", sys.version.split()[0], sys.platform)
+logger.info("=" * 60)
+
+
+# ===================================================================
+# NewsMonitor
+# ===================================================================
+
+
+class NewsMonitor:
+    """Top-level orchestrator that owns every subsystem."""
+
+    def __init__(self) -> None:
+        # ---- config -------------------------------------------------
+        self.config = ConfigLoader("config")
+
+        # Validate config at startup — logs warnings but does not abort
+        issues = self.config.validate()
+        if issues:
+            critical = [i for i in issues if "failed to load" in i]
+            if critical:
+                logger.error("FATAL config errors: %s", critical)
+                raise SystemExit(1)
+            logger.warning("Config has %d non-fatal issue(s) — continuing", len(issues))
+
+        # ---- database -----------------------------------------------
+        settings = self.config.load_settings()
+        db_path = settings["storage"]["sqlite_path"]
+        self.db = Database(db_path)
+        self.db.init_db()
+
+        # ---- vector store (semantic dedup + similarity) -------------
+        self.vector_store = VectorStore(
+            persist_path=settings["storage"].get("chroma_path", "data/chroma")
+        )
+        try:
+            self.vector_store.initialize()
+        except Exception as e:
+            logger.warning("VectorStore unavailable — semantic dedup disabled: %s", e)
+
+        # ---- dedup (with semantic tier) -----------------------------
+        self.dedup = DedupManager(vector_store=self.vector_store)
+
+        # ---- scheduler ----------------------------------------------
+        self.scheduler = NewsScheduler(self.config, self.db, self.dedup)
+
+        # ---- fast-lane rule engine (with semantic resonance) --------
+        self.fast_lane = FastLane(self.config, self.db, vector_store=self.vector_store)
+
+        # ---- deep-lane orchestrator ---------------------------------
+        self.deep_lane = DeepLane(self.config, self.db)
+
+        # ---- learning engine ----------------------------------------
+        self.learner = Learner(self.db)
+
+        # ---- knowledge base trainer ---------------------------------
+        self.trainer = Trainer(self.db)
+
+        # ---- AI curator ---------------------------------------------
+        self.curator = Curator(self.db, self.trainer)
+
+        # ---- alert dispatcher (Pushover + enhanced Telegram) ----------
+        self.alert_dispatcher = AlertDispatcher()
+        self._strategic = StrategicDetector()
+
+        # ---- Telegram bot -------------------------------------------
+        token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not token:
+            logger.warning("TELEGRAM_BOT_TOKEN not set -- bot disabled")
+            self.bot = None
+        else:
+            self.bot = NewsBot(token, self.db, self.config, self.deep_lane, self.learner, self.curator, self.trainer)
+
+    # -----------------------------------------------------------------
+    # Callback - wired to scheduler.on_news_batch
+    # -----------------------------------------------------------------
+
+    async def on_news_batch(self, items):
+        """Called by the scheduler whenever a batch of new items arrives.
+
+        1. Run every item through the fast-lane rule engine.
+        2. Persist tags / scores / status for items that pass the threshold.
+        3. Push qualifying alerts to Telegram (if the bot is configured).
+        4. Dispatch CRITICAL/IMPORTANT alerts through AlertDispatcher.
+        5. Trigger deep lane analysis for fast-pushed items (async).
+        """
+        pushed = self.fast_lane.process(items)
+
+        for item in pushed:
+            # Persist the enriched fields from fast-lane processing.
+            self.db.update_news_status(
+                item.id,
+                item.status,
+                tickers_found=item.tickers_found,
+                macro_tags=item.macro_tags,
+                is_breaking=int(item.is_breaking),
+                priority_score=item.priority_score,
+            )
+
+            # Build item dict for downstream consumers
+            updated = self.db.get_news_by_id(item.id)
+            if not updated:
+                continue
+
+            # ---- Strategic detection re-run (cheap: regex only) ----
+            text = f"{item.title or ''} {item.content_snippet or ''}"
+            strategic_matches = []
+            if item.priority_score >= 0.7 or 'STRATEGIC_' in (item.macro_tags or ''):
+                strategic_matches = self._strategic.detect(text)
+
+            # ---- Classify alert level ----
+            level, reason = self.alert_dispatcher.classify(
+                item.priority_score, strategic_matches
+            )
+
+            # ---- Alert dispatching ----
+            # AlertDispatcher handles all channels for CRITICAL/IMPORTANT.
+            # For NORMAL, fall back to the original Telegram push behaviour.
+            if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT):
+                tg_push = self.alert_dispatcher.wrap_telegram_push(self.bot)
+                result = await self.alert_dispatcher.dispatch(
+                    item=updated,
+                    priority_score=item.priority_score,
+                    strategic_matches=strategic_matches,
+                    telegram_push_fn=tg_push,
+                )
+                logger.info(
+                    "Alert dispatched: level=%s channels=%s reason=%s",
+                    result.level.value, result.channels_used, result.reason,
+                )
+            elif self.bot:
+                await self.bot.push_alert(updated)
+
+            # Trigger deep lane for urgent items (async, don't block)
+            if item.priority_score >= 0.7:
+                asyncio.create_task(self._run_deep_lane(item))
+
+    async def _run_deep_lane(self, item):
+        """Run deep lane analysis as a background task."""
+        try:
+            updated = self.db.get_news_by_id(item.id)
+            if updated:
+                from storage.models import NewsItem as NI
+                ni = NI(
+                    id=updated['id'],
+                    title=updated['title'],
+                    url=updated['url'],
+                    source=updated['source'],
+                    content_snippet=updated.get('content_snippet', ''),
+                    tickers_found=updated.get('tickers_found', ''),
+                    macro_tags=updated.get('macro_tags', ''),
+                    is_breaking=bool(updated.get('is_breaking', False)),
+                    priority_score=updated.get('priority_score', 0.0),
+                    status=updated.get('status', 'pending'),
+                )
+                result = await self.deep_lane.process(ni)
+                if self.bot and result.llm_analysis:
+                    await self.bot.push_deep_analysis(updated)
+        except Exception as e:
+            logger.error(f"Deep lane background task failed: {e}")
+
+    # -----------------------------------------------------------------
+    # Lifecycle
+    # -----------------------------------------------------------------
+
+    async def start(self) -> None:
+        logger.info("News Monitor starting ...")
+
+        # Wire the callback that the scheduler invokes on new items.
+        self.scheduler.on_news_batch(self.on_news_batch)
+
+        # Start the Telegram bot (polling mode).
+        if self.bot:
+            await self.bot.start()
+
+        # Start the collection scheduler.
+        await self.scheduler.start()
+
+        logger.info("News Monitor running")
+
+    async def stop(self) -> None:
+        logger.info("News Monitor stopping ...")
+        await self.scheduler.stop()
+        if self.bot:
+            await self.bot.stop()
+
+
+# ===================================================================
+# Entry point
+# ===================================================================
+
+
+async def main() -> None:
+    monitor = NewsMonitor()
+    try:
+        await monitor.start()
+        while True:
+            await asyncio.sleep(60)
+    except KeyboardInterrupt:
+        logger.info("Shutdown signal received (KeyboardInterrupt)")
+    finally:
+        await monitor.stop()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
