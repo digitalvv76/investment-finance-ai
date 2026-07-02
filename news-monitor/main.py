@@ -135,6 +135,18 @@ class NewsMonitor:
         else:
             self.bot = NewsBot(token, self.db, self.config, self.deep_lane, self.learner, self.curator, self.trainer)
 
+        # ---- web dashboard (optional) --------------------------------
+        web_port = int(os.environ.get("WEB_PORT", "0"))
+        if web_port > 0:
+            from web.server import WebDashboard
+            self.web_dashboard = WebDashboard(
+                db=self.db, curator=self.curator, trainer=self.trainer,
+                learner=self.learner, port=web_port,
+            )
+            logger.info("Web dashboard enabled on port %d", web_port)
+        else:
+            self.web_dashboard = None
+
     # -----------------------------------------------------------------
     # Callback - wired to scheduler.on_news_batch
     # -----------------------------------------------------------------
@@ -195,6 +207,10 @@ class NewsMonitor:
             elif self.bot:
                 await self.bot.push_alert(updated)
 
+            # ---- Web dashboard broadcast (SSE real-time push) ---------
+            if self.web_dashboard:
+                await self.web_dashboard.broadcast_alert(updated)
+
             # Trigger deep lane for urgent items (async, don't block)
             if item.priority_score >= 0.7:
                 asyncio.create_task(self._run_deep_lane(item))
@@ -240,11 +256,17 @@ class NewsMonitor:
         # Start the collection scheduler.
         await self.scheduler.start()
 
+        # Start the web dashboard (if enabled).
+        if self.web_dashboard:
+            await self.web_dashboard.start()
+
         logger.info("News Monitor running")
 
     async def stop(self) -> None:
         logger.info("News Monitor stopping ...")
         await self.scheduler.stop()
+        if self.web_dashboard:
+            await self.web_dashboard.stop()
         if self.bot:
             await self.bot.stop()
 

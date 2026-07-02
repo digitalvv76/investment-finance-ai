@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>News Monitor Dashboard</title>
+<style>
+/* ================================================================
+   Bloomberg Dark Theme (from briefing.html)
+   ================================================================ */
+:root {
+    --bg-primary: #0c0d14;
+    --bg-secondary: #13161f;
+    --bg-panel: #181b26;
+    --bg-hover: #1e2130;
+    --border: #2a2d3a;
+    --border-light: #353849;
+    --text-primary: #d1d4dc;
+    --text-secondary: #787b86;
+    --text-muted: #5a5d6a;
+    --green: #22c55e;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --purple: #8b5cf6;
+    --gold: #f59e0b;
+    --cyan: #06b6d4;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    --priority-critical: #ef4444;
+    --priority-important: #f59e0b;
+    --priority-normal: #787b86;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Inter', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+}
+
+/* ---- Status Bar ---- */
+.status-bar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; height: 48px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+}
+.status-left { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 15px; }
+.status-live { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.status-live.pulse { animation: pulse 2s infinite; }
+.status-right { display: flex; align-items: center; gap: 18px; font-family: var(--font-mono); font-size: 13px; }
+.connection-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; }
+.connection-dot.on { background: var(--green); }
+.connection-dot.off { background: var(--red); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ---- Grid ---- */
+.container { max-width: 1440px; margin: 0 auto; padding: 14px; }
+.grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+.span-8 { grid-column: span 8; }
+.span-4 { grid-column: span 4; }
+
+/* ---- Panels ---- */
+.panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+}
+.panel-title { text-transform: uppercase; letter-spacing: 1.5px; font-size: 11px; color: var(--text-secondary); font-weight: 600; }
+.panel-body { padding: 14px 16px; }
+
+/* ---- Tabs ---- */
+.tabs { display: flex; gap: 4px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.tab {
+    padding: 6px 14px; border-radius: 4px; font-size: 13px; cursor: pointer;
+    color: var(--text-secondary); background: transparent; border: none;
+    transition: all 0.2s;
+}
+.tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+.tab.active { color: var(--text-primary); background: var(--bg-hover); font-weight: 600; }
+
+/* ---- News Cards ---- */
+.news-card {
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
+    border-left: 3px solid transparent;
+    transition: background 0.2s;
+}
+.news-card:hover { background: var(--bg-hover); }
+.news-card.critical { border-left-color: var(--priority-critical); }
+.news-card.important { border-left-color: var(--priority-important); }
+.news-card.normal { border-left-color: var(--priority-normal); }
+.news-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; cursor: pointer; }
+.news-title:hover { color: var(--blue); }
+.news-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.news-actions { display: flex; gap: 6px; }
+
+/* ---- Badges ---- */
+.badge {
+    display: inline-block; padding: 2px 8px; border-radius: 3px;
+    font-size: 11px; font-weight: 600; font-family: var(--font-mono);
+}
+.badge-source { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+.badge-ticker { background: rgba(59,130,246,0.15); color: var(--blue); }
+.badge-macro { background: rgba(139,92,246,0.15); color: var(--purple); }
+.badge-bullish { background: rgba(34,197,94,0.15); color: var(--green); }
+.badge-bearish { background: rgba(239,68,68,0.15); color: var(--red); }
+
+/* ---- Buttons ---- */
+.btn {
+    padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-secondary); font-size: 12px;
+    cursor: pointer; transition: all 0.2s;
+}
+.btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+.btn-sm { padding: 3px 8px; font-size: 11px; }
+.btn-green:hover { border-color: var(--green); color: var(--green); }
+.btn-red:hover { border-color: var(--red); color: var(--red); }
+.btn-blue:hover { border-color: var(--blue); color: var(--blue); }
+
+/* ---- Metric Cards ---- */
+.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.m-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 14px; text-align: center; }
+.m-card-value { font-family: var(--font-mono); font-size: 24px; font-weight: 700; color: var(--text-primary); }
+.m-card-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+/* ---- Forms ---- */
+.form-group { margin-bottom: 12px; }
+.form-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; display: block; }
+.form-input {
+    width: 100%; padding: 8px 10px; border-radius: 4px;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    color: var(--text-primary); font-size: 13px; font-family: inherit;
+}
+.form-input:focus { outline: none; border-color: var(--blue); }
+textarea.form-input { resize: vertical; min-height: 60px; }
+
+/* ---- Range ---- */
+input[type=range] { width: 100%; accent-color: var(--blue); }
+
+/* ---- Toast ---- */
+.toast-container { position: fixed; top: 60px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+    padding: 12px 18px; border-radius: 6px; background: var(--bg-panel);
+    border: 1px solid var(--border); font-size: 13px;
+    animation: slideIn 0.3s ease-out;
+    max-width: 360px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.toast.critical { border-color: var(--red); }
+.toast.important { border-color: var(--gold); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* ---- Empty ---- */
+.empty { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
+
+/* ---- Responsive ---- */
+@media (max-width: 1200px) { .grid { grid-template-columns: repeat(6, 1fr); } .span-8, .span-4 { grid-column: span 6; } }
+@media (max-width: 768px) { .grid { grid-template-columns: 1fr; } .span-8, .span-4 { grid-column: span 1; } }
+</style>
+</head>
+<body>
+
+<div class="status-bar">
+    <div class="status-left">
+        📊 News Monitor Dashboard
+        <span class="status-live pulse" id="liveDot"></span>
+    </div>
+    <div class="status-right">
+        <span id="clock">--</span>
+        <span><span class="connection-dot on" id="connDot"></span><span id="connText">Connected</span></span>
+    </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<div class="container">
+<div class="grid">
+
+    <!-- LEFT: News Feed -->
+    <div class="span-8">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">News Feed</span>
+                <span style="font-size:12px;color:var(--text-muted)" id="feedCount">0 items</span>
+            </div>
+            <div class="tabs">
+                <button class="tab active" onclick="Dashboard.setFilter('all')">All</button>
+                <button class="tab" onclick="Dashboard.setFilter('critical')">🔴 Critical</button>
+                <button class="tab" onclick="Dashboard.setFilter('important')">🟡 Important</button>
+                <button class="tab" onclick="Dashboard.setFilter('breaking')">⚡ Breaking</button>
+            </div>
+            <div id="newsFeed" style="max-height:70vh;overflow-y:auto">
+                <div class="empty">⏳ Waiting for news...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Stats + Training + Profile -->
+    <div class="span-4">
+
+        <!-- Stats -->
+        <div class="panel" style="margin-bottom:14px">
+            <div class="panel-header"><span class="panel-title">System Stats</span></div>
+            <div class="panel-body">
+                <div class="metrics">
+                    <div class="m-card"><div class="m-card-value" id="statNews">-</div><div class="m-card-label">Total News</div></div>
+                    <div class="m-card"><div class="m-card-value" id="statPushed">-</div><div class="m-card-label">Pushed 24h</div></div>
+                    <div class="m-card"><div class="m-card-value" id="statDeep">-</div><div class="m-card-label">Deep Analyzed</div></div>
+                    <div class="m-card"><div class="m-card-value" id="statDB">-</div><div class="m-card-label">DB Size</div></div>
+                </div>
+                <div style="margin-top:12px">
+                    <label class="form-label">Threshold: <span id="threshVal">0.30</span></label>
+                    <input type="range" min="0.15" max="0.50" step="0.01" value="0.30" id="threshSlider" oninput="Dashboard.onThreshold(this.value)">
+                </div>
+            </div>
+        </div>
+
+        <!-- Training -->
+        <div class="panel" style="margin-bottom:14px">
+            <div class="panel-header">
+                <span class="panel-title">Training Docs</span>
+                <button class="btn btn-sm btn-blue" onclick="Dashboard.refreshTraining()">↻</button>
+            </div>
+            <div class="panel-body">
+                <div id="trainingList"><div class="empty">No training docs</div></div>
+                <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px">
+                    <div class="form-group">
+                        <label class="form-label">Add URL (article, docs, framework)</label>
+                        <input class="form-input" id="trainUrl" placeholder="https://..." style="margin-bottom:4px">
+                        <button class="btn btn-sm btn-blue" onclick="Dashboard.ingestUrl()">Ingest URL</button>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Add Text</label>
+                        <textarea class="form-input" id="trainText" placeholder="Paste knowledge text here..."></textarea>
+                        <button class="btn btn-sm btn-blue" onclick="Dashboard.ingestText()" style="margin-top:4px">Ingest Text</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile -->
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Filters &amp; Profile</span></div>
+            <div class="panel-body">
+                <div class="form-group">
+                    <label class="form-label">Focus Tickers (comma separated)</label>
+                    <input class="form-input" id="filterTickers" placeholder="NVDA, AAPL, TSLA" onchange="Dashboard.saveFilters()">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Urgent Keywords (comma separated)</label>
+                    <input class="form-input" id="urgentKw" placeholder="闪电崩盘, 黑天鹅" onchange="Dashboard.saveFilters()">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Personal Keywords (one per line)</label>
+                    <textarea class="form-input" id="personalKw" placeholder="做空&#10;违约&#10;收购" onchange="Dashboard.saveFilters()" style="min-height:50px"></textarea>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+</div>
+
+<script>
+// ===================================================================
+// Dashboard Controller
+// ===================================================================
+const Dashboard = {
+    news: [],
+    stats: {},
+    filter: 'all',
+    eventSource: null,
+    connected: false,
+
+    // ---- Init ----
+    async init() {
+        this.startClock();
+        await Promise.all([this.fetchStats(), this.fetchNews(), this.fetchFilters(), this.fetchTraining()]);
+        this.connectSSE();
+        setInterval(() => this.fetchStats(), 60000);
+    },
+
+    // ---- Clock ----
+    startClock() {
+        const el = document.getElementById('clock');
+        const tick = () => { el.textContent = new Date().toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',hour12:false}); };
+        tick(); setInterval(tick, 1000);
+    },
+
+    // ---- API calls ----
+    async fetchStats() {
+        try {
+            const r = await fetch('/api/stats');
+            this.stats = await r.json();
+            this.renderStats();
+        } catch(e) { console.error('stats:', e); }
+    },
+    async fetchNews() {
+        try {
+            const r = await fetch('/api/news/recent?limit=100&hours=72');
+            const data = await r.json();
+            this.news = data.items || [];
+            this.renderNewsFeed();
+        } catch(e) { console.error('news:', e); }
+    },
+    async fetchFilters() {
+        try {
+            const r = await fetch('/api/filters');
+            const f = await r.json();
+            document.getElementById('filterTickers').value = (f.filter_tickers||[]).join(', ');
+            document.getElementById('urgentKw').value = (f.urgent_keywords||[]).join(', ');
+            document.getElementById('personalKw').value = (f.personal_keywords||[]).join('\n');
+            document.getElementById('threshSlider').value = f.threshold || 0.30;
+            document.getElementById('threshVal').textContent = (f.threshold||0.30).toFixed(2);
+        } catch(e) { console.error('filters:', e); }
+    },
+    async fetchTraining() {
+        try {
+            const r = await fetch('/api/training');
+            const data = await r.json();
+            this.renderTraining(data.docs||[]);
+        } catch(e) { console.error('training:', e); }
+    },
+    async submitFeedback(newsId, reaction) {
+        try {
+            await fetch('/api/feedback', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({news_id:newsId, reaction})
+            });
+            this.showToast('Feedback recorded: '+reaction);
+        } catch(e) { this.showToast('Feedback failed'); }
+    },
+    async ingestUrl() {
+        const url = document.getElementById('trainUrl').value.trim();
+        if (!url) return;
+        try {
+            await fetch('/api/training/url', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({url})
+            });
+            this.showToast('URL ingestion started...');
+            document.getElementById('trainUrl').value = '';
+            setTimeout(() => this.fetchTraining(), 3000);
+            setTimeout(() => this.fetchTraining(), 8000);
+        } catch(e) { this.showToast('Failed'); }
+    },
+    async ingestText() {
+        const text = document.getElementById('trainText').value.trim();
+        if (!text) return;
+        try {
+            await fetch('/api/training/text', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({text})
+            });
+            this.showToast('Text ingested!');
+            document.getElementById('trainText').value = '';
+            this.fetchTraining();
+        } catch(e) { this.showToast('Failed'); }
+    },
+    async deleteDoc(id) {
+        try {
+            await fetch('/api/training/'+id, {method:'DELETE'});
+            this.fetchTraining();
+        } catch(e) { this.showToast('Delete failed'); }
+    },
+    async refreshTraining() { await this.fetchTraining(); },
+    async saveFilters() {
+        try {
+            const tickers = document.getElementById('filterTickers').value.split(',').map(s=>s.trim()).filter(Boolean);
+            const urgent = document.getElementById('urgentKw').value.split(',').map(s=>s.trim()).filter(Boolean);
+            const personal = document.getElementById('personalKw').value.split('\n').map(s=>s.trim()).filter(Boolean);
+            await fetch('/api/filters', {
+                method:'PUT', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({filter_tickers:tickers, urgent_keywords:urgent, personal_keywords:personal})
+            });
+        } catch(e) { console.error('save filters:', e); }
+    },
+    onThreshold(val) {
+        document.getElementById('threshVal').textContent = parseFloat(val).toFixed(2);
+        fetch('/api/filters', {
+            method:'PUT', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({threshold: parseFloat(val)})
+        }).catch(()=>{});
+    },
+
+    // ---- SSE ----
+    connectSSE() {
+        if (this.eventSource) this.eventSource.close();
+        this.eventSource = new EventSource('/api/events');
+        this.eventSource.addEventListener('news_alert', e => {
+            const item = JSON.parse(e.data);
+            this.news.unshift(item);
+            this.news.sort((a,b) => (b.priority_score||0) - (a.priority_score||0));
+            if (this.news.length > 200) this.news.length = 200;
+            this.renderNewsFeed();
+            const level = Dashboard.priorityLevel(item.priority_score||0);
+            this.showToast(item.title||'', level);
+        });
+        this.eventSource.addEventListener('stats_update', e => {
+            Object.assign(this.stats, JSON.parse(e.data));
+            this.renderStats();
+        });
+        this.eventSource.onopen = () => {
+            this.connected = true;
+            document.getElementById('connDot').className = 'connection-dot on';
+            document.getElementById('connText').textContent = 'Connected';
+        };
+        this.eventSource.onerror = () => {
+            this.connected = false;
+            document.getElementById('connDot').className = 'connection-dot off';
+            document.getElementById('connText').textContent = 'Disconnected';
+            setTimeout(() => this.connectSSE(), 5000);
+        };
+    },
+
+    // ---- Render ----
+    renderNewsFeed() {
+        const container = document.getElementById('newsFeed');
+        let items = this.news;
+        if (this.filter === 'critical') items = items.filter(i => (i.priority_score||0) >= 0.9);
+        else if (this.filter === 'important') items = items.filter(i => (i.priority_score||0) >= 0.7 && (i.priority_score||0) < 0.9);
+        else if (this.filter === 'breaking') items = items.filter(i => i.is_breaking);
+        document.getElementById('feedCount').textContent = items.length + ' items';
+
+        if (!items.length) { container.innerHTML = '<div class="empty">No news matching filter</div>'; return; }
+
+        const now = Date.now();
+        container.innerHTML = items.slice(0, 100).map(item => {
+            const score = item.priority_score||0;
+            const level = score >= 0.9 ? 'critical' : score >= 0.7 ? 'important' : 'normal';
+            const tickers = (item.tickers_found||'').split(',').filter(Boolean);
+            const macros = (item.macro_tags||'').split(',').filter(Boolean);
+            const sent = item.sentiment||'neutral';
+            const sentBadge = sent.includes('bullish') ? 'badge-bullish' : sent.includes('bearish') ? 'badge-bearish' : 'badge-neutral';
+            const time = this.fmtTime(item.captured_at||item.published_at, now);
+            const url = item.url||'';
+            return `
+                <div class="news-card ${level}">
+                    <div class="news-title" ${url ? `onclick="window.open('${this.esc(url)}','_blank')"` : ''}>${this.esc(item.title||'(no title)')}</div>
+                    <div class="news-meta">
+                        <span class="badge badge-source">${this.esc(item.source||'?')}</span>
+                        <span>${time}</span>
+                        ${tickers.map(t => `<span class="badge badge-ticker">$${this.esc(t)}</span>`).join('')}
+                        ${macros.slice(0,4).map(m => `<span class="badge badge-macro">${this.esc(m)}</span>`).join('')}
+                        ${item.sentiment ? `<span class="badge ${sentBadge}">${this.esc(sent)}</span>` : ''}
+                        <span style="font-family:var(--font-mono);font-size:11px;color:${score>=0.9?'var(--red)':score>=0.7?'var(--gold)':'var(--text-muted)'}">P:${score.toFixed(2)}</span>
+                    </div>
+                    <div class="news-actions">
+                        <button class="btn btn-sm btn-green" onclick="Dashboard.submitFeedback(${item.id},'content_good')">Content Good</button>
+                        <button class="btn btn-sm btn-green" onclick="Dashboard.submitFeedback(${item.id},'prediction_right')">Prediction Right</button>
+                        <button class="btn btn-sm btn-red" onclick="Dashboard.submitFeedback(${item.id},'prediction_wrong')">Prediction Wrong</button>
+                    </div>
+                </div>`;
+        }).join('');
+    },
+
+    renderStats() {
+        const s = this.stats;
+        document.getElementById('statNews').textContent = s.news_count ?? '-';
+        document.getElementById('statPushed').textContent = s.pushed_24h ?? '-';
+        document.getElementById('statDeep').textContent = s.deep_analyzed ?? '-';
+        document.getElementById('statDB').textContent = (s.db_size_mb||0).toFixed(1)+' MB';
+    },
+
+    renderTraining(docs) {
+        const el = document.getElementById('trainingList');
+        if (!docs.length) { el.innerHTML = '<div class="empty">No training docs</div>'; return; }
+        el.innerHTML = docs.map(d => `
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${this.esc(d.title||d.source||'Doc #'+d.id)}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${this.esc(d.type||'')} ${d.id ? '· #'+d.id : ''}</div>
+                </div>
+                <button class="btn btn-sm btn-red" onclick="Dashboard.deleteDoc(${d.id})" style="flex-shrink:0;margin-left:8px">Del</button>
+            </div>`).join('');
+    },
+
+    // ---- UI helpers ----
+    setFilter(f) {
+        this.filter = f;
+        document.querySelectorAll('.tab').forEach((t,i) => {
+            t.classList.toggle('active', ['all','critical','important','breaking'][i] === f);
+        });
+        this.renderNewsFeed();
+    },
+
+    showToast(msg, level='normal') {
+        const el = document.createElement('div');
+        el.className = 'toast ' + (level === 'critical' ? 'critical' : level === 'important' ? 'important' : '');
+        el.textContent = (level === 'critical' ? '🔴 ' : level === 'important' ? '🟡 ' : '') + (msg||'').substring(0, 100);
+        document.getElementById('toasts').appendChild(el);
+        setTimeout(() => el.remove(), 5000);
+    },
+
+    fmtTime(iso, now) {
+        if (!iso) return '';
+        const ms = now - new Date(iso).getTime();
+        const sec = ms/1000;
+        if (sec < 60) return 'just now';
+        if (sec < 3600) return Math.floor(sec/60)+'m ago';
+        if (sec < 86400) return Math.floor(sec/3600)+'h ago';
+        return Math.floor(sec/86400)+'d ago';
+    },
+
+    esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s||'';
+        return d.innerHTML;
+    },
+
+    priorityLevel(score) {
+        return score >= 0.9 ? 'critical' : score >= 0.7 ? 'important' : 'normal';
+    }
+};
+
+// Boot
+Dashboard.init();
+</script>
+</body>
+</html>
