@@ -44,6 +44,7 @@ from engine.impact_evaluator import ImpactEvaluator
 from engine.impact_learner import ImpactLearner
 from engine.event_matcher import EventMatcher
 from engine.relevance import signal_score, get_portfolio_summary
+from engine.actionability_review import ActionabilityReviewer
 from bot.telegram_bot import NewsBot
 
 # ---------------------------------------------------------------------------
@@ -142,6 +143,7 @@ class NewsMonitor:
         self.impact_evaluator = ImpactEvaluator()
         self.impact_learner = ImpactLearner()
         self.event_matcher = EventMatcher()
+        self.actionability_reviewer = ActionabilityReviewer()
         logger.info("ImpactEvaluator initialized (threshold=%.2f, event_matcher=%d events)",
                     ImpactEvaluator.THRESHOLD, self.event_matcher.event_count)
         logger.info("Portfolio/Relevance: %s", get_portfolio_summary())
@@ -261,6 +263,20 @@ class NewsMonitor:
                 impact_assessment=impact_assessment,
                 rel_mult=rel_mult,
             )
+
+            # ---- LLM Actionability Review (borderline cases only) ----
+            if (self.actionability_reviewer.should_review(rel_mult)
+                    and level != AlertLevel.NORMAL):
+                review_result = await self.actionability_reviewer.review(
+                    item, sig, impact_assessment=impact_assessment,
+                )
+                if review_result == "NOT_ACTIONABLE":
+                    logger.info(
+                        "LLM review: downgrading %s -> NORMAL for #%s — %s",
+                        level.value, item.id, (item.title or "")[:60],
+                    )
+                    level = AlertLevel.NORMAL
+                    reason = f"llm_review_not_actionable (was: {reason})"
 
             # ---- Alert dispatching ----
             if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT):

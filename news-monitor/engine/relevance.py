@@ -108,6 +108,8 @@ _LOW_IMPACT_CATEGORIES = {
     "earnings", "merger", "acquisition", "ipo",
     "product_launch", "leadership_change",
     "transparency", "routine_data",
+    "dividend", "buyback", "share_repurchase",
+    "analyst_rating", "price_target", "stock_movement",
 }
 
 _SECTOR_SIGNALS = {
@@ -128,6 +130,33 @@ _SECTOR_SIGNALS = {
     # Corporate actions with tradable opportunities
     "拆分": 0.70, "spinoff": 0.70, "spin off": 0.70,
     "分拆上市": 0.75, "剥离": 0.65, "divestiture": 0.65,
+    "breakup": 0.70, "split into": 0.70, "carve out": 0.65,
+    # English: government contracts & subsidies
+    "fast-track": 0.75, "expedite": 0.70, "accelerate": 0.65,
+    "nuclear reactor": 0.75, "SMR": 0.75, "small modular reactor": 0.75,
+    "coal power": 0.70, "coal-fired": 0.70, "fossil fuel plant": 0.65,
+    "critical minerals": 0.70, "rare earth": 0.75, "rare earths": 0.75,
+    "infrastructure contract": 0.75, "defense contract": 0.80,
+    "energy contract": 0.75, "power purchase agreement": 0.70,
+    "national security": 0.70, "supply chain security": 0.70,
+    "domestic production": 0.65, "reshore": 0.65, "onshore": 0.65,
+    # English: endorsement / verbal signals
+    "touted": 0.75, "praised": 0.70, "urged": 0.70,
+    "called for": 0.65, "threw support behind": 0.70,
+    "endorsed": 0.75, "backed": 0.70, "vouched for": 0.65,
+    "singled out": 0.65, "name-checked": 0.60,
+    "said.*is.*the.*future": 0.65, "called.*the.*most.*important": 0.70,
+    "hailed": 0.65, "championed": 0.70,
+    # English: FDA / drug catalysts
+    "FDA approval": 0.75, "FDA clearance": 0.75,
+    "accelerated approval": 0.80, "breakthrough therapy": 0.80,
+    "priority review": 0.75, "fast track designation": 0.75,
+    "NDA": 0.55, "BLA": 0.55, "PDUFA": 0.65,
+    # English: strategic investments
+    "takes stake in": 0.85, "acquires stake": 0.85,
+    "convertible preferred": 0.80, "equity stake": 0.80,
+    "strategic investment": 0.75, "anchor investment": 0.75,
+    "lead investor": 0.80, "co-invest": 0.75,
 }
 
 # Patterns that indicate RETROSPECTIVE / SUMMARY content — not actionable.
@@ -141,6 +170,14 @@ _RETROSPECTIVE_PATTERNS = [
     r"(自|从)\d{4}年.{0,15}(以来|起|至今)",                # "自2025年以来" — long historical view
     r"(上市|IPO|定价).{0,30}(?:估值|融资|万亿)",            # IPO retrospective
     r"\d{4}年(?:金融危机|危机|泡沫)",                      # historical event from another era
+    # English retrospective patterns
+    r"(from|since)\s*\$?\d+.*(→|to)\s*\$?\d+",             # "from $67 → $119"
+    r"(plunged|surged|skyrocketed|tumbled|soared)\s*\d+%",  # single-direction recap
+    r"(year.to.date|ytd|quarterly|monthly)\s+(review|recap|roundup|wrap)",
+    r"(best|worst)\s+(month|quarter|year)\s+(since|in)",    # "worst quarter since 2013"
+    r"(market\s+cap|market\s+value)\s+(evaporat|wiped|erased|lost)",
+    r"(closed|ended|finished)\s+(the\s+)?(month|quarter|week)\s+(down|up|flat)",
+    r"since\s+(the\s+)?start\s+of\s+(the\s+)?(year|quarter|month)",
 ]
 
 # Patterns that indicate THREAT / PROPOSAL — not yet action.
@@ -149,11 +186,17 @@ _THREAT_PATTERNS = [
     r"(威胁|警告|提议|考虑|可能|计划|拟|将)\s*(征收|对|加征|禁止|限制|制裁|课征)",
     r"(threaten|warn|propose|consider|plan|may|might|could)\s+(impose|levy|ban|restrict|sanction|tariff)",
     r"(尚未|还未|暂未|仍在讨论|有待|等待)\s*(实施|执行|通过|批准)",
+    # English threat / proposal patterns
+    r"(threaten|warn|propose|consider|plan|may|might|could)\s+(?:to\s+)?(impose|levy|ban|restrict|sanction|tariff|duty)",
+    r"(floated|floating)\s+(?:the\s+)?(?:idea|proposal|plan)\s+(?:of|to)",
+    r"(mulled|mulling|weighed|weighing)\s+(?:a\s+)?(?:tariff|sanction|ban|restriction)",
+    r"(not\s+yet|has\s+not|have\s+not|still\s+(?:under|in))\s+(?:implement|enact|enforce|approve|finalize)",
+    r"(could|could\s+potentially|is\s+expected\s+to|is\s+set\s+to)\s+(levy|impose|raise|increase)",
 ]
 
 # Personnel appointments that lack accompanying policy action
 _PERSONNEL_ONLY_PATTERNS = [
-    r"(宣誓就任|被任命为|出任|接替|appointed|sworn\sin|named\sas|takes\sover)",
+    r"(宣誓就任|被任命为|出任|接替|appointed|sworn\sin|named\sas|takes\sover|will\s+become|has\s+been\s+named|to\s+lead|to\s+head)",
 ]
 
 
