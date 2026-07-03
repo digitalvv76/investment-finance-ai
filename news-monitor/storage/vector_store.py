@@ -146,6 +146,36 @@ class VectorStore:
             logger.error("Vector store search failed: %s", e)
             return []
 
+    def max_similarity(self, text: str) -> float:
+        """Return the cosine similarity to the most similar article.
+
+        Returns 0.0 if the store is empty or no articles are similar.
+        """
+        if not self.is_ready or self._collection.count() == 0:
+            return 0.0
+
+        try:
+            embedding = self._embed(text)
+            if embedding is None:
+                return 0.0
+
+            results = self._collection.query(
+                query_embeddings=[embedding],
+                n_results=min(3, max(1, self._collection.count())),
+                include=["distances"],
+            )
+
+            if results and results['distances'] and results['distances'][0]:
+                best_distance = results['distances'][0][0]
+                # ChromaDB cosine distance: 0=identical, 2=opposite
+                similarity = 1.0 - (best_distance / 2.0)
+                return round(max(similarity, 0.0), 4)
+
+            return 0.0
+        except Exception as e:
+            logger.error("Vector store max_similarity failed: %s", e)
+            return 0.0
+
     def is_semantic_duplicate(self, text: str, threshold: float = 0.90) -> bool:
         """Check if an article is a semantic duplicate of any stored article.
 

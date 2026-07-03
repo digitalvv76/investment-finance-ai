@@ -344,9 +344,17 @@ def timeliness_factor(
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Track seen headlines in a simple in-memory LRU set (for dedup-aware novelty).
-# In production this should use ChromaDB; this is the lightweight fast-path.
 _SEEN_SIGNATURES: set[int] = set()
 _MAX_SEEN = 2000
+
+
+def _max_semantic_similarity(vector_store, text: str) -> float:
+    """Return the cosine similarity to the most similar article in ChromaDB."""
+    try:
+        return vector_store.max_similarity(text[:1000])
+    except Exception:
+        return 0.0
+
 
 
 def novelty_factor(
@@ -356,23 +364,34 @@ def novelty_factor(
 ) -> float:
     """Is this NEW information, or has the market already absorbed it?
 
-    Factors:
-    - Breaking markers → high novelty
-    - Surprise / unprecedented language → high novelty
-    - First-seen keywords (突破/首次/exclusive) → high novelty
-    - Has this exact title been seen before? → zero novelty
+    Three-layer detection:
+    1. Breaking markers → always novel (1.0)
+    2. Semantic dedup via ChromaDB → near-duplicate → 0.1
+    3. Title-hash exact duplicate → 0.1
+    4. Surprise/novelty keyword scoring
+    5. Default: 0.85 (assume novel without evidence)
 
     Returns 1.0 (completely new) → 0.0 (already known).
     """
     if not news_text:
-        return 0.85  # unknown → assume novel
+        return 0.85
 
     text_lower = news_text.lower()
 
-    # --- Breaking + surprise markers → high novelty ---
+    # --- Breaking markers → ceiling ---
     if is_breaking:
-        return 1.0  # breaking news is definitionally novel
+        return 1.0
 
+    # Note: near-duplicate detection is handled upstream by DedupManager
+    # (URL + content-hash + ChromaDB semantic dedup).  Articles that
+    # reach this point have already passed dedup — they are at least
+    # somewhat novel.  Our job here is to detect:
+    #   1. Retrospective/recap content (handled by _content_quality_penalty
+    #      in the relevance dimension, not here)
+    #   2. Breaking/surprise markers → high novelty
+    #   3. Exact title reprints → very low novelty (hash check below)
+
+    # --- Surprise markers → high novelty ---
     surprise_count = sum(1 for kw in _SURPRISE_KEYWORDS if kw.lower() in text_lower)
     if surprise_count >= 2:
         return 1.0
@@ -384,14 +403,14 @@ def novelty_factor(
         return 0.85
 
     # --- Exact duplicate check (fast path via title hash) ---
-    sig = hash(news_text[:200])  # first 200 chars as fingerprint
+    sig = hash(news_text[:200])
     if sig in _SEEN_SIGNATURES:
-        return 0.1  # exact duplicate → very low novelty
+        return 0.1
     _SEEN_SIGNATURES.add(sig)
     if len(_SEEN_SIGNATURES) > _MAX_SEEN:
-        _SEEN_SIGNATURES.clear()  # simple LRU: just flush when full
+        _SEEN_SIGNATURES.clear()
 
-    # Default: assume novel (don't penalize without evidence of staleness)
+    # Default: assume novel
     return 0.85
 
 
