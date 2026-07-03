@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Impact Evaluator — Investment Finance AI</title>
+<style>
+/* ================================================================
+   DESIGN.md Palette — Bloomberg Terminal Dark Theme
+   ================================================================ */
+:root {
+    --bg-primary: #0c0d14;
+    --bg-secondary: #13161f;
+    --bg-panel: #181b26;
+    --bg-hover: #1e2130;
+    --border: #2a2d3a;
+    --border-light: #353849;
+    --text-primary: #d1d4dc;
+    --text-secondary: #787b86;
+    --text-muted: #5a5d6a;
+    --green: #22c55e;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --purple: #8b5cf6;
+    --gold: #f59e0b;
+    --cyan: #06b6d4;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Inter', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+}
+
+/* ---- Status Bar ---- */
+.status-bar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; height: 48px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+}
+.status-bar .brand { font-weight: 700; letter-spacing: 1px; }
+.status-bar .brand span { color: var(--blue); }
+.status-bar .clock { font-family: var(--font-mono); color: var(--text-secondary); font-size: 13px; }
+.status-bar .live-dot {
+    width: 8px; height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    display: inline-block;
+    animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,.4); }
+    50% { opacity: .7; box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+}
+
+/* ---- Dashboard Grid ---- */
+.dashboard {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 14px;
+}
+
+.span-4 { grid-column: span 4; }
+.span-8 { grid-column: span 8; }
+.span-12 { grid-column: span 12; }
+
+/* ---- Panels ---- */
+.panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+}
+.panel-title {
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.panel-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+.badge-live {
+    background: rgba(34,197,94,.12);
+    color: var(--green);
+}
+.badge-degraded {
+    background: rgba(245,158,11,.12);
+    color: var(--gold);
+}
+.badge-down {
+    background: rgba(239,68,68,.12);
+    color: var(--red);
+}
+.panel-body {
+    padding: 16px;
+}
+
+/* ---- Header Panel ---- */
+.header-panel {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+.header-panel h1 { font-size: 20px; font-weight: 700; }
+.header-status { display: flex; align-items: center; gap: 12px; }
+.status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+}
+.status-dot.healthy { background: var(--green); }
+.status-dot.degraded { background: var(--gold); }
+.status-dot.down { background: var(--red); }
+.header-status .status-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+}
+
+/* ---- Data Table ---- */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.data-table th {
+    text-align: left;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+}
+.data-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(255,255,255,.03);
+}
+.data-table tbody tr { cursor: pointer; }
+.data-table tbody tr:hover td { background: var(--bg-hover); }
+.data-table .col-id { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); width: 50px; }
+.data-table .col-title { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.data-table .col-score { font-family: var(--font-mono); font-weight: 600; width: 60px; }
+.data-table .col-cat { width: 90px; font-size: 12px; }
+.data-table .col-conf { font-family: var(--font-mono); font-size: 12px; width: 60px; text-align: center; }
+
+.score-high { color: var(--red); }
+.score-med { color: var(--gold); }
+.score-low { color: var(--text-muted); }
+
+/* ---- Badges ---- */
+.badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 6px;
+}
+.badge-low-conf { background: rgba(245,158,11,.15); color: var(--gold); }
+.badge-new { background: var(--purple); color: #d1d4dc; }
+.badge-critical { background: var(--red); color: #d1d4dc; }
+
+/* ---- Reasoning Chain (expandable row) ---- */
+.reasoning-row { display: none; }
+.reasoning-row.open { display: table-row; }
+.reasoning-row td {
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-light);
+}
+.reasoning-block {
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    padding: 12px;
+}
+.reasoning-step {
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,.03);
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+.reasoning-step:last-child { border-bottom: none; }
+.reasoning-label {
+    display: inline-block;
+    font-family: 'Inter', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+/* ---- Metric Cards ---- */
+.metric-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    margin-bottom: 8px;
+}
+.metric-card .label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+}
+.metric-card .value {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 600;
+}
+.metric-card .value.small {
+    font-size: 13px;
+    color: var(--red);
+}
+.metric-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+/* ---- Prompt Compare ---- */
+.prompt-compare {
+    display: flex;
+    align-items: flex-end;
+    gap: 20px;
+    padding: 8px 0;
+}
+.prompt-version {
+    text-align: center;
+    flex: 1;
+}
+.prompt-version .ver-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+.prompt-version .ver-value {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 600;
+}
+.prompt-version .ver-sub {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+.prompt-sep {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-muted);
+    padding-bottom: 4px;
+}
+.prompt-active-tag {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.prompt-active-tag.active { background: rgba(34,197,94,.15); color: var(--green); }
+.prompt-active-tag.inactive { background: rgba(120,123,134,.1); color: var(--text-muted); }
+
+/* ---- Events Log ---- */
+.events-log {
+    max-height: 220px;
+    overflow-y: auto;
+    font-size: 11px;
+}
+.event-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,.03);
+}
+.event-entry:last-child { border-bottom: none; }
+.event-type-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-top: 3px;
+    flex-shrink: 0;
+}
+.event-type-dot.error { background: var(--red); }
+.event-type-dot.warn { background: var(--gold); }
+.event-type-dot.info { background: var(--blue); }
+.event-type-dot.success { background: var(--green); }
+.event-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    min-width: 48px;
+}
+.event-detail { color: var(--text-secondary); }
+
+/* ---- Empty State ---- */
+.empty-state {
+    text-align: center;
+    padding: 24px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* ---- Footer ---- */
+.terminal-footer {
+    text-align: center;
+    padding: 24px;
+    font-size: 11px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    margin-top: 16px;
+}
+.terminal-footer a { color: var(--blue); text-decoration: none; }
+
+/* ---- Responsive ---- */
+@media (max-width: 1200px) {
+    .dashboard { grid-template-columns: repeat(6, 1fr); }
+    .span-4, .span-8 { grid-column: span 6; }
+}
+@media (max-width: 768px) {
+    .dashboard { grid-template-columns: 1fr; padding: 10px; gap: 10px; }
+    .span-4, .span-8, .span-12 { grid-column: span 1; }
+    .header-panel { flex-direction: column; gap: 8px; align-items: flex-start; }
+    .header-panel h1 { font-size: 17px; }
+    .metric-grid { grid-template-columns: 1fr; }
+    .data-table { font-size: 12px; }
+    .data-table th, .data-table td { padding: 5px 8px; }
+}
+</style>
+</head>
+<body>
+
+<!-- STATUS BAR -->
+<header class="status-bar">
+    <div class="brand"><span>&#9670;</span> INVESTMENT FINANCE AI</div>
+    <div class="clock" id="status-clock">--</div>
+    <div><span class="live-dot"></span> <span style="color:var(--green);font-size:12px;">LIVE</span></div>
+</header>
+
+<!-- DASHBOARD -->
+<div class="dashboard">
+
+    <!-- Header Row -->
+    <div class="panel span-12 header-panel">
+        <h1>&#128200; Market Impact Evaluator</h1>
+        <div class="header-status" id="healthBadge">
+            <span class="status-label">LOADING...</span>
+        </div>
+    </div>
+
+    <!-- Left: Assessments -->
+    <div class="panel span-8">
+        <div class="panel-header">
+            <span class="panel-title">&#128203; Latest Assessments</span>
+            <span class="panel-badge badge-live">LIVE</span>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th class="col-id">ID</th>
+                        <th class="col-title">Headline</th>
+                        <th class="col-score">Score</th>
+                        <th class="col-cat">Category</th>
+                        <th class="col-conf">Conf</th>
+                    </tr>
+                </thead>
+                <tbody id="assessmentsBody">
+                    <tr><td colspan="5" class="empty-state">Loading assessments...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Right Column -->
+    <div class="span-4" style="display:flex;flex-direction:column;gap:14px;">
+
+        <!-- Health -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">&#9889; Health</span>
+            </div>
+            <div class="panel-body" id="healthCards">
+                <div class="empty-state">Loading health data...</div>
+            </div>
+        </div>
+
+        <!-- Calibration -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">&#128300; Calibration</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr><th>Category</th><th>Bias</th><th style="text-align:center;">Samples</th></tr>
+                    </thead>
+                    <tbody id="calibrationBody">
+                        <tr><td colspan="3" class="empty-state">Loading calibration...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Prompt Versions -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">&#128221; Prompt Versions</span>
+            </div>
+            <div class="panel-body" id="promptCompare">
+                <div class="empty-state">Loading prompt data...</div>
+            </div>
+        </div>
+
+        <!-- Health Events -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">&#128680; Health Events</span>
+            </div>
+            <div class="panel-body">
+                <div class="events-log" id="eventsLog">
+                    <div class="empty-state">Loading events...</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="terminal-footer">
+    <p>&#9888;&#65039; Impact scores are AI-generated estimates for research purposes only &mdash; not financial advice</p>
+    <p style="margin-top:4px;">Powered by Claude Code &times; Impact Evaluator Engine</p>
+    <p style="margin-top:8px;">
+        <a href="/dashboard">&#8592; News Dashboard</a>
+    </p>
+</footer>
+
+<script>
+// ============================================================
+// STATUS BAR CLOCK
+// ============================================================
+function updateClock() {
+    const now = new Date();
+    const opts = { year:'numeric', month:'2-digit', day:'2-digit',
+        hour:'2-digit', minute:'2-digit', second:'2-digit',
+        hour12: false, timeZone: 'Asia/Shanghai' };
+    document.getElementById('status-clock').textContent =
+        '🕐 ' + now.toLocaleString('zh-CN', opts) + ' CST';
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ============================================================
+// DATA LOADING
+// ============================================================
+async function load() {
+    try {
+        const [a, h, c, p, e] = await Promise.all([
+            fetch('/api/impact/latest?limit=20').then(r => r.json()).catch(() => []),
+            fetch('/api/impact/health').then(r => r.json()).catch(() => null),
+            fetch('/api/impact/calibration').then(r => r.json()).catch(() => []),
+            fetch('/api/impact/prompts').then(r => r.json()).catch(() => null),
+            fetch('/api/impact/events?limit=20').then(r => r.json()).catch(() => []),
+        ]);
+        renderAssessments(Array.isArray(a) ? a : []);
+        renderHealth(h || {});
+        renderCalibration(Array.isArray(c) ? c : []);
+        renderPrompts(p);
+        renderEvents(Array.isArray(e) ? e : []);
+    } catch (e) {
+        console.error('Impact dashboard load error:', e);
+        const el = document.getElementById('healthBadge');
+        if (el) el.innerHTML = '<span style="color:var(--red);font-size:12px;">CONNECTION ERROR</span>';
+    }
+}
+
+// ============================================================
+// RENDER: Assessments Table
+// ============================================================
+function renderAssessments(items) {
+    const tbody = document.getElementById('assessmentsBody');
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No assessments yet</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map((a, i) => {
+        const score = a.impact_score ?? 0;
+        const sc = score > 70 ? 'score-high' : score > 40 ? 'score-med' : 'score-low';
+        const title = (a.title || a.headline || 'N/A');
+        const truncated = title.length > 70 ? title.substring(0, 67) + '...' : title;
+        const conf = a.confidence != null ? (typeof a.confidence === 'number' ? a.confidence.toFixed(2) : a.confidence) : '-';
+        const lowConfBadge = a.low_confidence ? ' <span class="badge badge-low-conf">LOW CONF</span>' : '';
+        const reasoning = a.reasoning_chain || '[]';
+        let steps = [];
+        try {
+            steps = typeof reasoning === 'string' ? JSON.parse(reasoning) : reasoning;
+        } catch (e) { steps = [reasoning]; }
+        if (!Array.isArray(steps)) steps = [String(steps)];
+
+        const stepsHtml = steps.map((s, si) =>
+            `<div class="reasoning-step"><span style="color:var(--text-muted);">[${si + 1}]</span> ${escHtml(String(s))}</div>`
+        ).join('');
+
+        return `<tr onclick="toggleReasoning(${i})" title="Click to expand reasoning">
+            <td class="col-id">#${a.id}</td>
+            <td class="col-title">${escHtml(truncated)}${lowConfBadge}</td>
+            <td class="col-score ${sc}">${score}</td>
+            <td class="col-cat">${escHtml(String(a.event_category || '-'))}</td>
+            <td class="col-conf">${conf}</td>
+        </tr>
+        <tr id="reasoning-${i}" class="reasoning-row">
+            <td colspan="5">
+                <div class="reasoning-block">
+                    <div class="reasoning-label">Reasoning Chain (${steps.length} steps)</div>
+                    ${stepsHtml}
+                    ${a.expected_moves ? `<div class="reasoning-step" style="margin-top:6px;"><span style="color:var(--gold);">Expected Moves:</span> ${escHtml(String(a.expected_moves))}</div>` : ''}
+                    ${a.similar_events ? `<div class="reasoning-step"><span style="color:var(--blue);">Similar Events:</span> ${escHtml(String(a.similar_events))}</div>` : ''}
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function toggleReasoning(i) {
+    const row = document.getElementById('reasoning-' + i);
+    if (row) row.classList.toggle('open');
+}
+
+// ============================================================
+// RENDER: Health
+// ============================================================
+function renderHealth(h) {
+    const badge = document.getElementById('healthBadge');
+    const status = h.status || 'unknown';
+    const dot = status === 'healthy' ? 'healthy' : status === 'degraded' ? 'degraded' : 'down';
+    const badgeCls = status === 'healthy' ? 'badge-live' : status === 'degraded' ? 'badge-degraded' : 'badge-down';
+    badge.innerHTML = `
+        <span class="status-dot ${dot}"></span>
+        <span class="panel-badge ${badgeCls}">${status.toUpperCase()}</span>
+    `;
+
+    const container = document.getElementById('healthCards');
+    const rate = h.success_rate_1h != null ? h.success_rate_1h : (h.success_rate != null ? h.success_rate : '-');
+    const latency = h.avg_latency_ms != null ? h.avg_latency_ms : '-';
+    const failures = h.consecutive_failures != null ? h.consecutive_failures : '-';
+    const lastErr = h.last_error || '';
+
+    container.innerHTML = `
+        <div class="metric-grid">
+            <div class="metric-card">
+                <div class="label">Success Rate (1h)</div>
+                <div class="value" style="color:${rate >= 95 ? 'var(--green)' : rate >= 80 ? 'var(--gold)' : 'var(--red)'}">${rate}${rate !== '-' ? '%' : ''}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Avg Latency</div>
+                <div class="value">${latency}${latency !== '-' ? 'ms' : ''}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Consecutive Failures</div>
+                <div class="value" style="color:${failures === 0 || failures === '-' ? 'var(--text-primary)' : failures > 3 ? 'var(--red)' : 'var(--gold)'}">${failures}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">Total Processed</div>
+                <div class="value">${h.total != null ? h.total : (h.total_assessments_1h != null ? h.total_assessments_1h : '-')}</div>
+            </div>
+        </div>
+        ${lastErr ? `<div class="metric-card"><div class="label">Last Error</div><div class="value small">${escHtml(String(lastErr).substring(0, 100))}</div></div>` : ''}
+    `;
+}
+
+// ============================================================
+// RENDER: Calibration
+// ============================================================
+function renderCalibration(items) {
+    const tbody = document.getElementById('calibrationBody');
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No calibration data yet</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map(c => {
+        const bias = c.bias != null ? c.bias : 0;
+        const biasColor = bias > 0.05 ? 'var(--red)' : bias < -0.05 ? 'var(--green)' : 'var(--text-secondary)';
+        const biasStr = bias > 0 ? '+' + bias.toFixed(2) : bias.toFixed(2);
+        return `<tr>
+            <td>${escHtml(String(c.category || '-'))}</td>
+            <td style="font-family:var(--font-mono);color:${biasColor};">${biasStr}</td>
+            <td style="font-family:var(--font-mono);text-align:center;">${c.sample_count ?? '-'}</td>
+        </tr>`;
+    }).join('');
+}
+
+// ============================================================
+// RENDER: Prompt Version Comparison
+// ============================================================
+function renderPrompts(p) {
+    const container = document.getElementById('promptCompare');
+    if (!p || !p.versions) {
+        container.innerHTML = '<div class="empty-state">No prompt data available</div>';
+        return;
+    }
+    const active = p.active || 'v2';
+    const versions = p.versions || {};
+    const v1 = versions.v1 || {};
+    const v2 = versions.v2 || {};
+
+    // Determine which is better
+    const v1Mae = v1.mae != null ? v1.mae : null;
+    const v2Mae = v2.mae != null ? v2.mae : null;
+
+    container.innerHTML = `
+        <div class="prompt-compare">
+            <div class="prompt-version">
+                <div class="ver-label">V1</div>
+                <div class="ver-value" style="color:${active === 'v1' ? 'var(--green)' : 'var(--text-secondary)'}">${v1Mae != null ? v1Mae.toFixed(3) : '-'}</div>
+                <div class="ver-sub">MAE</div>
+                <span class="prompt-active-tag ${active === 'v1' ? 'active' : 'inactive'}">${active === 'v1' ? 'ACTIVE' : 'INACTIVE'}</span>
+                ${v1.samples != null ? `<div class="ver-sub" style="margin-top:2px;">${v1.samples} samples</div>` : ''}
+            </div>
+            <div class="prompt-sep">vs</div>
+            <div class="prompt-version">
+                <div class="ver-label">V2</div>
+                <div class="ver-value" style="color:${active === 'v2' ? 'var(--green)' : 'var(--text-secondary)'}">${v2Mae != null ? v2Mae.toFixed(3) : '-'}</div>
+                <div class="ver-sub">MAE</div>
+                <span class="prompt-active-tag ${active === 'v2' ? 'active' : 'inactive'}">${active === 'v2' ? 'ACTIVE' : 'INACTIVE'}</span>
+                ${v2.samples != null ? `<div class="ver-sub" style="margin-top:2px;">${v2.samples} samples</div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================
+// RENDER: Health Events Log
+// ============================================================
+function renderEvents(events) {
+    const container = document.getElementById('eventsLog');
+    if (!events.length) {
+        container.innerHTML = '<div class="empty-state">No health events recorded</div>';
+        return;
+    }
+    container.innerHTML = events.map(ev => {
+        const etype = (ev.event_type || '').toLowerCase();
+        let dotCls = 'info';
+        if (etype.includes('error') || etype.includes('fail')) dotCls = 'error';
+        else if (etype.includes('warn') || etype.includes('degrad')) dotCls = 'warn';
+        else if (etype.includes('success') || etype.includes('ok')) dotCls = 'success';
+
+        const ts = ev.created_at ? ev.created_at.replace('T', ' ').substring(0, 19) : '';
+        const detail = ev.detail || '';
+
+        return `<div class="event-entry">
+            <div class="event-type-dot ${dotCls}"></div>
+            <div class="event-meta">${ts}</div>
+            <div class="event-detail">${escHtml(detail.substring(0, 120))}</div>
+        </div>`;
+    }).join('');
+}
+
+// ============================================================
+// INIT + AUTO-REFRESH
+// ============================================================
+load();
+setInterval(load, 60000);
+</script>
+
+</body>
+</html>

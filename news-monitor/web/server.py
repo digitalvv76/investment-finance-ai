@@ -34,6 +34,7 @@ from web.routes import (
     sse_events,
     impact_latest, impact_health, impact_stats,
     impact_calibration, impact_prompts, impact_detail, impact_outcomes,
+    impact_health_events,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,6 +127,7 @@ class WebDashboard:
         app.router.add_get("/api/impact/stats", impact_stats)
         app.router.add_get("/api/impact/calibration", impact_calibration)
         app.router.add_get("/api/impact/prompts", impact_prompts)
+        app.router.add_get("/api/impact/events", impact_health_events)
         app.router.add_get("/api/impact/{id}", impact_detail)
         app.router.add_get("/api/impact/{id}/outcomes", impact_outcomes)
 

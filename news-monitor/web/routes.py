@@ -471,3 +471,10 @@ async def impact_prompts(request: web.Request) -> web.Response:
     from engine.impact_evaluator import PromptVersionManager
     mae = PromptVersionManager.compare_mae(db)
     return _json({"active": PromptVersionManager.ACTIVE, "versions": mae})
+
+
+async def impact_health_events(request: web.Request) -> web.Response:
+    db = _get_db(request)
+    limit = int(request.query.get("limit", 20))
+    events = db.get_health_events(limit=limit)
+    return _json(events)
