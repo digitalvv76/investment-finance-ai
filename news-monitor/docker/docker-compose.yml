@@ -1,7 +1,21 @@
 # Financial News Monitor — Docker Compose
-# Start: docker-compose -f docker/docker-compose.yml up -d
-# Stop:  docker-compose -f docker/docker-compose.yml down
-# Logs:  docker-compose -f docker/docker-compose.yml logs -f
+#
+# === Quick Start ===
+#   1. Create .env in the project root (or copy from D:\class1\.env)
+#   2. docker compose -f docker/docker-compose.yml up -d
+#   3. docker compose -f docker/docker-compose.yml logs -f
+#
+# === Management ===
+#   docker compose -f docker/docker-compose.yml down        # Stop
+#   docker compose -f docker/docker-compose.yml restart     # Restart
+#   docker compose -f docker/docker-compose.yml ps          # Status
+#   docker compose -f docker/docker-compose.yml logs -f     # Live logs
+#
+# === Server Deployment ===
+#   Any cloud VPS (AWS EC2, DigitalOcean, Alibaba Cloud ECS, etc.):
+#   - 2 GB RAM minimum (Playwright Chromium needs ~500 MB)
+#   - 20 GB disk (logs + ChromaDB + Docker images)
+#   - Ubuntu 22.04+ recommended
 
 version: "3.9"
 
@@ -13,21 +27,40 @@ services:
     container_name: news-monitor
     restart: unless-stopped
 
+    # ---- Ports ----
+    # Expose web dashboard (bind to localhost-only for security;
+    # use a reverse proxy like Nginx/Caddy for public access)
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    # ---- Environment ----
+    # All secrets come from the .env file in the project root.
+    # Create .env if missing: copy from D:\class1\.env
+    env_file:
+      - ../../.env
+
     environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - FRED_API_KEY=${FRED_API_KEY:-}
-      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
+      # Always enable web dashboard in container
+      - WEB_PORT=8080
       - TZ=America/New_York
 
+    # ---- Persistent Volumes ----
+    # Survives container restarts & image rebuilds
     volumes:
-      # Persist data across container restarts
       - news_data:/app/data
       - news_logs:/app/logs
-      # Mount watchlist for ticker tracking
-      - ../.claude/memory/watchlist-state.md:/app/.claude/memory/watchlist-state.md:ro
-      - ../.claude/memory/portfolio-state.md:/app/.claude/memory/portfolio-state.md:ro
 
+    # ---- Resource Limits ----
+    # Adjust based on your server size
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+    # ---- Logging ----
+    # JSON-file driver with rotation (10 MB × 3 files = 30 MB max)
     logging:
       driver: "json-file"
       options:

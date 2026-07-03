@@ -85,6 +85,16 @@ def install():
         "AppExit": "Default Restart",
     }
 
+    # Load .env from project root BEFORE collecting env vars
+    try:
+        from dotenv import load_dotenv, find_dotenv
+        _env_path = find_dotenv(usecwd=True)
+        if _env_path:
+            load_dotenv(_env_path)
+            print(f"  Loaded .env from {_env_path}")
+    except ImportError:
+        print("  WARNING: python-dotenv not installed, using only system env vars")
+
     # Collect ALL environment variables needed by the service
     required_env_vars = [
         "TELEGRAM_BOT_TOKEN",
@@ -95,6 +105,7 @@ def install():
         "ALPHA_VANTAGE_API_KEY",
         "PUSHOVER_APP_TOKEN",
         "PUSHOVER_USER_KEY",
+        "WEB_PORT",          # Enable web dashboard (8080)
     ]
 
     env_lines = []
@@ -104,7 +115,12 @@ def install():
             env_lines.append(f"{env_key}={val}")
             print(f"  Env: {env_key}=***set***")
         else:
-            print(f"  Env: {env_key}=<not set, skipping>")
+            if env_key == "WEB_PORT":
+                # Default WEB_PORT to 8080 for 24/7 service
+                env_lines.append("WEB_PORT=8080")
+                print(f"  Env: WEB_PORT=8080 (default)")
+            else:
+                print(f"  Env: {env_key}=<not set, skipping>")
 
     if env_lines:
         # NSSM AppEnvironmentExtra sets all env vars at once (newline-separated)

@@ -85,7 +85,7 @@ class NewsMonitor:
 
     def __init__(self) -> None:
         # ---- config -------------------------------------------------
-        self.config = ConfigLoader("config")
+        self.config = ConfigLoader(str(_pkg_root / "config"))
 
         # Validate config at startup — logs warnings but does not abort
         issues = self.config.validate()
