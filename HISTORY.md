@@ -4,6 +4,56 @@
 
 ---
 
+## 2026-07-03 · 会话 — P0 数据源扩展：Twitter + 中国金融新闻
+
+### P0 任务结果总览
+- ✅ **Twitter**: 6 账号实时推文采集，18 tweets/次，每 5 分钟
+- ✅ **中国源**: 新浪财经 + 华尔街见闻(5频道)，15 items/次，每 15 分钟  
+- ✅ **中文关键词**: keywords.yaml 新增 80+ 中文触发词
+- 🧪 **测试**: 16 new tests, 249 total passed
+
+### Twitter 采集方案演进（8 种方案尝试）
+1. ❌ Nitter RSS (16 实例) → Cloudflare 全部封杀
+2. ❌ Twitter v1.1 API → 已废弃
+3. ❌ Twitter GraphQL API → guest token 被禁用(2026)
+4. ❌ Playwright 直接抓取 → 强制登录墙
+5. ❌ snscrape → Python 3.12 不兼容
+6. ❌ twikit → 加密协议不兼容(2026)
+7. ❌ Chrome cookie 直接提取 → App-Bound Encryption 加密
+8. ✅ **Playwright + auth_token Cookie** → 成功！
+
+### 最终方案
+- 🔑 用户 X 账号 auth_token（马甲号，零风险）
+- 🎭 Playwright headless Chromium，模拟真实浏览器
+- 🍪 Cookie 注入绕过登录墙
+- 🔗 Clash 代理 (127.0.0.1:7897) 解决网络封锁
+- 📄 `collector/twitter_fetcher.py` 重写为 Playwright 方案
+- 🔐 auth_token 保存在 `.env` (TWITTER_AUTH_TOKEN)
+
+### 数据源最终状态
+```
+采集层: 9 + 6(Twitter) + 6(中文) = 21 个源
+  Tier 1 RSS:       5 源 (CNBC/WSJ/MarketWatch/SA/CNBC Econ) 
+  Tier 2 Playwright: 1 源 (ZeroHedge)
+  Tier 2 Twitter:    6 源 (Newsquawk/elerianm/lisaabramowicz1/
+                         bespokeinvest/zerohedge/Fxhedgers) ← NEW
+  Tier 3 API:        3 源 (SEC/FRED/AlphaVantage)
+  Chinese:           6 频道 (新浪财经 + 华尔街见闻×5) ← NEW
+```
+
+### 修改文件清单
+- `collector/twitter_fetcher.py` — 重写为 Playwright + Cookie 方案
+- `collector/chinese_fetcher.py` — 新建，新浪财经+华尔街见闻 JSON API
+- `collector/scheduler.py` — 集成 Twitter(5min) + 中国源(15min) + browser 生命周期
+- `config/sources.yaml` — Twitter 改为 auth_token 配置 + chinese_sources
+- `config/keywords.yaml` — 中文宏观/人物/行业/突发 80+ 关键词
+- `.env` — 新增 TWITTER_AUTH_TOKEN
+- `tests/test_twitter_fetcher.py` — 重写，8 tests
+- `tests/test_chinese_fetcher.py` — 新建，8 tests
+- `scripts/test_new_fetchers.py` — 新建，烟雾测试
+
+---
+
 ## 2026-07-01 — Sprint 3: Learning Engine + Interaction ✅
 
 ### Sprint 3 完成 — 反馈学习 + 交互命令 + 每日摘要 (Gate 3)
@@ -412,3 +462,7 @@
 - `config/training_news_events_2026H1_news_only_EN.md` — 纯事件版英文训练文档
 
 ---
+
+---
+
+## 2026-07-03T11:53+08:00 · 会话开始

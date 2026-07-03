@@ -1,6 +1,7 @@
 # Keyword dictionaries for entity extraction and alert triggering
 
-macro_alerts:  # Trigger fast lane if in title
+macro_alerts:  # Trigger fast lane if in title (EN + CN)
+  # English
   - "Federal Reserve"
   - "Fed meeting"
   - "Fed rate"
@@ -25,8 +26,58 @@ macro_alerts:  # Trigger fast lane if in title
   - "QE"
   - "quantitative tightening"
   - "QT"
+  - "tariff"
+  - "trade war"
+  - "export controls"
+  - "sanctions"
+  - "geopolitical"
+  # Chinese — 宏观政策
+  - "美联储"
+  - "加息"
+  - "降息"
+  - "通胀"
+  - "非农"
+  - "失业率"
+  - "央行"
+  - "降准"
+  - "降息"
+  - "逆回购"
+  - "MLF"
+  - "LPR"
+  - "财政政策"
+  - "货币政策"
+  - "政治局"
+  - "国务院"
+  - "国常会"
+  - "中央经济工作会议"
+  # Chinese — 宏观数据
+  - "GDP"
+  - "CPI"
+  - "PPI"
+  - "PMI"
+  - "社融"
+  - "M2"
+  - "进出口"
+  - "贸易顺差"
+  - "外汇储备"
+  - "人民币汇率"
+  # Chinese — 地缘 / 贸易
+  - "关税"
+  - "贸易战"
+  - "制裁"
+  - "出口管制"
+  - "实体清单"
+  - "芯片法案"
+  - "地缘政治"
+  # Chinese — 市场异动
+  - "暴跌"
+  - "暴涨"
+  - "熔断"
+  - "闪崩"
+  - "黑天鹅"
+  - "股灾"
 
-breaking_markers:  # Words that mark breaking news
+breaking_markers:  # Words that mark breaking news (EN + CN)
   - "BREAKING"
   - "URGENT"
   - "ALERT"
@@ -34,8 +85,14 @@ breaking_markers:  # Words that mark breaking news
   - "FLASH"
   - "DEVELOPING"
   - "EXCLUSIVE"
+  # Chinese markers
+  - "突发"
+  - "快讯"
+  - "紧急"
+  - "重磅"
 
-key_people:  # Names that trigger fast lane
+key_people:  # Names that trigger fast lane (EN + CN)
+  # US / Global
   - "Kevin Warsh"
   - "Jerome Powell"
   - "Janet Yellen"
@@ -46,8 +103,19 @@ key_people:  # Names that trigger fast lane
   - "Warren Buffett"
   - "Jamie Dimon"
   - "Gary Gensler"
+  # China
+  - "习近平"
+  - "李强"
+  - "潘功胜"
+  - "易纲"
+  - "刘鹤"
+  - "王毅"
+  - "雷军"
+  - "任正非"
+  - "马化腾"
+  - "马云"
 
-sectors:  # Sector -> keywords mapping for portfolio correlation
+sectors:  # Sector -> keywords mapping for portfolio correlation (EN + CN)
   semiconductor:
     - "semiconductor"
     - "chip"
@@ -55,23 +123,55 @@ sectors:  # Sector -> keywords mapping for portfolio correlation
     - "AI chip"
     - "foundry"
     - "wafer"
+    # Chinese
+    - "半导体"
+    - "芯片"
+    - "光刻机"
+    - "晶圆"
+    - "台积电"
+    - "中芯国际"
+    - "英伟达"
+    - "NVIDIA"
+    - "AMD"
   tech:
     - "cloud computing"
     - "SaaS"
     - "software"
     - "AI"
     - "artificial intelligence"
+    # Chinese
+    - "人工智能"
+    - "云计算"
+    - "大模型"
+    - "ChatGPT"
+    - "自动驾驶"
+    - "机器人"
   finance:
     - "bank"
     - "fintech"
     - "insurance"
     - "hedge fund"
+    # Chinese
+    - "银行"
+    - "券商"
+    - "保险"
+    - "基金"
+    - "信托"
   energy:
     - "oil"
     - "crude"
     - "natural gas"
     - "OPEC"
     - "renewable energy"
+    # Chinese
+    - "原油"
+    - "油价"
+    - "新能源"
+    - "光伏"
+    - "锂电池"
+    - "电动车"
+    - "特斯拉"
+    - "比亚迪"
   crypto:
     - "Bitcoin"
     - "Ethereum"
@@ -79,3 +179,27 @@ sectors:  # Sector -> keywords mapping for portfolio correlation
     - "DeFi"
     - "blockchain"
     - "SEC crypto"
+    # Chinese
+    - "比特币"
+    - "以太坊"
+    - "加密货币"
+    - "区块链"
+  real_estate:
+    # Chinese — 房地产
+    - "房地产"
+    - "房价"
+    - "楼市"
+    - "房贷"
+    - "恒大"
+    - "碧桂园"
+    - "万科"
+  healthcare:
+    - "pharma"
+    - "biotech"
+    - "FDA"
+    # Chinese
+    - "医药"
+    - "创新药"
+    - "CXO"
+    - "集采"
+    - "医保"

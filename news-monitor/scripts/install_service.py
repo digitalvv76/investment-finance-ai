@@ -85,16 +85,34 @@ def install():
         "AppExit": "Default Restart",
     }
 
-    # Set environment variables from current session
-    for env_key in ["TELEGRAM_BOT_TOKEN", "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY"]:
+    # Collect ALL environment variables needed by the service
+    required_env_vars = [
+        "TELEGRAM_BOT_TOKEN",
+        "DEEPSEEK_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "TWITTER_AUTH_TOKEN",
+        "FRED_API_KEY",
+        "ALPHA_VANTAGE_API_KEY",
+        "PUSHOVER_APP_TOKEN",
+        "PUSHOVER_USER_KEY",
+    ]
+
+    env_lines = []
+    for env_key in required_env_vars:
         val = os.environ.get(env_key, "")
         if val:
-            subprocess.run(
-                ["nssm", "set", SERVICE_NAME, "AppEnvironmentExtra",
-                 f"{env_key}={val}"],
-                check=True,
-            )
+            env_lines.append(f"{env_key}={val}")
             print(f"  Env: {env_key}=***set***")
+        else:
+            print(f"  Env: {env_key}=<not set, skipping>")
+
+    if env_lines:
+        # NSSM AppEnvironmentExtra sets all env vars at once (newline-separated)
+        subprocess.run(
+            ["nssm", "set", SERVICE_NAME, "AppEnvironmentExtra", "\n".join(env_lines)],
+            check=True,
+        )
+        print(f"  Total: {len(env_lines)} environment variables configured")
 
     for key, value in configs.items():
         subprocess.run(["nssm", "set", SERVICE_NAME, key, value], check=True)

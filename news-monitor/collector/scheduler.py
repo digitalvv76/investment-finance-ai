@@ -9,6 +9,8 @@ from collector.exchange_calendar import ExchangeCalendar
 from collector.rss_fetcher import RSSFetcher
 from collector.playwright_fetcher import PlaywrightFetcher
 from collector.api_fetcher import APIFetcher
+from collector.twitter_fetcher import TwitterFetcher
+from collector.chinese_fetcher import ChineseNewsFetcher
 from config.loader import ConfigLoader
 from storage.database import Database
 from storage.models import NewsItem
@@ -39,6 +41,12 @@ class NewsScheduler:
         )
         self.api_fetcher = APIFetcher(
             watchlist=self._load_watchlist()
+        )
+        self.twitter_fetcher = TwitterFetcher(
+            self.sources.get('twitter', {})
+        )
+        self.chinese_fetcher = ChineseNewsFetcher(
+            self.sources.get('chinese_sources', {})
         )
 
         # Track last fetch times for adaptive throttling
@@ -115,7 +123,7 @@ class NewsScheduler:
             logger.debug("Heartbeat: no new items")
 
     async def _tick_5min(self):
-        """5-minute tick: remaining Playwright sources + fast RSS."""
+        """5-minute tick: remaining Playwright sources + Twitter."""
         sources = [
             s for s in self.sources.get('tier_2_playwright', [])
             if s.get('frequency_tier') != 'heartbeat'
@@ -125,12 +133,27 @@ class NewsScheduler:
             src_items = await self.playwright_fetcher.fetch_source(source)
             items.extend(src_items)
 
+        # Twitter/X feeds via Nitter RSS proxy
+        try:
+            twitter_items = await self.twitter_fetcher.fetch_all()
+            items.extend(twitter_items)
+        except Exception as e:
+            logger.warning("Twitter fetch failed: %s", e)
+
         if items:
             await self._insert_and_notify(items)
 
     async def _tick_15min(self):
-        """15-minute tick: all RSS sources."""
+        """15-minute tick: all RSS sources + Chinese financial news."""
         items = await self.rss_fetcher.fetch_all()
+
+        # Chinese financial news (新浪财经 + 华尔街见闻)
+        try:
+            cn_items = await self.chinese_fetcher.fetch_all()
+            items.extend(cn_items)
+        except Exception as e:
+            logger.warning("Chinese news fetch failed: %s", e)
+
         if items:
             await self._insert_and_notify(items)
 
@@ -180,6 +203,12 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"Playwright startup failed: {e}")
 
+        # Startup Twitter browser (Playwright + auth cookie)
+        try:
+            await self.twitter_fetcher.startup()
+        except Exception as e:
+            logger.warning(f"Twitter fetcher startup failed (non-fatal): {e}")
+
         while self._running:
             now = time.time()
 
@@ -219,3 +248,5 @@ class NewsScheduler:
         await self.rss_fetcher.close()
         await self.playwright_fetcher.shutdown()
         await self.api_fetcher.close()
+        await self.twitter_fetcher.shutdown()
+        await self.chinese_fetcher.close()
