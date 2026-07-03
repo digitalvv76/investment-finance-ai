@@ -329,13 +329,15 @@ class NewsMonitor:
             await self.web_dashboard.start()
 
         # Start impact collector loop (background, periodic)
-        asyncio.create_task(self._run_collector_loop())
+        self._collector_task = asyncio.create_task(self._run_collector_loop())
 
         logger.info("News Monitor running")
 
     async def stop(self) -> None:
         logger.info("News Monitor stopping ...")
         await self.scheduler.stop()
+        if hasattr(self, '_collector_task'):
+            self._collector_task.cancel()
         if self.web_dashboard:
             await self.web_dashboard.stop()
         if self.bot:

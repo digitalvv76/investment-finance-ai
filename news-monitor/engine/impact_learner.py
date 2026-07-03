@@ -21,7 +21,8 @@ class ImpactLearner:
         biases = [
             s["predicted_score"] - s["actual_score"]
             for s in samples
-            if s.get("actual_score", 0) > 0
+            if (s.get("actual_score") is not None
+                and s.get("actual_score", 0) >= 0)  # skip sentinel -1.0 (not yet collected)
         ]
         if not biases:
             return 0.0

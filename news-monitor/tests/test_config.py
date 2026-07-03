@@ -33,6 +33,7 @@ def test_load_keywords():
 
 def test_env_interpolation(monkeypatch):
     monkeypatch.setenv("TEST_VAR", "test_value")
+    monkeypatch.setenv("FRED_API_KEY", "test_fred_key")
     loader = ConfigLoader("config")
     # settings.yaml has ${FRED_API_KEY} etc — verify they get interpolated
     settings = loader.load_settings()

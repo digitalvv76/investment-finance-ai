@@ -22,3 +22,4 @@ openai>=1.0.0           # DeepSeek (OpenAI-compatible API)
 
 # Utilities
 schedule>=1.2.0
+python-dotenv>=1.0.0

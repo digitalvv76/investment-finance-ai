@@ -1,6 +1,7 @@
 """LLM-driven market impact evaluator with data quality, explainability gates,
 health monitoring, and prompt version management."""
 
+import asyncio
 import json
 import logging
 import os
@@ -41,22 +42,20 @@ class PromptVersionManager:
 
     @classmethod
     def compare_mae(cls, db) -> dict:
-        # Query mean absolute error by prompt_version
-        import sqlite3
-        conn = sqlite3.connect(db.db_path)
-        conn.row_factory = sqlite3.Row
+        """Compare MAE by prompt version. Uses db._get_conn() for proper WAL/PRAGMA."""
         result = {}
-        for version in ["v1", "v2"]:
-            row = conn.execute("""
-                SELECT AVG(ABS(a.impact_score - o.actual_score)) as mae,
-                       COUNT(*) as n
-                FROM impact_assessments a
-                JOIN impact_outcomes o ON o.assessment_id = a.id
-                WHERE a.prompt_version = ?
-            """, (version,)).fetchone()
-            if row and row["n"]:
-                result[version] = {"mae": round(row["mae"], 2), "samples": row["n"]}
-        conn.close()
+        with db._get_conn() as conn:
+            for version in ["v1", "v2"]:
+                row = conn.execute("""
+                    SELECT AVG(ABS(a.impact_score - o.actual_score)) as mae,
+                           COUNT(*) as n
+                    FROM impact_assessments a
+                    JOIN impact_outcomes o ON o.assessment_id = a.id
+                    WHERE a.prompt_version = ?
+                      AND o.actual_score >= 0
+                """, (version,)).fetchone()
+                if row and row["n"]:
+                    result[version] = {"mae": round(row["mae"], 2), "samples": row["n"]}
         return result
 
 
@@ -69,10 +68,8 @@ def _validate_input(item: NewsItem) -> tuple[bool, str]:
         return False, "title_too_short"
     if not item.content_snippet or len(item.content_snippet) < 50:
         return False, "content_too_short"
-    try:
-        item.title.encode("utf-8")
-    except UnicodeError:
-        return False, "encoding_error"
+    if "\x00" in item.title:
+        return False, "null_byte_in_title"
     return True, "ok"
 
 
@@ -200,7 +197,9 @@ class ImpactEvaluator:
             f"Content: {item.content_snippet[:800]}\n"
         )
 
-        # 3. LLM call with retry
+        # 3. LLM call with retry (API failures only)
+        raw = None
+        t0 = time.monotonic()
         for attempt in range(2):
             try:
                 client = self._get_client()
@@ -209,8 +208,9 @@ class ImpactEvaluator:
                     self.health.record_failure("no_client")
                     return None
 
-                t0 = time.monotonic()
-                resp = client.chat.completions.create(
+                # Run synchronous OpenAI SDK in a thread to avoid blocking event loop
+                resp = await asyncio.to_thread(
+                    client.chat.completions.create,
                     model="deepseek-chat",
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -219,18 +219,35 @@ class ImpactEvaluator:
                     temperature=0.3,
                     max_tokens=1200,
                 )
-                latency = (time.monotonic() - t0) * 1000
-                self.health.record_success(latency)
                 raw = resp.choices[0].message.content
-                return self._parse_response(raw, prompt_version, int(latency))
+                break  # API call succeeded, exit retry loop
 
             except Exception as e:
-                logger.error("ImpactEval attempt %d failed: %s", attempt + 1, e)
+                logger.error("ImpactEval API attempt %d failed: %s", attempt + 1, e)
                 if attempt == 0:
                     continue  # retry once
                 self.health.record_failure(str(e)[:200])
+                return None
 
-        return None
+        if raw is None:
+            return None
+
+        latency = (time.monotonic() - t0) * 1000
+
+        # Parse response (outside retry loop — parse failures are NOT retried)
+        try:
+            assessment = self._parse_response(raw, prompt_version, int(latency))
+            if assessment:
+                assessment.news_id = item.id  # assign early for logging
+                self.health.record_success(latency)
+                return assessment
+            else:
+                self.health.record_failure("parse_returned_none")
+                return None
+        except Exception as e:
+            logger.error("ImpactEval parse failed: %s", e)
+            self.health.record_failure(f"parse_error: {str(e)[:200]}")
+            return None
 
     def _parse_response(self, raw: str, prompt_version: str,
                         latency_ms: int) -> Optional[ImpactAssessment]:

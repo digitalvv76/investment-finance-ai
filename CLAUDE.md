@@ -70,6 +70,9 @@ calss1/
 | quant-strategy | `/quant-strategy`, "策略", "backtest", "signal" | 量化策略开发/回测/信号生成 |
 | portfolio-management | `/portfolio-management`, "组合", "调仓", "risk" | 组合分析/风险评估/调仓建议 |
 | daily-briefing | `/daily-briefing`, "早报", "日报", "briefing" | 每日市场概览 + 持仓更新 |
+| db-migration | `/db-migration`, "schema", "migration", "改表" | 数据库安全变更 — 影响评估 + 迁移脚本 + 回滚 |
+| deployment-checklist | `/deployment-checklist`, "deploy", "上线", "发布" | 上线前 5 道门禁检查 (凭证/测试/质量/安全/回滚) |
+| visual-design | `/visual-design`, "UI", "页面", "前端", "样式" | 视觉规范一致性 — 先读 DESIGN.md 再写代码 |
 
 ## MCP 数据源
 
@@ -125,6 +128,48 @@ calss1/
 设置方式：
 - **Windows**: `setx FRED_API_KEY "your_key_here"`
 - **或在项目 `.env` 文件中直接填写**（.env 已 git-ignored）
+
+## 🔐 凭证架构 (Credential Architecture)
+
+**`.env` 是唯一真相来源。** 所有 Python 入口点通过 `python-dotenv` 自动加载。
+
+### 凭证清单
+
+| 环境变量 | 用途 | 必需 |
+|----------|------|------|
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot 推送 | ✅ 是 |
+| `DEEPSEEK_API_KEY` | LLM 深度分析 (主) | ✅ 是* |
+| `ANTHROPIC_API_KEY` | LLM 深度分析 (备) | ✅ 是* |
+| `PUSHOVER_APP_TOKEN` | 手机紧急推送 (警笛) | 推荐 |
+| `PUSHOVER_USER_KEY` | Pushover 用户标识 | 推荐 |
+| `FRED_API_KEY` | 美联储宏观数据 | 可选 |
+| `ALPHA_VANTAGE_API_KEY` | 股票基本面 | 可选 |
+
+*至少需要一个 LLM key
+
+### 启动自动检查
+
+每次会话启动自动运行（SessionStart hook）：
+
+1. **`backup_state.py`** — 备份所有关键文件到 `.claude/backups/state/`
+2. **`verify_env.py`** — 检查凭证完整性、.env ↔ settings.json 同步、API 连通性
+
+### 手动同步 (.env → settings.json)
+
+编辑 `.env` 后运行：
+```bash
+python news-monitor/scripts/sync_env_to_settings.py
+```
+
+### 恢复凭证
+
+从备份恢复：
+```bash
+ls .claude/backups/state/           # 查看备份列表
+cp .claude/backups/state/<latest>/.env .env
+```
+
+详见 `.claude/memory/credential-architecture.md`
 
 ### 数据回退策略
 

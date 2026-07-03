@@ -28,15 +28,23 @@ class ImpactCollector:
     async def collect_pending(self, db, window: str) -> int:
         """Fetch market data for all assessments without outcomes for `window`.
 
-        Returns count of outcomes created.
+        Returns count of outcomes collected.
         """
         pending = db.get_assessments_without_outcomes(window, limit=20)
         count = 0
         for row in pending:
-            # In production: call yfinance/stock-scanner here.
-            # For MVP, write placeholder — actual data comes from
-            # the scheduled task in main.py.
-            pass
+            # MVP: insert a placeholder outcome so these assessments aren't
+            # re-fetched every cycle. Real market data from yfinance/stock-scanner
+            # MCP tools will populate actual scores in a future phase.
+            outcome = ImpactOutcome(
+                assessment_id=row["id"],
+                collection_window=window,
+                actual_score=-1.0,  # sentinel: not yet collected
+            )
+            db.insert_outcome(outcome)
+            count += 1
+        if count:
+            logger.info("ImpactCollector[%s]: placed %d placeholder outcomes", window, count)
         return count
 
     def _normalize_score(self, *, spx_change: float, vix_change: float,

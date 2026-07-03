@@ -1,1 +1,2 @@
 - [Session Workflow](.claude/memory/session-workflow.md) — Every session must end with HISTORY.md update + git push
+- [Credential Architecture](.claude/memory/credential-architecture.md) — Credential single source of truth, loading flow, recovery procedures
