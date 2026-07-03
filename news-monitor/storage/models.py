@@ -75,3 +75,52 @@ class UserPreference:
     key: str = ""                 # e.g. "source_weight:bloomberg", "topic:semiconductor"
     value: str = ""               # JSON value
     updated_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class ImpactAssessment:
+    id: Optional[int] = None
+    news_id: int = 0
+    impact_score: float = 0.0          # 0-100 LLM prediction
+    confidence: float = 0.0            # 0-100
+    event_category: str = ""            # monetary|geopolitical|macro_data|corporate|regulatory|other
+    surprise_level: str = ""            # expected|minor_surprise|major_surprise|shock
+    breadth: str = ""                   # single_stock|sector|broad_market|cross_asset
+    reasoning_chain: str = ""           # JSON array of 5 strings
+    similar_events: str = ""            # JSON array
+    expected_moves: str = ""            # JSON dict
+    calibration_note: str = ""
+    low_confidence: bool = False
+    prompt_version: str = "v1"
+    latency_ms: int = 0
+    created_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class ImpactOutcome:
+    id: Optional[int] = None
+    assessment_id: int = 0
+    collection_window: str = ""         # '15m' | '1h' | '4h'
+    spx_change_pct: float = 0.0
+    vix_change_pct: float = 0.0
+    sector_changes: str = ""            # JSON dict
+    actual_score: float = 0.0           # 0-100 normalized
+    collected_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class CalibrationState:
+    id: Optional[int] = None
+    category: str = ""                  # event_category or 'global'
+    bias: float = 0.0                   # positive = over-estimate
+    sample_count: int = 0
+    last_updated: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class HealthEvent:
+    id: Optional[int] = None
+    event_type: str = ""                # quality_reject|llm_timeout|llm_parse_error|degraded
+    news_id: int = 0
+    detail: str = ""
+    created_at: datetime = field(default_factory=datetime.now)

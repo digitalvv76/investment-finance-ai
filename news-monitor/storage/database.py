@@ -4,7 +4,8 @@ import json
 from datetime import datetime, date
 from typing import List, Optional
 from contextlib import contextmanager
-from .models import NewsItem, EventLine, FeedbackRecord, UserPreference
+from .models import NewsItem, EventLine, FeedbackRecord, UserPreference, \
+    ImpactAssessment, ImpactOutcome, CalibrationState, HealthEvent
 
 
 def _adapt_datetime(val):
@@ -98,6 +99,56 @@ class Database:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE INDEX IF NOT EXISTS idx_training_type ON training_docs(type);
+
+                CREATE TABLE IF NOT EXISTS impact_assessments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    news_id INTEGER NOT NULL,
+                    impact_score REAL DEFAULT 0.0,
+                    confidence REAL DEFAULT 0.0,
+                    event_category TEXT DEFAULT '',
+                    surprise_level TEXT DEFAULT '',
+                    breadth TEXT DEFAULT '',
+                    reasoning_chain TEXT DEFAULT '',
+                    similar_events TEXT DEFAULT '',
+                    expected_moves TEXT DEFAULT '',
+                    calibration_note TEXT DEFAULT '',
+                    low_confidence INTEGER DEFAULT 0,
+                    prompt_version TEXT DEFAULT 'v1',
+                    latency_ms INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_impact_news ON impact_assessments(news_id);
+                CREATE INDEX IF NOT EXISTS idx_impact_score ON impact_assessments(impact_score);
+
+                CREATE TABLE IF NOT EXISTS impact_outcomes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    assessment_id INTEGER NOT NULL,
+                    collection_window TEXT DEFAULT '',
+                    spx_change_pct REAL DEFAULT 0.0,
+                    vix_change_pct REAL DEFAULT 0.0,
+                    sector_changes TEXT DEFAULT '',
+                    actual_score REAL DEFAULT 0.0,
+                    collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (assessment_id) REFERENCES impact_assessments(id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_outcome_assessment ON impact_outcomes(assessment_id);
+
+                CREATE TABLE IF NOT EXISTS calibration_state (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    category TEXT UNIQUE NOT NULL,
+                    bias REAL DEFAULT 0.0,
+                    sample_count INTEGER DEFAULT 0,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS health_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT DEFAULT '',
+                    news_id INTEGER DEFAULT 0,
+                    detail TEXT DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_health_type ON health_events(event_type);
             """)
 
     def insert_news(self, item: NewsItem) -> int:
@@ -231,6 +282,158 @@ class Database:
         return "\n".join(parts) if parts else ""
 
     # ------------------------------------------------------------------
+    # Impact Evaluator CRUD
+    # ------------------------------------------------------------------
+
+    def insert_assessment(self, a: ImpactAssessment) -> int:
+        with self._get_conn() as conn:
+            c = conn.execute("""
+                INSERT INTO impact_assessments
+                (news_id, impact_score, confidence, event_category, surprise_level,
+                 breadth, reasoning_chain, similar_events, expected_moves,
+                 calibration_note, low_confidence, prompt_version, latency_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                a.news_id, a.impact_score, a.confidence, a.event_category,
+                a.surprise_level, a.breadth, a.reasoning_chain, a.similar_events,
+                a.expected_moves, a.calibration_note, int(a.low_confidence),
+                a.prompt_version, a.latency_ms
+            ))
+            a.id = c.lastrowid
+            return c.lastrowid
+
+    def get_assessments(self, limit: int = 20, min_score: float = 0.0) -> list[dict]:
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM impact_assessments WHERE impact_score >= ? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (min_score, limit)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_assessment(self, assessment_id: int) -> dict | None:
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM impact_assessments WHERE id = ?", (assessment_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_assessments_without_outcomes(self, window: str, limit: int = 50) -> list[dict]:
+        """Assessments that still need an outcome for a given window."""
+        with self._get_conn() as conn:
+            rows = conn.execute("""
+                SELECT a.* FROM impact_assessments a
+                WHERE a.id NOT IN (
+                    SELECT assessment_id FROM impact_outcomes
+                    WHERE collection_window = ?
+                )
+                ORDER BY a.created_at DESC LIMIT ?
+            """, (window, limit)).fetchall()
+            return [dict(r) for r in rows]
+
+    def insert_outcome(self, o: ImpactOutcome) -> int:
+        with self._get_conn() as conn:
+            c = conn.execute("""
+                INSERT INTO impact_outcomes
+                (assessment_id, collection_window, spx_change_pct, vix_change_pct,
+                 sector_changes, actual_score)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (o.assessment_id, o.collection_window, o.spx_change_pct,
+                  o.vix_change_pct, o.sector_changes, o.actual_score))
+            o.id = c.lastrowid
+            return c.lastrowid
+
+    def get_outcomes_for_category(self, category: str, limit: int = 20) -> list[dict]:
+        with self._get_conn() as conn:
+            rows = conn.execute("""
+                SELECT a.impact_score as predicted_score,
+                       a.event_category,
+                       MAX(o.actual_score) as actual_score
+                FROM impact_assessments a
+                JOIN impact_outcomes o ON o.assessment_id = a.id
+                WHERE a.event_category = ?
+                GROUP BY a.id
+                ORDER BY a.created_at DESC LIMIT ?
+            """, (category, limit)).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_outcomes_for_assessment(self, assessment_id: int) -> list[dict]:
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM impact_outcomes WHERE assessment_id = ? "
+                "ORDER BY collected_at DESC",
+                (assessment_id,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def upsert_calibration(self, category: str, bias: float, sample_count: int):
+        with self._get_conn() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO calibration_state
+                (category, bias, sample_count, last_updated)
+                VALUES (?, ?, ?, datetime('now'))
+            """, (category, bias, sample_count))
+
+    def get_calibration(self, category: str = None) -> list[dict]:
+        with self._get_conn() as conn:
+            if category:
+                rows = conn.execute(
+                    "SELECT * FROM calibration_state WHERE category = ?", (category,)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM calibration_state ORDER BY category"
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+    def insert_health_event(self, e: HealthEvent) -> int:
+        with self._get_conn() as conn:
+            c = conn.execute(
+                "INSERT INTO health_events (event_type, news_id, detail) VALUES (?, ?, ?)",
+                (e.event_type, e.news_id, e.detail)
+            )
+            return c.lastrowid
+
+    def get_health_events(self, limit: int = 50, event_type: str = None) -> list[dict]:
+        with self._get_conn() as conn:
+            if event_type:
+                rows = conn.execute(
+                    "SELECT * FROM health_events WHERE event_type = ? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (event_type, limit)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM health_events ORDER BY created_at DESC LIMIT ?",
+                    (limit,)
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_health_stats(self, hours: int = 1) -> dict:
+        with self._get_conn() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) as cnt FROM impact_assessments "
+                "WHERE created_at > datetime('now', ?)",
+                (f'-{hours} hours',)
+            ).fetchone()["cnt"]
+            errors = conn.execute(
+                "SELECT COUNT(*) as cnt FROM health_events "
+                "WHERE created_at > datetime('now', ?)",
+                (f'-{hours} hours',)
+            ).fetchone()["cnt"]
+            return {"total_assessments_1h": total, "health_events_1h": errors,
+                    "success_rate": round((total - errors) / max(total, 1) * 100, 1)}
+
+    def get_impact_stats(self) -> dict:
+        with self._get_conn() as conn:
+            total = conn.execute("SELECT COUNT(*) as cnt FROM impact_assessments").fetchone()["cnt"]
+            with_outcomes = conn.execute(
+                "SELECT COUNT(DISTINCT assessment_id) as cnt FROM impact_outcomes"
+            ).fetchone()["cnt"]
+            pending = total - with_outcomes
+            return {"total": total, "with_outcomes": with_outcomes, "pending": pending}
+
+    # ------------------------------------------------------------------
     # Retention / maintenance
     # ------------------------------------------------------------------
 
@@ -265,6 +468,10 @@ class Database:
             "feedback_count": 0,
             "event_count": 0,
             "training_docs": 0,
+            "impact_assessments_count": 0,
+            "impact_outcomes_count": 0,
+            "calibration_state_count": 0,
+            "health_events_count": 0,
             "db_size_mb": 0,
         }
         try:
@@ -273,7 +480,8 @@ class Database:
             pass
 
         with self._get_conn() as conn:
-            for table in ["news", "feedback", "event_lines", "training_docs"]:
+            for table in ["news", "feedback", "event_lines", "training_docs",
+                           "impact_assessments", "impact_outcomes", "calibration_state", "health_events"]:
                 row = conn.execute(f"SELECT COUNT(*) as cnt FROM {table}").fetchone()
                 if row:
                     key = f"{table if table != 'news' else 'news'}_count"
