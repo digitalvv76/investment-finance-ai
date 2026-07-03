@@ -14,6 +14,13 @@ import os
 import sys
 from pathlib import Path
 
+# Load .env from repo root BEFORE any module reads os.environ.
+# find_dotenv() walks up from this file's directory to find D:/class1/.env.
+from dotenv import load_dotenv, find_dotenv
+_env_path = find_dotenv(usecwd=True)
+if _env_path:
+    load_dotenv(_env_path)
+
 # Ensure the news-monitor package directory is importable when running
 # directly (``python main.py``) regardless of how the working directory
 # is set up.
@@ -33,6 +40,8 @@ from engine.curator import Curator
 from engine.trainer import Trainer
 from engine.alert_dispatcher import AlertDispatcher, AlertLevel
 from engine.strategic_detector import StrategicDetector
+from engine.impact_evaluator import ImpactEvaluator
+from engine.impact_learner import ImpactLearner
 from bot.telegram_bot import NewsBot
 
 # ---------------------------------------------------------------------------
@@ -127,6 +136,11 @@ class NewsMonitor:
         self.alert_dispatcher = AlertDispatcher()
         self._strategic = StrategicDetector()
 
+        # ---- impact evaluator (LLM, async, isolated) --------
+        self.impact_evaluator = ImpactEvaluator()
+        self.impact_learner = ImpactLearner()
+        logger.info("ImpactEvaluator initialized (threshold=%.2f)", ImpactEvaluator.THRESHOLD)
+
         # ---- Telegram bot -------------------------------------------
         token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
         if not token:
@@ -143,6 +157,8 @@ class NewsMonitor:
                 db=self.db, curator=self.curator, trainer=self.trainer,
                 learner=self.learner, port=web_port,
             )
+            # Make evaluator available for /api/impact/health endpoint
+            self.web_dashboard.impact_evaluator = self.impact_evaluator
             logger.info("Web dashboard enabled on port %d", web_port)
         else:
             self.web_dashboard = None
@@ -215,6 +231,10 @@ class NewsMonitor:
             if item.priority_score >= 0.7:
                 asyncio.create_task(self._run_deep_lane(item))
 
+            # ---- Impact Evaluator (LLM, async, isolated from alerts) ----
+            if item.priority_score >= ImpactEvaluator.THRESHOLD:
+                asyncio.create_task(self._run_impact_evaluator(item))
+
     async def _run_deep_lane(self, item):
         """Run deep lane analysis as a background task."""
         try:
@@ -239,6 +259,54 @@ class NewsMonitor:
         except Exception as e:
             logger.error(f"Deep lane background task failed: {e}")
 
+    async def _run_impact_evaluator(self, item):
+        """Run impact evaluation as a background task (LLM, async, isolated from alerts)."""
+        try:
+            calibration_hint = self.impact_learner.generate_calibration_hint(self.db)
+            assessment = await self.impact_evaluator.evaluate(
+                item,
+                market_context="",  # populated later from market data
+                calibration_hint=calibration_hint,
+            )
+            if assessment:
+                assessment.news_id = item.id
+                self.db.insert_assessment(assessment)
+                logger.debug(
+                    "ImpactEval: news#%s -> score=%d cat=%s conf=%d",
+                    item.id, assessment.impact_score,
+                    assessment.event_category, assessment.confidence
+                )
+            else:
+                # Log health event for degraded evaluation
+                from storage.models import HealthEvent
+                self.db.insert_health_event(HealthEvent(
+                    event_type="degraded",
+                    news_id=item.id,
+                    detail="evaluate returned None"
+                ))
+        except Exception as e:
+            logger.error("ImpactEval failed for news#%s: %s", item.id, e)
+            self.impact_evaluator.health.record_failure(str(e)[:200])
+
+    async def _collect_impact_outcomes(self, window: str):
+        """Periodic task: collect market data for pending assessments."""
+        try:
+            from engine.impact_collector import ImpactCollector
+            collector = ImpactCollector()
+            count = await collector.collect_pending(self.db, window)
+            if count:
+                logger.info("ImpactCollector[%s]: %d outcomes collected", window, count)
+        except Exception as e:
+            logger.error("ImpactCollector[%s] failed: %s", window, e)
+
+    async def _run_collector_loop(self):
+        """Run collector at 15m/1h/4h intervals."""
+        while True:
+            await asyncio.sleep(15 * 60)
+            await self._collect_impact_outcomes("15m")
+            # 1h and 4h windows are handled by a separate check
+            # that looks at created_at age
+
     # -----------------------------------------------------------------
     # Lifecycle
     # -----------------------------------------------------------------
@@ -259,6 +327,9 @@ class NewsMonitor:
         # Start the web dashboard (if enabled).
         if self.web_dashboard:
             await self.web_dashboard.start()
+
+        # Start impact collector loop (background, periodic)
+        asyncio.create_task(self._run_collector_loop())
 
         logger.info("News Monitor running")
 

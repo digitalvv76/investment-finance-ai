@@ -83,6 +83,7 @@ class WebDashboard:
         app["trainer"] = self.trainer
         app["learner"] = self.learner
         app["sse_manager"] = self._sse
+        app["impact_evaluator"] = getattr(self, "impact_evaluator", None)
 
         # CORS middleware (permissive for local dev)
         @web.middleware
