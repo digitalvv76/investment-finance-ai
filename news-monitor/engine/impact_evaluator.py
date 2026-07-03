@@ -197,7 +197,7 @@ class ImpactEvaluator:
             f"Content: {item.content_snippet[:800]}\n"
         )
 
-        # 3. LLM call with retry (API failures only)
+        # 3. LLM call with retry (API failures + hard timeout)
         raw = None
         t0 = time.monotonic()
         for attempt in range(2):
@@ -208,19 +208,33 @@ class ImpactEvaluator:
                     self.health.record_failure("no_client")
                     return None
 
-                # Run synchronous OpenAI SDK in a thread to avoid blocking event loop
-                resp = await asyncio.to_thread(
-                    client.chat.completions.create,
-                    model="deepseek-chat",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    temperature=0.3,
-                    max_tokens=1200,
+                # Run synchronous OpenAI SDK in a thread to avoid blocking event loop.
+                # HARD_TIMEOUT guards against hangs (network dropout, server overload).
+                resp = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        client.chat.completions.create,
+                        model=os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        temperature=0.3,
+                        max_tokens=1200,
+                    ),
+                    timeout=self.HARD_TIMEOUT,
                 )
                 raw = resp.choices[0].message.content
                 break  # API call succeeded, exit retry loop
+
+            except asyncio.TimeoutError:
+                logger.error(
+                    "ImpactEval attempt %d: LLM call timed out after %.0fs",
+                    attempt + 1, self.HARD_TIMEOUT,
+                )
+                if attempt == 0:
+                    continue  # retry once
+                self.health.record_failure("hard_timeout")
+                return None
 
             except Exception as e:
                 logger.error("ImpactEval API attempt %d failed: %s", attempt + 1, e)
