@@ -82,3 +82,37 @@ class TestPromptVersionManager:
         prompt = PromptVersionManager.load("v9_nonexistent")
         assert isinstance(prompt, str)
         assert len(prompt) > 100
+
+
+class TestImpactCollector:
+    def test_normalize_actual_score_typical(self):
+        from engine.impact_collector import ImpactCollector
+        c = ImpactCollector.__new__(ImpactCollector)
+        score = c._normalize_score(
+            spx_change=-2.1, vix_change=18.0,
+            sector_count=5, bonds_moved=True, fx_moved=False, commodities_moved=True
+        )
+        # spx: min(2.1/3,1)*100=70 *0.4 = 28
+        # vix: min(18/15,1)*100=100 *0.25 = 25
+        # sector: 5/11*100=45.5 *0.2 = 9.1
+        # cross: (1+0+1)/3*100=66.7 *0.15 = 10
+        # total ≈ 72
+        assert 65 < score < 80
+
+    def test_normalize_actual_score_zero(self):
+        from engine.impact_collector import ImpactCollector
+        c = ImpactCollector.__new__(ImpactCollector)
+        score = c._normalize_score(
+            spx_change=0, vix_change=0, sector_count=0,
+            bonds_moved=False, fx_moved=False, commodities_moved=False
+        )
+        assert score == 0.0
+
+    def test_normalize_actual_score_max(self):
+        from engine.impact_collector import ImpactCollector
+        c = ImpactCollector.__new__(ImpactCollector)
+        score = c._normalize_score(
+            spx_change=-5.0, vix_change=30.0, sector_count=11,
+            bonds_moved=True, fx_moved=True, commodities_moved=True
+        )
+        assert score == 100.0
