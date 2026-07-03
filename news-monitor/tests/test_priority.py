@@ -111,7 +111,7 @@ class TestPriorityScorer:
         ]
         pushed = scorer.score_batch(
             items,
-            tickers_map={id(items[0]): {"NVDA"}},
+            tickers_map={0: {"NVDA"}},  # key=index (items have no DB id yet)
         )
         assert len(pushed) == 1
         assert pushed[0].priority_score >= FAST_LANE_THRESHOLD

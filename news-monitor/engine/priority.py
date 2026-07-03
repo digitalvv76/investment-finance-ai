@@ -269,11 +269,13 @@ class PriorityScorer:
     ) -> List[NewsItem]:
         """Score a batch of items, updating their priority_score in place."""
         pushed = []
-        for item in items:
-            tid = id(item)
-            tickers = (tickers_map or {}).get(tid, set())
-            macros = (macro_map or {}).get(tid, set())
-            has_people = (people_map or {}).get(tid, False)
+        for idx, item in enumerate(items):
+            # Use item.id when available (persisted items), fall back to list
+            # index for newly-created items that haven't been assigned a DB id.
+            key = item.id if item.id is not None else idx
+            tickers = (tickers_map or {}).get(key, set())
+            macros = (macro_map or {}).get(key, set())
+            has_people = (people_map or {}).get(key, False)
 
             item.priority_score = self.score(item, tickers, macros, has_people)
 

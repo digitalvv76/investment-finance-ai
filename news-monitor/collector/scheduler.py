@@ -54,7 +54,9 @@ class NewsScheduler:
         tickers = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"]
         try:
             from pathlib import Path
-            watchlist_path = Path("../../.claude/memory/watchlist-state.md")
+            # Resolve relative to this file, not the process CWD
+            _project_root = Path(__file__).resolve().parents[3]
+            watchlist_path = _project_root / ".claude" / "memory" / "watchlist-state.md"
             if watchlist_path.exists():
                 content = watchlist_path.read_text()
                 import re
@@ -207,7 +209,7 @@ class NewsScheduler:
             logger.warning(f"Twitter fetcher startup failed (non-fatal): {e}")
 
         while self._running:
-            now = time.time()
+            now = time.monotonic()
 
             try:
                 if now - last_1min >= self._get_frequency(60):

@@ -13,6 +13,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+
+import aiohttp
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -213,8 +215,6 @@ class AlertDispatcher:
             priority: -2=silent, 0=normal, 1=high, 2=emergency (repeating).
             sound: Sound name from Pushover's sound library.
         """
-        import aiohttp
-
         title = item.get("title", "")[:250]
         source = item.get("source", "")
         url = item.get("url", "")
