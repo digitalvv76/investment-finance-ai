@@ -186,8 +186,8 @@ async def test_pushover_emergency_payload():
         call_args = mock_post.call_args
         payload = call_args[1]["json"]
         assert payload["priority"] == 2
-        assert payload["sound"] == "siren"
-        assert payload["retry"] == 60
+        assert payload["sound"] == "spacealarm"
+        assert payload["retry"] == 30
         assert payload["expire"] == 3600
         assert "Market crash" in payload["title"]
 
