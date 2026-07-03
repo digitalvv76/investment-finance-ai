@@ -116,3 +116,24 @@ class TestImpactCollector:
             bonds_moved=True, fx_moved=True, commodities_moved=True
         )
         assert score == 100.0
+
+
+class TestImpactLearner:
+    def test_no_samples_returns_empty_hint(self):
+        from engine.impact_learner import ImpactLearner
+        learner = ImpactLearner()
+        hint = learner._build_hint({})
+        assert hint == "No calibration data yet"
+
+    def test_single_category_bias(self):
+        from engine.impact_learner import ImpactLearner
+        learner = ImpactLearner()
+        hint = learner._build_hint({"monetary": 4.0})
+        assert "monetary" in hint
+        assert "over-estimate" in hint
+
+    def test_bias_below_threshold_not_included(self):
+        from engine.impact_learner import ImpactLearner
+        learner = ImpactLearner()
+        hint = learner._build_hint({"macro_data": 1.5})  # < 2.0 threshold
+        assert hint == "No calibration data yet"
