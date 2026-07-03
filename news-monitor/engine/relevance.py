@@ -116,7 +116,45 @@ _SECTOR_SIGNALS = {
     "strategic partnership": 0.6, "breakthrough": 0.6, "突破": 0.6,
     "战略合作": 0.6, "入股": 1.0, "收购": 0.8, "领投": 0.9,
     "站台": 0.7, "赞扬": 0.6,
+    # Government contracts & subsidies (expanded from user feedback)
+    "加速开发": 0.75, "核反应堆": 0.75, "煤电": 0.70, "火电": 0.70,
+    "关键矿产": 0.70, "能源合同": 0.75, "基础设施合同": 0.75,
+    # Jensen Huang verbal signals (expanded)
+    "喊话": 0.75, "力挺": 0.75, "背书": 0.70, "点名": 0.65,
+    "公开赞扬": 0.70, "站台背书": 0.75,
+    # FDA / drug approval catalysts
+    "FDA": 0.70, "批准": 0.55, "加速批准": 0.80, "突破性疗法": 0.80,
+    "accelerated approval": 0.80, "breakthrough therapy": 0.80,
+    # Corporate actions with tradable opportunities
+    "拆分": 0.70, "spinoff": 0.70, "spin off": 0.70,
+    "分拆上市": 0.75, "剥离": 0.65, "divestiture": 0.65,
 }
+
+# Patterns that indicate RETROSPECTIVE / SUMMARY content — not actionable.
+# These pull the relevance score DOWN because the event already happened.
+_RETROSPECTIVE_PATTERNS = [
+    r"从\s*\S+\s*(→|到|升至|跌至|涨至|暴涨|暴跌|飙)",  # "从 $67 → $119"
+    r"(蒸发|过山车|回顾|总结)",                          # summary/recap language
+    r"(单月|当月|本月|上周|上月|Q\d|H1|H2|季度|年度).{0,10}(蒸发|跌|涨|暴跌|暴涨|累计|流出|流入)",  # period recap
+    r"(YTD|今年以来|年初至今)",                          # year-to-date recap
+    r"(创.*(?:新高|新低|纪录|记录))",                     # "创历史新高"
+    r"(自|从)\d{4}年.{0,15}(以来|起|至今)",                # "自2025年以来" — long historical view
+    r"(上市|IPO|定价).{0,30}(?:估值|融资|万亿)",            # IPO retrospective
+    r"\d{4}年(?:金融危机|危机|泡沫)",                      # historical event from another era
+]
+
+# Patterns that indicate THREAT / PROPOSAL — not yet action.
+# These should get a discount because the event hasn't materialized.
+_THREAT_PATTERNS = [
+    r"(威胁|警告|提议|考虑|可能|计划|拟|将)\s*(征收|对|加征|禁止|限制|制裁|课征)",
+    r"(threaten|warn|propose|consider|plan|may|might|could)\s+(impose|levy|ban|restrict|sanction|tariff)",
+    r"(尚未|还未|暂未|仍在讨论|有待|等待)\s*(实施|执行|通过|批准)",
+]
+
+# Personnel appointments that lack accompanying policy action
+_PERSONNEL_ONLY_PATTERNS = [
+    r"(宣誓就任|被任命为|出任|接替|appointed|sworn\sin|named\sas|takes\sover)",
+]
 
 
 def _parse_tickers_from_md(path: Path) -> set[str]:
@@ -332,7 +370,7 @@ def _opportunity_score(news_text: str, strategic_matches: list | None,
         if tag_set and tag_set.issubset(_LOW_IMPACT_CATEGORIES):
             score = min(score, 0.5)  # cap at 0.5 for purely low-impact events
 
-    # --- Sector-level signals (gov support, subsidies) ---
+    # --- Sector-level signals (gov support, subsidies, FDA, spinoffs) ---
     sector_bonus = 0.0
     for kw, weight in _SECTOR_SIGNALS.items():
         if kw.lower() in text_lower:
@@ -340,7 +378,39 @@ def _opportunity_score(news_text: str, strategic_matches: list | None,
     if sector_bonus > 0:
         score = max(score, sector_bonus)
 
+    # --- Content quality penalties ---
+    score *= _content_quality_multiplier(text_lower)
+
     return min(score, 1.5)
+
+
+def _content_quality_multiplier(text_lower: str) -> float:
+    """Penalize retrospective summaries and empty threats.
+
+    Returns 1.0 (no penalty) down to 0.4 (severe penalty).
+    """
+    penalty = 1.0
+
+    # Retrospective/summary content → not actionable, heavy penalty
+    for pat in _RETROSPECTIVE_PATTERNS:
+        if re.search(pat, text_lower):
+            penalty = min(penalty, 0.5)
+            break  # one match is enough
+
+    # Threat/proposal (not yet action) → moderate penalty
+    for pat in _THREAT_PATTERNS:
+        if re.search(pat, text_lower):
+            penalty = min(penalty, 0.65)
+            break
+
+    # Personnel appointment alone (no policy action attached) → stronger penalty
+    for pat in _PERSONNEL_ONLY_PATTERNS:
+        if re.search(pat, text_lower):
+            if not re.search(r"(加息|降息|利率|关税|制裁|战争|invest|subsid|fund|grant|ban|restrict|tariff|policy|行政命令|法案)", text_lower):
+                penalty = min(penalty, 0.55)  # stronger than before: 0.55 instead of 0.7
+            break
+
+    return penalty
 
 
 # ═══════════════════════════════════════════════════════════════════════════

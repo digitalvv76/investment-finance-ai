@@ -246,6 +246,8 @@ class StrategicDetector:
             # FDA/drug approvals (routine regulatory, not gov intervention)
             r'(FDA|药监局).*(批准|approve|approval|clear|clearance)',
             r'(generic|仿制|drug|药品|treatment|therapy)',
+            # NVIDIA's own stock movement / market cap (not endorsement of others)
+            r'(NVIDIA|英伟达|NVDA).*(蒸发|暴跌|市值|股价|下跌|drop|market\s+cap|wipe)',
         ]
     ]
 
