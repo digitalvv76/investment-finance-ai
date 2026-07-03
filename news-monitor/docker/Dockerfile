@@ -42,6 +42,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# Install CPU-only PyTorch first (saves ~2GB vs CUDA version)
+# sentence-transformers depends on torch but we don't need GPU for inference
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
