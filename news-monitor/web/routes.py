@@ -411,3 +411,63 @@ async def sse_events(request: web.Request) -> web.StreamResponse:
         await sse_mgr.unsubscribe(cid)
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Impact Evaluator API
+# ---------------------------------------------------------------------------
+
+
+async def impact_latest(request: web.Request) -> web.Response:
+    db = _get_db(request)
+    limit = int(request.query.get("limit", 20))
+    min_score = float(request.query.get("min_score", 0))
+    assessments = db.get_assessments(limit=limit, min_score=min_score)
+    return _json(assessments)
+
+
+async def impact_detail(request: web.Request) -> web.Response:
+    db = _get_db(request)
+    aid = int(request.match_info["id"])
+    a = db.get_assessment(aid)
+    if not a:
+        return _error("assessment not found", 404)
+    outcomes = db.get_outcomes_for_assessment(aid)
+    a["outcomes"] = outcomes
+    return _json(a)
+
+
+async def impact_outcomes(request: web.Request) -> web.Response:
+    db = _get_db(request)
+    aid = int(request.match_info["id"])
+    outcomes = db.get_outcomes_for_assessment(aid)
+    return _json(outcomes)
+
+
+async def impact_calibration(request: web.Request) -> web.Response:
+    db = _get_db(request)
+    cal = db.get_calibration()
+    return _json(cal)
+
+
+async def impact_stats(request: web.Request) -> web.Response:
+    db = _get_db(request)
+    stats = db.get_impact_stats()
+    return _json(stats)
+
+
+async def impact_health(request: web.Request) -> web.Response:
+    db = _get_db(request)
+    stats = db.get_health_stats(hours=1)
+    # Merge with in-memory health monitor if available
+    evaluator = request.app.get("impact_evaluator")
+    if evaluator:
+        stats.update(evaluator.health.health)
+    return _json(stats)
+
+
+async def impact_prompts(request: web.Request) -> web.Response:
+    db = _get_db(request)
+    from engine.impact_evaluator import PromptVersionManager
+    mae = PromptVersionManager.compare_mae(db)
+    return _json({"active": PromptVersionManager.ACTIVE, "versions": mae})

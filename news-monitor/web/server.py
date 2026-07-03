@@ -32,6 +32,8 @@ from web.routes import (
     get_filters, put_filters,
     get_alert_history, get_daily_digest,
     sse_events,
+    impact_latest, impact_health, impact_stats,
+    impact_calibration, impact_prompts, impact_detail, impact_outcomes,
 )
 
 logger = logging.getLogger(__name__)
@@ -119,6 +121,13 @@ class WebDashboard:
         app.router.add_get("/api/alerts/history", get_alert_history)
         app.router.add_get("/api/daily", get_daily_digest)
         app.router.add_get("/api/events", sse_events)
+        app.router.add_get("/api/impact/latest", impact_latest)
+        app.router.add_get("/api/impact/health", impact_health)
+        app.router.add_get("/api/impact/stats", impact_stats)
+        app.router.add_get("/api/impact/calibration", impact_calibration)
+        app.router.add_get("/api/impact/prompts", impact_prompts)
+        app.router.add_get("/api/impact/{id}", impact_detail)
+        app.router.add_get("/api/impact/{id}/outcomes", impact_outcomes)
 
         # ---- Static files ----
         static_dir = _HERE / "static"
