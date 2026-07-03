@@ -67,6 +67,49 @@ _OPPORTUNITY_CATEGORIES = {
     "nvda_competitive_threat": 0.7,
 }
 
+# Only the HIGHEST-impact event categories get an automatic relevance boost.
+# Lower-tier events (earnings, product launches, IPOs) don't get boosted —
+# they need other signals (ticker match, strategic pattern, sector keyword).
+_HIGH_IMPACT_CATEGORIES = {
+    # Monetary — affects every asset in existence
+    "fomc":               1.00,
+    "monetary_policy":    0.95,
+    "rate_hike":          0.90,
+    "rate_cut":           0.90,
+    "inflation":          0.90,
+    "cpi":                0.90,
+    "fed":                0.85,
+    "interest_rate":      0.85,
+    "stagflation_risk":   0.85,
+    # Geopolitical — highest impact, hardest to hedge
+    "war":                1.00,
+    "geopolitical":       1.00,
+    "oil_supply":         0.90,
+    "energy_crisis":      0.90,
+    "trade_war":          0.85,
+    "sanction":           0.80,
+    # Systemic — "the plumbing is breaking"
+    "systemic_risk":      0.85,
+    "contagion":          0.80,
+    "tariff":             0.85,
+    "trade_policy":       0.80,
+    # Macro data surprises
+    "macro_data":         0.80,
+    "gdp":                0.70,
+    "employment":         0.70,
+    # China macro
+    "china_stimulus":     0.85,
+    "pboc":               0.80,
+}
+
+# Categories that are INHERENTLY LOW IMPACT — they should NOT trigger
+# phone pushes unless paired with a strategic signal or ticker match.
+_LOW_IMPACT_CATEGORIES = {
+    "earnings", "merger", "acquisition", "ipo",
+    "product_launch", "leadership_change",
+    "transparency", "routine_data",
+}
+
 _SECTOR_SIGNALS = {
     "扶持": 0.8, "补贴": 0.8, "拨款": 0.7, "行政命令": 0.7,
     "invests": 0.8, "subsidizes": 0.8, "funding": 0.7, "grant": 0.7,
@@ -140,7 +183,7 @@ def timeliness_factor(
     Returns 1.0 (just happened) → 0.0 (stale).
     """
     if published_at is None:
-        return 0.5  # unknown age → neutral
+        return 1.0  # unknown age → assume fresh (don't penalize missing data)
 
     try:
         if isinstance(published_at, str):
@@ -150,9 +193,9 @@ def timeliness_factor(
         elif isinstance(published_at, datetime):
             pub = published_at
         else:
-            return 0.5
+            return 1.0
     except (ValueError, TypeError):
-        return 0.5
+        return 1.0
 
     age_minutes = (datetime.now() - pub).total_seconds() / 60
     if age_minutes < 0:
@@ -194,7 +237,7 @@ def novelty_factor(
     Returns 1.0 (completely new) → 0.0 (already known).
     """
     if not news_text:
-        return 0.5
+        return 0.85  # unknown → assume novel
 
     text_lower = news_text.lower()
 
@@ -220,8 +263,8 @@ def novelty_factor(
     if len(_SEEN_SIGNATURES) > _MAX_SEEN:
         _SEEN_SIGNATURES.clear()  # simple LRU: just flush when full
 
-    # Default: moderately novel
-    return 0.7
+    # Default: assume novel (don't penalize without evidence of staleness)
+    return 0.85
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -257,17 +300,39 @@ def _opportunity_score(news_text: str, strategic_matches: list | None,
                        macro_tags: str) -> float:
     score = 0.0
     text_lower = news_text.lower()
+    tags_lower = macro_tags.lower()
 
+    # --- StrategicDetector regex matches ---
     if strategic_matches:
         for m in strategic_matches:
             cat_score = _OPPORTUNITY_CATEGORIES.get(m.category, 0.5)
             score = max(score, cat_score * m.confidence)
 
+    # --- FastLane STRATEGIC_ tags ---
     if macro_tags and "STRATEGIC_" in macro_tags:
         for cat, cat_score in _OPPORTUNITY_CATEGORIES.items():
             if cat in macro_tags:
                 score = max(score, cat_score * 0.85)
 
+    # --- High-impact category boost (FOMC, war, CPI, etc.) ---
+    # Only the top-tier event categories get an automatic boost.
+    # Lower-tier events (earnings, product launches) don't — they need
+    # strategic signals or ticker matches to earn relevance.
+    category_bonus = 0.0
+    for tag, weight in _HIGH_IMPACT_CATEGORIES.items():
+        if tag.lower() in tags_lower:
+            category_bonus = max(category_bonus, weight)
+    if category_bonus > 0:
+        score = max(score, category_bonus)
+
+    # --- Low-impact category penalty ---
+    # If ALL the event's tags are low-impact, pull the score down.
+    if tags_lower:
+        tag_set = set(tags_lower.replace(",", " ").split())
+        if tag_set and tag_set.issubset(_LOW_IMPACT_CATEGORIES):
+            score = min(score, 0.5)  # cap at 0.5 for purely low-impact events
+
+    # --- Sector-level signals (gov support, subsidies) ---
     sector_bonus = 0.0
     for kw, weight in _SECTOR_SIGNALS.items():
         if kw.lower() in text_lower:

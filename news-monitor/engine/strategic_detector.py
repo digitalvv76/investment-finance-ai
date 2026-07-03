@@ -243,6 +243,9 @@ class StrategicDetector:
             r'(股价|stock\s+(price|up|down|rise|fall|surge|drop))',
             # Analyst ratings (not strategic)
             r'(上调|下调|upgrade|downgrade|target\s+price|评级)',
+            # FDA/drug approvals (routine regulatory, not gov intervention)
+            r'(FDA|药监局).*(批准|approve|approval|clear|clearance)',
+            r'(generic|仿制|drug|药品|treatment|therapy)',
         ]
     ]
 
