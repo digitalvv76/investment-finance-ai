@@ -60,8 +60,11 @@ GOV_INTERVENTION_CRITICAL = True  # Any gov_intervention match → auto CRITICAL
 
 PUSHOVER_API = "https://api.pushover.net/1/messages.json"
 
+# Pushover sound options ranked by intensity:
+#   spacealarm, alien, siren, incoming, mechanical, heavy, persistent, ...
+# See: https://pushover.net/api#sounds
 PUSHOVER_SOUNDS = {
-    "critical": "siren",        # Emergency: loud descending siren
+    "critical": "spacealarm",   # Emergency: sci-fi alarm, very jarring
     "important": "persistent",  # High priority: insistent beep
     "normal": "none",           # Silent (not used for Pushover)
 }
@@ -238,7 +241,7 @@ class AlertDispatcher:
 
         # Emergency priority requires retry + expire
         if priority == 2:
-            payload.setdefault("retry", 60)    # retry every 60 seconds
+            payload.setdefault("retry", 30)    # retry every 30 seconds (more aggressive)
             payload.setdefault("expire", 3600)  # stop after 1 hour
 
         # URL for deep link
@@ -261,12 +264,12 @@ class AlertDispatcher:
             return False
 
     async def _pushover_emergency(self, item: dict) -> bool:
-        """Emergency Pushover: repeats until user acknowledges."""
+        """Emergency Pushover: repeats every 30s until user acknowledges."""
         return await self._pushover(
             item,
             priority=2,
-            sound="siren",
-            retry=60,
+            sound="spacealarm",
+            retry=30,
             expire=3600,
         )
 

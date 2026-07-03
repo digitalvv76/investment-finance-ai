@@ -465,4 +465,42 @@
 
 ---
 
-## 2026-07-03T11:53+08:00 · 会话开始
+## 2026-07-03 — Impact Evaluator 完全交付 + P0 数据源 + Docker 生产部署 🚀
+
+### Phase 1: Impact Evaluator 从零到完全交付 (09:18-10:15) — 8 commits
+
+| # | Commit | 模块 | 说明 |
+|---|--------|------|------|
+| 1 | `e97bdd2` | 数据模型 | DB schema — 4 张新表 (impact_evaluations, actual_outcomes, calibration_log, health_events) |
+| 2 | `24bcfd2` | LLM Prompt | 五步推理链系统提示 v1 (事件类型→惊喜幅度→市场广度→历史先例→当前情绪) |
+| 3 | `0b50159` | 引擎核心 | ImpactEvaluator + 5 道门禁 (API/gate/model/token/fallback) + health monitor + prompt manager |
+| 4 | `fa47a34` | 实际采集 | ImpactCollector — 4 因子加权归一化 (价格冲击/波动率/成交量/相关性) |
+| 5 | `5dc27a8` | 自学习 | ImpactLearner — 5 类偏差校准 (category_bias, magnitude_bias, breadth_bias, sentiment_bias, temporal_decay) |
+| 6 | `4f22e8e` | API | 7 个 REST API 端点 (evaluate/list/stats/outcomes/calibrate/health/dashboard) |
+| 7 | `a5434a2` | Dashboard | 健康事件 API + 影响评估仪表盘 |
+| 8 | `edff345` | 集成 | 接入 main pipeline — on_news_batch() 后自动触发影响评估 |
+
+### Phase 2: Review 修复 (10:15) — 1 commit
+- `82a91d0` — 解决 9 项 review 意见: async SDK 调用、collector 归一化边界、learner 冷启动、gate 超时配置
+
+### Phase 3: P0 数据源扩展 (13:39) — 1 commit
+- `d971dff` — **Twitter** (Playwright+Cookie, 6 账号: Newsquawk/elerianm/lisaabramowicz1/bespokeinvest/zerohedge/Fxhedgers) + **中国金融新闻** (新浪财经 + 华尔街见闻 5 频道)
+- 数据源总数: **9 + 6 + 6 = 21 个源**
+
+### Phase 4: Docker 生产部署 (16:56-18:32) — 2 commits
+- `fe3b773` — Docker 24/7 部署就绪: 配置路径修正、env vars 注入、系统依赖 (Playwright/Chromium)
+- `cd53d47` — CPU-only PyTorch 替换 CUDA 版本，镜像从 **8GB → ~2GB**
+
+### 今日总计
+- **12 commits**, Impact Evaluator 全栈 (DB→Engine→API→Dashboard→自学习) 一天交付
+- 21 个数据源全部上线 (RSS + API + Playwright + Twitter + 中文)
+- Docker 生产就绪，镜像精简 75%
+
+### 关键架构决策
+- Impact Evaluator 采用**双轨并行**: 现有告警管道冻结不变，影响评估独立运行
+- 自学习闭环: 预测 → 采集实际市场数据 → 偏差分析 → 校准提示注入下轮 Prompt
+- Dashboard + Telegram 双通道展示，不触发手机紧急推送 (与 CRITICAL 告警分离)
+
+---
+
+## 2026-07-03T21:32+08:00 · 会话开始

@@ -42,6 +42,7 @@ data/cache/
 data/alerts.log
 data/audit.log
 data/theses/
+news-monitor/data/
 
 # ====== Scripts ======
 scripts/__pycache__/
