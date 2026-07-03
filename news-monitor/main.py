@@ -237,11 +237,13 @@ class NewsMonitor:
                     except Exception as e:
                         logger.error("ImpactEval failed for news#%s: %s, falling back to legacy", item.id, e)
 
-            # ---- Personal relevance multiplier ----
+            # ---- Personal relevance (protective + opportunity) ----
             rel_mult = relevance_multiplier(
                 news_tickers=item.tickers_found or "",
                 news_text=text,
                 macro_tags=item.macro_tags or "",
+                strategic_matches=strategic_matches,
+                is_breaking=bool(item.is_breaking),
             )
 
             # ---- Classify alert level (impact-first, legacy fallback) ----
