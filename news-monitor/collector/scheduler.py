@@ -3,7 +3,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timedelta
-from typing import Callable, Awaitable, List, Dict
+from typing import Callable, Awaitable, List
 
 from collector.exchange_calendar import ExchangeCalendar
 from collector.rss_fetcher import RSSFetcher
@@ -48,9 +48,6 @@ class NewsScheduler:
         self.chinese_fetcher = ChineseNewsFetcher(
             self.sources.get('chinese_sources', {})
         )
-
-        # Track last fetch times for adaptive throttling
-        self._last_heartbeat_results: Dict[str, int] = {}  # source -> consecutive empty count
 
     def _load_watchlist(self) -> list:
         """Load watchlist from .claude/memory/watchlist-state.md."""

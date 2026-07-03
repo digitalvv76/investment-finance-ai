@@ -176,14 +176,6 @@ _ACTION_PATTERN = '|'.join(re.escape(a) for a in ALL_ACTIONS)
 _ENDORSE_PATTERN = '|'.join(re.escape(a) for a in (ENDORSEMENT_ACTIONS_CN + ENDORSEMENT_ACTIONS_EN))
 _THREAT_PATTERN = '|'.join(re.escape(a) for a in (COMPETITIVE_THREAT_CN + COMPETITIVE_THREAT_EN))
 
-# Pattern 1: Government + action + company
-# Matches: "美国政府通过CHIPS Act资助英特尔" or "能源部向特斯拉提供贷款"
-# 80-char window for English sentences with intermediate clauses
-GOV_ACTION_RE = re.compile(
-    rf'({_GOV_PATTERN}).{{0,80}}?({_ACTION_PATTERN}).{{0,80}}?',
-    re.IGNORECASE
-)
-
 # Pattern 2a: NVIDIA/Huang + investment action → nvda_investment
 # Matches: "英伟达入股XX公司" or "黄仁勋领投YY B轮"
 NVDA_ACTION_RE = re.compile(
