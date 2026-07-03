@@ -246,31 +246,81 @@ def _get_watchlist() -> set[str]:
 # Dimension 1 — Timeliness (时效性)      0.0–1.0
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Exponential decay: a 5-minute-old breaking news is worth ~0.95;
-# a 4-hour-old article is worth ~0.37.
-_HALF_LIFE_MINUTES = 30          # relevance halves every 30 minutes
-_BREAKING_BYPASS_MINUTES = 10    # breaking news gets full score for 10 min
+# Exponential decay with event-type-specific half-lives.
+# Geopolitical shocks take hours to digest; product launches go stale in minutes.
+_DEFAULT_HALF_LIFE = 30           # minutes — default for unclassified news
+_BREAKING_BYPASS_MINUTES = 10     # breaking news gets full score for 10 min
+
+# Half-life by event category: how long before the news value drops by 50%.
+_EVENT_HALF_LIFE = {
+    "geopolitical": 240,     # 4 hours — war, sanctions, regime change take time to assess
+    "war": 240,
+    "monetary": 90,          # 1.5 hours — FOMC, rate decisions need parsing
+    "macro_data": 60,        # 1 hour — CPI, NFP, GDP
+    "regulatory": 45,        # 45 min — trade policy, tariffs, FDA
+    "corporate": 15,         # 15 min — earnings, product launches (fast-moving)
+    "other": 30,             # 30 min — default
+}
+
+# Map from common tag names to event categories for half-life lookup.
+_TAG_TO_HALF_LIFE_CATEGORY = {
+    # geopolitical → 240min
+    "geopolitical": "geopolitical", "war": "geopolitical",
+    "oil_supply": "geopolitical", "energy_crisis": "geopolitical",
+    "sanction": "geopolitical", "trade_war": "geopolitical",
+    "defense": "geopolitical",
+    # monetary → 90min
+    "monetary_policy": "monetary", "fomc": "monetary",
+    "rate_hike": "monetary", "rate_cut": "monetary",
+    "fed": "monetary", "interest_rate": "monetary",
+    "forward_guidance": "monetary", "hawkish": "monetary", "dovish": "monetary",
+    "fed_policy": "monetary", "transparency": "monetary",
+    # macro_data → 60min
+    "macro_data": "macro_data", "inflation": "macro_data",
+    "cpi": "macro_data", "gdp": "macro_data", "employment": "macro_data",
+    "stagflation_risk": "macro_data",
+    # regulatory → 45min
+    "tariff": "regulatory", "trade_policy": "regulatory",
+    "regulation": "regulatory", "regulatory": "regulatory",
+    "china_regulation": "regulatory", "china_stimulus": "regulatory",
+    "pboc": "regulatory",
+    # corporate → 15min
+    "earnings": "corporate", "merger": "corporate", "acquisition": "corporate",
+    "ipo": "corporate", "product_launch": "corporate",
+    "leadership_change": "corporate",
+    "tech_selloff": "corporate", "ai_spending": "corporate",
+    "magnificent_seven": "corporate", "sector_rotation": "corporate",
+}
 
 
 def timeliness_factor(
     published_at: Optional[str] = None,
     is_breaking: bool = False,
+    event_type: str = "",
 ) -> float:
     """How timely is this news?  Can I act before the market prices it in?
 
-    Breaking news degrades slowly (full score for 10 min, then decays).
-    Regular news decays faster — a 2-hour-old article has minimal edge.
+    Half-life varies by event type:
+      - war/geopolitical: 240 min (4 hours — takes time to assess)
+      - FOMC/monetary:    90 min (1.5 hours — needs parsing)
+      - CPI/macro data:   60 min (1 hour)
+      - tariff/regulatory: 45 min
+      - earnings/product:  15 min (fast-moving, goes stale quickly)
+      - default:           30 min
+
+    Breaking news gets full score for the first 10 minutes.
 
     Returns 1.0 (just happened) → 0.0 (stale).
     """
+    half_life = _EVENT_HALF_LIFE.get(event_type, _DEFAULT_HALF_LIFE) if event_type else _DEFAULT_HALF_LIFE
+
     if published_at is None:
         return 1.0  # unknown age → assume fresh (don't penalize missing data)
 
     try:
         if isinstance(published_at, str):
-            # Normalise ISO-ish formats
             ts = published_at.replace("T", " ").replace("Z", "")
-            pub = datetime.fromisoformat(ts[:19])  # YYYY-MM-DD HH:MM:SS
+            pub = datetime.fromisoformat(ts[:19])
         elif isinstance(published_at, datetime):
             pub = published_at
         else:
@@ -280,16 +330,13 @@ def timeliness_factor(
 
     age_minutes = (datetime.now() - pub).total_seconds() / 60
     if age_minutes < 0:
-        age_minutes = 0  # clock skew
+        age_minutes = 0
 
-    # Breaking news: full score for the first BREAKING_BYPASS_MINUTES,
-    # then decays with the same half-life.
     if is_breaking and age_minutes <= _BREAKING_BYPASS_MINUTES:
         return 1.0
 
-    # Exponential decay: score = 2^(-age / half_life)
-    decay = 2 ** (-age_minutes / _HALF_LIFE_MINUTES)
-    return round(max(decay, 0.05), 3)  # floor at 0.05 — never zero
+    decay = 2 ** (-age_minutes / half_life)
+    return round(max(decay, 0.05), 3)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -460,6 +507,45 @@ def _content_quality_multiplier(text_lower: str) -> float:
 # Combined signal score (4 dimensions)
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _infer_event_type(macro_tags: str, strategic_matches: list | None,
+                      news_text: str) -> str:
+    """Infer the event category for half-life lookup.
+
+    Checks (in priority order):
+    1. StrategicDetector match category
+    2. Macro tags matching known high-impact categories
+    3. News text keyword scanning
+    """
+    # 1. Strategic match → map category
+    if strategic_matches:
+        for m in strategic_matches:
+            if m.category in ("gov_intervention",):
+                return "regulatory"
+            if m.category in ("nvda_endorsement", "nvda_investment", "nvda_competitive_threat"):
+                return "corporate"
+
+    # 2. Macro tags → half-life category
+    tags_lower = macro_tags.lower()
+    for tag, hl_cat in _TAG_TO_HALF_LIFE_CATEGORY.items():
+        if tag in tags_lower:
+            return hl_cat
+
+    # 3. Text scanning for obvious event types
+    text_lower = news_text.lower()
+    if any(kw in text_lower for kw in ("war", "military", "invasion", "strike", "conflict", "战争", "军事", "入侵")):
+        return "geopolitical"
+    if any(kw in text_lower for kw in ("fomc", "fed", "rate hike", "rate cut", "central bank", "加息", "降息", "美联储")):
+        return "monetary"
+    if any(kw in text_lower for kw in ("cpi", "nfp", "gdp", "inflation", "unemployment", "通胀", "失业")):
+        return "macro_data"
+    if any(kw in text_lower for kw in ("tariff", "sanction", "trade", "ban", "关税", "制裁", "监管")):
+        return "regulatory"
+    if any(kw in text_lower for kw in ("earnings", "revenue", "eps", "财报", "营收")):
+        return "corporate"
+
+    return ""  # unknown → use default half-life
+
+
 def signal_score(
     news_tickers: str = "",
     news_text: str = "",
@@ -487,8 +573,11 @@ def signal_score(
     """
     item_tickers = _parse_news_tickers(news_tickers)
 
-    # 1. Timeliness
-    timely = timeliness_factor(published_at, is_breaking)
+    # Infer event type for half-life lookup
+    ev_type = _infer_event_type(macro_tags, strategic_matches, news_text)
+
+    # 1. Timeliness (event-type-specific half-life)
+    timely = timeliness_factor(published_at, is_breaking, ev_type)
 
     # 2. Novelty
     novel = novelty_factor(news_text, is_breaking, macro_tags)
@@ -517,6 +606,7 @@ def signal_score(
         "novelty": novel,
         "relevance": relevance,
         "relevance_direction": direction,
+        "event_type": ev_type,
     }
 
 
