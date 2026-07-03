@@ -59,6 +59,15 @@ alerts:
   telegram_triple_enabled: true
   telegram_triple_interval: 0.5      # seconds between triple-push messages
 
+# Impact-based push decision (replaces score-only classification)
+impact_push:
+  prescreen_threshold: 0.30  # FastLane min score to trigger ImpactEvaluator
+  critical_threshold: 70     # composite (impact*0.7 + conf*0.3) >= this → CRITICAL
+  important_threshold: 50    # composite >= this → IMPORTANT
+  impact_weight: 0.7         # impact_score weight in composite
+  confidence_weight: 0.3     # confidence weight in composite
+  max_concurrent_llm: 3      # max simultaneous LLM calls for impact eval
+
 # Web dashboard configuration
 web:
   enabled: false         # Set to true or set WEB_PORT env var

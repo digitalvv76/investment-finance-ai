@@ -503,4 +503,56 @@
 
 ---
 
+## 2026-07-03T21:32+08:00 · 会话 — 推送决策重构：从新闻学评分到投资冲击预测
+
+### 评审驱动的代码质量修复 (6 commits)
+- `4055de5` 清理运行时数据 (news-monitor/data/) + alert_dispatcher 调优 + HISTORY 更新
+- `07b1d88` LLM 超时保护: HARD_TIMEOUT 从声明变为真正生效 (asyncio.wait_for)
+- `c15c581` 死代码清理 (GOV_ACTION_RE, _last_heartbeat_results) + requirements.txt 补测试依赖
+- `ff30155` handlers.py 重构: 14 个嵌套函数 → 模块级函数 (754行巨型函数拆分)
+- `5c65561` 4 项代码质量修复: id(item)字典key / import aiohttp位置 / time.monotonic / watchlist路径
+
+### 🆕 推送决策重构 — Impact-First Pipeline (4 phases)
+
+**Phase 1: 翻转管道顺序**
+- `main.py`: ImpactEvaluator 从后台任务 → 推送前置决策
+  - FastLane 预筛选 (score ≥ 0.3) → ImpactEvaluator LLM → 综合分 → AlertDispatcher
+  - Semaphore 限制并发 LLM (默认 3)
+  - 超时/失败自动回退到旧 PriorityScorer 逻辑
+- `alert_dispatcher.py`: classify() 新增 impact_assessment + rel_mult 参数
+- `config/settings.yaml`: 新增 impact_push 配置段
+- 删除不再使用的 `_run_impact_evaluator` 后台方法
+
+**Phase 2: 事件-冲击历史匹配器**
+- 🆕 `engine/event_matcher.py`: EventMatcher — 51 个历史事件
+  - 解析 training_news_events_2026H1.md → 结构化 HistoricalEvent
+  - 匹配: 同类事件(+30) + 标签命中(+8/ea) + 词重叠(+0.5/ea) + CRITICAL加成(+5)
+  - 最低分阈值 10 分过滤噪音
+- `impact_evaluator.py`: evaluate() 接受 historical_examples 注入 LLM prompt
+- `config/prompts/impact_v1.txt`: 新增 {historical_examples} 占位符
+
+**Phase 3: 个性化相关性权重**
+- 🆕 `engine/relevance.py`: 新闻与用户持仓/关注列表的相关性乘数
+  - 持仓匹配: +0.6/ea, 关注列表: +0.4/ea, 宏观事件: +0.5
+  - 完全不相关: ×0.3 (降级), 高相关: ×1.5 (升级)
+  - 自动解析 portfolio-state.md + watchlist-state.md
+
+**Phase 4: 测试**
+- 🆕 `tests/test_event_matcher.py` — 12 tests
+- 🆕 `tests/test_impact_push.py` — 10 tests (含 impact-based + legacy 回退 + 相关性)
+- 全量 270 tests 通过, 0 回归
+
+### 新数据流
+```
+FastLane预筛选(≥0.30) → ImpactEvaluator(LLM) + EventMatcher(历史) 
+→ 综合分(impact×0.7+conf×0.3)×相关性 → CRITICAL/IMPORTANT/NORMAL
+```
+
+### 效果
+- 手机推送从"看起来重要"变为"市场可能会动 + 跟我的钱有关"
+- 历史事件校准让 LLM 有案例可参考
+- 回退策略完整: 超时/失败 → 旧 PriorityScorer 兜底
+
+---
+
 ## 2026-07-03T21:32+08:00 · 会话开始

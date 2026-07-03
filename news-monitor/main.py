@@ -42,6 +42,8 @@ from engine.alert_dispatcher import AlertDispatcher, AlertLevel
 from engine.strategic_detector import StrategicDetector
 from engine.impact_evaluator import ImpactEvaluator
 from engine.impact_learner import ImpactLearner
+from engine.event_matcher import EventMatcher
+from engine.relevance import relevance_multiplier, get_portfolio_summary
 from bot.telegram_bot import NewsBot
 
 # ---------------------------------------------------------------------------
@@ -139,7 +141,10 @@ class NewsMonitor:
         # ---- impact evaluator (LLM, async, isolated) --------
         self.impact_evaluator = ImpactEvaluator()
         self.impact_learner = ImpactLearner()
-        logger.info("ImpactEvaluator initialized (threshold=%.2f)", ImpactEvaluator.THRESHOLD)
+        self.event_matcher = EventMatcher()
+        logger.info("ImpactEvaluator initialized (threshold=%.2f, event_matcher=%d events)",
+                    ImpactEvaluator.THRESHOLD, self.event_matcher.event_count)
+        logger.info("Portfolio/Relevance: %s", get_portfolio_summary())
 
         # ---- Telegram bot -------------------------------------------
         token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -170,13 +175,21 @@ class NewsMonitor:
     async def on_news_batch(self, items):
         """Called by the scheduler whenever a batch of new items arrives.
 
-        1. Run every item through the fast-lane rule engine.
-        2. Persist tags / scores / status for items that pass the threshold.
-        3. Push qualifying alerts to Telegram (if the bot is configured).
-        4. Dispatch CRITICAL/IMPORTANT alerts through AlertDispatcher.
-        5. Trigger deep lane analysis for fast-pushed items (async).
+        NEW PIPELINE (impact-first):
+        1. FastLane pre-screening (cheap, fast).
+        2. ImpactEvaluator LLM runs BEFORE push decision (not after).
+        3. Composite impact score decides push level.
+        4. Fallback to legacy PriorityScorer if ImpactEvaluator fails/times out.
+        5. Deep lane triggered asynchronously for high-impact items.
         """
         pushed = self.fast_lane.process(items)
+
+        # Limit concurrent LLM calls so we don't hammer the API.
+        _settings = self.config.load_settings()
+        _impact_cfg = _settings.get("impact_push", {})
+        _llm_sem = asyncio.Semaphore(
+            _impact_cfg.get("max_concurrent_llm", 3)
+        )
 
         for item in pushed:
             # Persist the enriched fields from fast-lane processing.
@@ -194,20 +207,51 @@ class NewsMonitor:
             if not updated:
                 continue
 
-            # ---- Strategic detection re-run (cheap: regex only) ----
+            # ---- Strategic detection (cheap: regex only) ----
             text = f"{item.title or ''} {item.content_snippet or ''}"
             strategic_matches = []
             if item.priority_score >= 0.7 or 'STRATEGIC_' in (item.macro_tags or ''):
                 strategic_matches = self._strategic.detect(text)
 
-            # ---- Classify alert level ----
+            # ---- NEW: ImpactEvaluator BEFORE push decision ----
+            impact_assessment = None
+            prescreen = _impact_cfg.get("prescreen_threshold", 0.30)
+            if item.priority_score >= prescreen and self.impact_evaluator:
+                async with _llm_sem:
+                    try:
+                        calibration_hint = self.impact_learner.generate_calibration_hint(self.db)
+                        historical = self.event_matcher.get_examples(
+                            text, event_category="", top_k=3,
+                        )
+                        impact_assessment = await self.impact_evaluator.evaluate(
+                            item,
+                            market_context="",
+                            calibration_hint=calibration_hint,
+                            historical_examples=historical,
+                        )
+                        if impact_assessment:
+                            impact_assessment.news_id = item.id
+                            self.db.insert_assessment(impact_assessment)
+                    except asyncio.TimeoutError:
+                        logger.warning("ImpactEval timeout for news#%s, using legacy classification", item.id)
+                    except Exception as e:
+                        logger.error("ImpactEval failed for news#%s: %s, falling back to legacy", item.id, e)
+
+            # ---- Personal relevance multiplier ----
+            rel_mult = relevance_multiplier(
+                news_tickers=item.tickers_found or "",
+                news_text=text,
+                macro_tags=item.macro_tags or "",
+            )
+
+            # ---- Classify alert level (impact-first, legacy fallback) ----
             level, reason = self.alert_dispatcher.classify(
-                item.priority_score, strategic_matches
+                item.priority_score, strategic_matches,
+                impact_assessment=impact_assessment,
+                rel_mult=rel_mult,
             )
 
             # ---- Alert dispatching ----
-            # AlertDispatcher handles all channels for CRITICAL/IMPORTANT.
-            # For NORMAL, fall back to the original Telegram push behaviour.
             if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT):
                 tg_push = self.alert_dispatcher.wrap_telegram_push(self.bot)
                 result = await self.alert_dispatcher.dispatch(
@@ -227,13 +271,9 @@ class NewsMonitor:
             if self.web_dashboard:
                 await self.web_dashboard.broadcast_alert(updated)
 
-            # Trigger deep lane for urgent items (async, don't block)
-            if item.priority_score >= 0.7:
+            # Trigger deep lane for high-impact items (async, don't block)
+            if (impact_assessment and impact_assessment.impact_score >= 60) or item.priority_score >= 0.7:
                 asyncio.create_task(self._run_deep_lane(item))
-
-            # ---- Impact Evaluator (LLM, async, isolated from alerts) ----
-            if item.priority_score >= ImpactEvaluator.THRESHOLD:
-                asyncio.create_task(self._run_impact_evaluator(item))
 
     async def _run_deep_lane(self, item):
         """Run deep lane analysis as a background task."""
@@ -259,36 +299,7 @@ class NewsMonitor:
         except Exception as e:
             logger.error(f"Deep lane background task failed: {e}")
 
-    async def _run_impact_evaluator(self, item):
-        """Run impact evaluation as a background task (LLM, async, isolated from alerts)."""
-        try:
-            calibration_hint = self.impact_learner.generate_calibration_hint(self.db)
-            assessment = await self.impact_evaluator.evaluate(
-                item,
-                market_context="",  # populated later from market data
-                calibration_hint=calibration_hint,
-            )
-            if assessment:
-                assessment.news_id = item.id
-                self.db.insert_assessment(assessment)
-                logger.debug(
-                    "ImpactEval: news#%s -> score=%d cat=%s conf=%d",
-                    item.id, assessment.impact_score,
-                    assessment.event_category, assessment.confidence
-                )
-            else:
-                # Log health event for degraded evaluation
-                from storage.models import HealthEvent
-                self.db.insert_health_event(HealthEvent(
-                    event_type="degraded",
-                    news_id=item.id,
-                    detail="evaluate returned None"
-                ))
-        except Exception as e:
-            logger.error("ImpactEval failed for news#%s: %s", item.id, e)
-            self.impact_evaluator.health.record_failure(str(e)[:200])
-
-    async def _collect_impact_outcomes(self, window: str):
+    async def_collect_impact_outcomes(self, window: str):
         """Periodic task: collect market data for pending assessments."""
         try:
             from engine.impact_collector import ImpactCollector

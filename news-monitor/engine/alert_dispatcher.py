@@ -17,7 +17,7 @@ import os
 import aiohttp
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from engine.strategic_detector import StrategicMatch
@@ -112,14 +112,44 @@ class AlertDispatcher:
         priority_score: float,
         strategic_matches: list | None = None,
         is_breaking: bool = False,
+        impact_assessment=None,  # ImpactAssessment | None
+        rel_mult: float = 1.0,   # relevance multiplier from portfolio/watchlist
     ) -> tuple[AlertLevel, str]:
-        """Determine alert level from priority score + strategic signals.
+        """Determine alert level from priority score + strategic signals + impact prediction.
+
+        When impact_assessment is available (from ImpactEvaluator LLM), it takes
+        precedence over the legacy priority_score-based classification.  The
+        composite formula is: (impact_score × 0.7 + confidence × 0.3) × rel_mult.
+
+        rel_mult ranges 0.3–1.5 based on portfolio/watchlist match (1.0 = neutral).
 
         Returns (AlertLevel, reason_string).
         """
         strategic_matches = strategic_matches or []
 
-        # --- auto-CRITICAL: government intervention ---
+        # --- NEW: impact-prediction-first classification ---
+        if impact_assessment is not None:
+            impact = getattr(impact_assessment, 'impact_score', 0)
+            conf = getattr(impact_assessment, 'confidence', 0)
+            composite = round((impact * 0.7 + conf * 0.3) * rel_mult, 1)
+
+            if composite >= CRITICAL_PRIORITY * 100:   # 70
+                return AlertLevel.CRITICAL, (
+                    f"high_impact: composite={composite} "
+                    f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
+                )
+            elif composite >= IMPORTANT_PRIORITY * 100:  # 50
+                return AlertLevel.IMPORTANT, (
+                    f"moderate_impact: composite={composite} "
+                    f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
+                )
+            else:
+                return AlertLevel.NORMAL, (
+                    f"low_impact: composite={composite} "
+                    f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
+                )
+
+        # --- LEGACY: score + strategic classification (fallback) ---
         gov_matches = [m for m in strategic_matches if m.category == "gov_intervention"]
         if gov_matches:
             top = max(m.confidence for m in gov_matches)

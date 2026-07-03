@@ -177,6 +177,7 @@ class ImpactEvaluator:
 
     async def evaluate(self, item: NewsItem, market_context: str = "",
                        calibration_hint: str = "",
+                       historical_examples: str = "",
                        prompt_version: str = "v1") -> Optional[ImpactAssessment]:
         # 1. Data Quality Gate
         ok, reason = _validate_input(item)
@@ -188,6 +189,7 @@ class ImpactEvaluator:
         system_prompt = PromptVersionManager.load(prompt_version)
         system_prompt = system_prompt.replace("{market_context}", market_context or "No additional context provided.")
         system_prompt = system_prompt.replace("{calibration_hint}", calibration_hint or "No calibration data yet.")
+        system_prompt = system_prompt.replace("{historical_examples}", historical_examples or "No historical examples available.")
 
         user_prompt = (
             f"Title: {item.title}\n"

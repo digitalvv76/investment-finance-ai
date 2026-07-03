@@ -18,7 +18,8 @@ the potential MARKET IMPACT of a financial news event. You think in terms of:
 
 4. HISTORICAL PRECEDENT
    - Has a similar event occurred in the past 2 years? What was the market reaction?
-   - Use your training knowledge to contextualize.
+   - Use the provided historical examples below as calibration references.
+   {historical_examples}
 
 5. CURRENT MARKET CONTEXT
    - Is the market positioned for this? (crowded trades amplify moves)
