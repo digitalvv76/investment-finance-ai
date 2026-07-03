@@ -43,7 +43,7 @@ from engine.strategic_detector import StrategicDetector
 from engine.impact_evaluator import ImpactEvaluator
 from engine.impact_learner import ImpactLearner
 from engine.event_matcher import EventMatcher
-from engine.relevance import relevance_multiplier, get_portfolio_summary
+from engine.relevance import signal_score, get_portfolio_summary
 from bot.telegram_bot import NewsBot
 
 # ---------------------------------------------------------------------------
@@ -237,13 +237,22 @@ class NewsMonitor:
                     except Exception as e:
                         logger.error("ImpactEval failed for news#%s: %s, falling back to legacy", item.id, e)
 
-            # ---- Personal relevance (protective + opportunity) ----
-            rel_mult = relevance_multiplier(
+            # ---- 4-dimension signal score ----
+            sig = signal_score(
                 news_tickers=item.tickers_found or "",
                 news_text=text,
                 macro_tags=item.macro_tags or "",
                 strategic_matches=strategic_matches,
                 is_breaking=bool(item.is_breaking),
+                published_at=getattr(item, 'published_at', None),
+            )
+            rel_mult = sig["composite"]
+            logger.debug(
+                "Signal: composite=%.3f (timeliness=%.2f novelty=%.2f "
+                "relevance=%.2f dir=%s) — %s",
+                sig["composite"], sig["timeliness"], sig["novelty"],
+                sig["relevance"], sig["relevance_direction"],
+                (item.title or "")[:60],
             )
 
             # ---- Classify alert level (impact-first, legacy fallback) ----
