@@ -28,10 +28,10 @@ services:
     restart: unless-stopped
 
     # ---- Ports ----
-    # Expose web dashboard (bind to localhost-only for security;
-    # use a reverse proxy like Nginx/Caddy for public access)
+    # Expose web dashboard to the host for Nginx reverse proxy.
+    # Do NOT open port 8080 on the firewall — only 80/443.
     ports:
-      - "127.0.0.1:8080:8080"
+      - "8080:8080"
 
     # ---- Environment ----
     # All secrets come from the .env file in the project root.
@@ -42,6 +42,9 @@ services:
     environment:
       # Always enable web dashboard in container
       - WEB_PORT=8080
+      # Basic Auth credentials (from .env, empty = no auth)
+      - WEB_USERNAME=${WEB_USERNAME:-}
+      - WEB_PASSWORD=${WEB_PASSWORD:-}
       - TZ=America/New_York
 
     # ---- Persistent Volumes ----
@@ -51,13 +54,13 @@ services:
       - news_logs:/app/logs
 
     # ---- Resource Limits ----
-    # Adjust based on your server size
+    # 2 GB recommended: Chromium ≈500M, Python+spaCy ≈300M, LLM headroom
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2G
         reservations:
-          memory: 256M
+          memory: 512M
 
     # ---- Logging ----
     # JSON-file driver with rotation (10 MB × 3 files = 30 MB max)

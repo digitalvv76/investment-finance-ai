@@ -65,8 +65,12 @@ RUN mkdir -p data logs
 # Default WEB_PORT — enables the web dashboard inside the container
 ENV WEB_PORT=8080
 
-# Health check: verify the main module is importable and DB is accessible
-HEALTHCHECK --interval=300s --timeout=15s --start-period=60s --retries=3 \
-    CMD python -c "import sys; sys.path.insert(0,'.'); from storage.database import Database; db = Database('data/news.db'); db.init_db(); print('OK')" || exit 1
+# Basic Auth credentials (empty = auth disabled, transparent pass-through)
+ENV WEB_USERNAME=""
+ENV WEB_PASSWORD=""
+
+# Health check: hit the /health endpoint (no auth required)
+HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
 
 CMD ["python", "main.py"]

@@ -54,6 +54,32 @@ def _get_sse(request: web.Request):
 
 
 # ---------------------------------------------------------------------------
+# Health check (no auth required — for monitoring probes)
+# ---------------------------------------------------------------------------
+
+
+async def health_check(request: web.Request) -> web.Response:
+    """Lightweight health check, excluded from auth.
+
+    Returns HTTP 200 with status/uptime/DB info.  Uptime monitors and
+    Docker HEALTHCHECK can hit this endpoint without credentials.
+    """
+    db = _get_db(request)
+    try:
+        db.get_db_stats()
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    return _json({
+        "status": "ok" if db_ok else "degraded",
+        "uptime_seconds": int(time.time() - _APP_START_TIME),
+        "db": "ok" if db_ok else "error",
+        "sse_clients": _get_sse(request).client_count,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Stats
 # ---------------------------------------------------------------------------
 

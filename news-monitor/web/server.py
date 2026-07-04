@@ -24,7 +24,9 @@ from typing import Optional
 from aiohttp import web
 
 from web.sse_manager import SSEManager
+from web.auth import basic_auth_middleware
 from web.routes import (
+    health_check,
     get_stats, get_recent_news, get_news_by_id,
     post_feedback,
     get_profile, put_profile,
@@ -97,6 +99,8 @@ class WebDashboard:
             resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
             return resp
 
+        # ---- Middleware (order matters: auth first, then CORS) ----
+        app.middlewares.append(basic_auth_middleware)
         app.middlewares.append(cors_middleware)
 
         # ---- Serve dashboard HTML at / ----
@@ -105,6 +109,10 @@ class WebDashboard:
             return web.FileResponse(static_dir / "index.html")
 
         app.router.add_get("/", index_handler)
+
+        # ---- Health check (no auth — for monitoring probes) ----
+        app.router.add_get("/health", health_check)
+        app.router.add_get("/api/health", health_check)
 
         # ---- API routes ----
         app.router.add_get("/api/stats", get_stats)
