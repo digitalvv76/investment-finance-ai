@@ -39,6 +39,7 @@ DEFAULT_WEIGHTS = {
 
 # Source authority scores (higher = more trusted/urgent)
 SOURCE_AUTHORITY: Dict[str, float] = {
+    # —— Tier 1: English primary sources ——
     "bloomberg": 0.10,
     "bloomberg markets": 0.10,
     "reuters": 0.10,
@@ -48,6 +49,7 @@ SOURCE_AUTHORITY: Dict[str, float] = {
     "cnbc live blog": 0.09,
     "cnbc economy": 0.07,
     "wsj": 0.10,
+    "wsj markets": 0.10,
     "marketwatch": 0.06,
     "yahoo finance": 0.05,
     "seeking alpha": 0.04,
@@ -56,7 +58,23 @@ SOURCE_AUTHORITY: Dict[str, float] = {
     "zerohedge": 0.03,
     "sec edgar 8-k": 0.10,
     "fred economic releases": 0.09,
+    # Twitter — English accounts (primary)
+    "@elerianm": 0.07,
+    "@lisaabramowicz1": 0.07,
+    "@bespokeinvest": 0.06,
+    "@newsquawk": 0.07,
+    "@zerohedge": 0.03,
+    "@fxhedgers": 0.05,
+    # —— Tier 2: Chinese supplementary sources (low authority) ——
+    "新浪财经·7x24综合快讯": 0.02,
+    "新浪财经·7x24全球财经": 0.02,
+    "华尔街见闻·全球快讯": 0.02,
+    "华尔街见闻·美股": 0.03,
+    "华尔街见闻·外汇": 0.02,
+    "华尔街见闻·加密货币": 0.02,
+    "华尔街见闻·大宗商品": 0.02,
 }
+# Default for unknown sources: 0.03 (lower than any Tier-1 English source)
 
 # Priority thresholds
 URGENT_THRESHOLD = 0.7
@@ -235,9 +253,9 @@ class PriorityScorer:
         if tickers:
             score += min(0.24, len(tickers) * self.weights["ticker_per_hit"])
 
-        # 4. Key people mentions
+        # 4. Key people mentions (tiered)
         if has_people:
-            score += self.weights["people"]
+            score += self._people_score(getattr(item, "_people_tier", 1))
 
         # 5. Source authority
         source = getattr(item, "source", "") or getattr(item, "source_name", "") or ""
@@ -440,6 +458,27 @@ class PriorityScorer:
         elif similar_count >= 2:
             return self.weights["resonance_max"] * 0.5
         return 0.0
+
+    # ------------------------------------------------------------------
+    # People scoring (tiered)
+    # ------------------------------------------------------------------
+
+    # Default weights per tier — overridable via set_people_weights()
+    _PEOPLE_TIER_WEIGHTS = {1: 0.15, 2: 0.10, 3: 0.03}
+
+    def set_people_weights(self, tier1: float = 0.15, tier2: float = 0.10,
+                           tier3: float = 0.03):
+        """Override people tier weights (called from FastLane on init)."""
+        self._PEOPLE_TIER_WEIGHTS = {1: tier1, 2: tier2, 3: tier3}
+
+    def _people_score(self, tier: int = 1) -> float:
+        """Return the people bonus for a given tier.
+
+        Tier 1 = market pricer (Jensen Huang, Powell, Warsh) → full weight
+        Tier 2 = market influencer (Musk, Buffett) → reduced
+        Tier 3 = political figure (Trump, Xi) → minimal
+        """
+        return self._PEOPLE_TIER_WEIGHTS.get(tier, self.weights["people"])
 
     @staticmethod
     def _parse_number(s: str) -> float:

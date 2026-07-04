@@ -1,4 +1,4 @@
-"""Tests for message formatters."""
+"""Tests for message formatters — Chinese display."""
 from bot.formatters import format_fast_alert, format_deep_analysis, build_feedback_keyboard
 
 
@@ -11,8 +11,9 @@ def test_format_fast_alert_with_ticker():
         'url': 'https://bloomberg.com/nvda',
     }
     result = format_fast_alert(item)
+    # Chinese format: 📰 【NVDA】彭博社\nNvidia beats estimates\n🔗 url
     assert 'NVDA' in result
-    assert 'Bloomberg' in result
+    assert '彭博社' in result       # Bloomberg → 彭博社
     assert 'Nvidia beats estimates' in result
     assert 'https://bloomberg.com/nvda' in result
 
@@ -26,8 +27,38 @@ def test_format_fast_alert_no_ticker():
         'url': '',
     }
     result = format_fast_alert(item)
-    assert 'Reuters' in result
+    assert '路透社' in result       # Reuters → 路透社
     assert 'CPI data released' in result
+
+
+def test_format_fast_alert_strategic():
+    """Strategic events get special Chinese badges."""
+    item = {
+        'id': 3,
+        'tickers_found': 'MRVL',
+        'source': 'CNBC',
+        'title': 'Jensen Huang calls Marvell the next big thing',
+        'url': '',
+        'macro_tags': 'STRATEGIC_NVDA_ENDORSEMENT',
+    }
+    result = format_fast_alert(item)
+    assert 'MRVL' in result
+    assert '大佬力挺' in result     # nvda_endorsement badge
+    assert 'CNBC' in result
+
+
+def test_format_fast_alert_gov_intervention():
+    """Government intervention gets Chinese badge."""
+    item = {
+        'id': 4,
+        'tickers_found': 'IONQ',
+        'source': 'Reuters',
+        'title': 'US gov invests in quantum',
+        'url': '',
+        'macro_tags': 'STRATEGIC_GOV_INTERVENTION',
+    }
+    result = format_fast_alert(item)
+    assert '政府干预' in result
 
 
 def test_format_deep_analysis():
@@ -40,9 +71,10 @@ def test_format_deep_analysis():
     }
     result = format_deep_analysis(item)
     assert 'AAPL' in result
-    assert 'high' in result
-    assert 'bearish' in result
+    assert '高' in result             # high → 高 (Chinese)
+    assert '看空' in result           # bearish → 看空
     assert '-0.72' in result
+    assert '强烈负面' in result       # sentiment score label
     assert 'test analysis' in result
 
 

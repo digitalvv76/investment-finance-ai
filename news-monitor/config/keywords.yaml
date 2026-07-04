@@ -91,8 +91,45 @@ breaking_markers:  # Words that mark breaking news (EN + CN)
   - "紧急"
   - "重磅"
 
-key_people:  # Names that trigger fast lane (EN + CN)
-  # US / Global
+# Tiered key_people — different weights for market relevance.
+# Tier 1: Market PRICERS — their words move stock prices (full weight 0.15)
+# Tier 2: Market INFLUENCERS — sometimes move markets (reduced weight 0.10)
+# Tier 3: Political figures — need market context, rarely move stocks (minimal 0.03)
+
+key_people_tier1:  # Market pricers — +0.15 in PriorityScorer
+  - "Jensen Huang"
+  - "Jensen Huang"
+  - "Lisa Su"
+  - "Kevin Warsh"
+  - "Jerome Powell"
+  # Chinese
+  - "黄仁勋"
+
+key_people_tier2:  # Market influencers — +0.10
+  - "Elon Musk"
+  - "Warren Buffett"
+  - "Jamie Dimon"
+  - "Janet Yellen"
+  - "Gary Gensler"
+  # Chinese
+  - "雷军"
+  - "任正非"
+
+key_people_tier3:  # Political / general — +0.03 (trivially low, requires market context)
+  - "Donald Trump"
+  - "Joe Biden"
+  # China
+  - "习近平"
+  - "李强"
+  - "潘功胜"
+  - "易纲"
+  - "刘鹤"
+  - "王毅"
+  - "马化腾"
+  - "马云"
+
+# Legacy key_people — merged list for backward-compatible lookup by EntityExtractor
+key_people:
   - "Kevin Warsh"
   - "Jerome Powell"
   - "Janet Yellen"
@@ -103,7 +140,6 @@ key_people:  # Names that trigger fast lane (EN + CN)
   - "Warren Buffett"
   - "Jamie Dimon"
   - "Gary Gensler"
-  # China
   - "习近平"
   - "李强"
   - "潘功胜"
@@ -203,3 +239,121 @@ sectors:  # Sector -> keywords mapping for portfolio correlation (EN + CN)
     - "CXO"
     - "集采"
     - "医保"
+
+# -------------------------------------------------------------------
+# Noise patterns — content that should be demoted or skipped entirely
+# -------------------------------------------------------------------
+
+# Chinese domestic politics with ZERO US market relevance
+# (Used by content_filter.py AND chinese_fetcher.py pre-filter)
+noise_patterns_cn:
+  # Party propaganda
+  - "党委"
+  - "学习贯彻"
+  - "全会精神"
+  - "主题教育"
+  - "民主生活会"
+  - "团拜"
+  - "重要讲话"
+  - "指示精神"
+  - "新时代中国特色社会主义"
+  - "两个维护"
+  - "四个意识"
+  - "四个自信"
+  - "脱贫攻坚"
+  - "乡村振兴"
+  - "共同富裕"
+  - "党史学习教育"
+  - "不忘初心"
+  - "牢记使命"
+  - "巡视整改"
+  - "全面从严治党"
+  - "中心组学习"
+  - "意识形态"
+  # Single-stock noise
+  - "涨停"
+  - "跌停"
+  - "连续涨停"
+  - "一字板"
+  - "地天板"
+  - "天地板"
+  - "封板"
+  - "炸板"
+  # Routine announcements
+  - "油价调整"
+  - "成品油价格"
+  - "限行"
+  - "天气预报"
+
+# Non-US political events that rarely affect US equities
+# (Used by content_filter.py geo_market_filter)
+noise_patterns_foreign:
+  - "Venezuela"
+  - "Caracas"
+  - "Maduro"
+  - "Iran"
+  - "Tehran"
+  - "Khamenei"
+  - "Ayatollah"
+  - "North Korea"
+  - "Pyongyang"
+  - "Kim Jong"
+  - "Myanmar"
+  - "Burma"
+  - "state funeral"
+  - "national mourning"
+  - "coup"
+  - "regime change"
+  - "military junta"
+
+# -------------------------------------------------------------------
+# US-market-positive signals — these should ALWAYS pass through
+# (Used by content_filter.py as override)
+# -------------------------------------------------------------------
+us_market_signals:
+  # Government investment / subsidy
+  - "government invest"
+  - "government stake"
+  - "government equity"
+  - "govt invests"
+  - "US invests"
+  - "federal funding"
+  - "subsidizes"
+  - "subsidize"
+  - "grant to"
+  - "award contract"
+  - "CHIPS Act"
+  - "芯片法案"
+  - "Inflation Reduction Act"
+  - "executive order"
+  - "行政命令"
+  - "pentagon contract"
+  - "DoD award"
+  - "DARPA"
+  - "golden share"
+  - "黄金股"
+  - "convertible preferred"
+  - "可转换优先股"
+  # NVIDIA / Jensen Huang
+  - "Jensen Huang"
+  - "Jensen Huang"
+  - "NVIDIA invest"
+  - "NVIDIA invest"
+  - "英伟达入股"
+  - "黄仁勋"
+  - "Huang says"
+  - "Huang calls"
+  - "Huang endorses"
+  - "trillion dollar company"
+  - "万亿美元公司"
+  - "next trillion"
+  # Market-moving macro
+  - "FOMC"
+  - "Federal Reserve"
+  - "rate hike"
+  - "rate cut"
+  - "tariff"
+  - "trade war"
+  - "sanctions"
+  - "oil supply"
+  - "geopolitical risk"

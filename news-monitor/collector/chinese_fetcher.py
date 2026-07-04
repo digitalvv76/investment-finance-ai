@@ -63,6 +63,26 @@ class ChineseNewsFetcher:
         request_delay_seconds: 2.0
     """
 
+    # Chinese noise keywords — titles matching these are skipped at source.
+    # These are categorically NOT market news: party propaganda, single-stock
+    # limit-up moves, routine oil price adjustments, weather, traffic, etc.
+    _NOISE_KEYWORDS: set[str] = {
+        # Party propaganda
+        "党委", "学习贯彻", "全会精神", "主题教育", "民主生活会",
+        "团拜", "重要讲话", "指示精神", "新时代中国特色社会主义",
+        "两个维护", "四个意识", "四个自信", "党史学习教育",
+        "不忘初心", "牢记使命", "巡视整改", "全面从严治党",
+        "中心组学习", "意识形态", "统战",
+        # Single-stock noise
+        "涨停", "跌停", "连续涨停", "一字板", "地天板", "天地板",
+        "封板", "炸板", "尾盘拉升", "尾盘跳水",
+        # Routine domestic announcements (no US market link)
+        "油价调整", "成品油价格", "限行通知", "天气预报",
+        "交通管制", "停水停电",
+        # Non-financial domestic
+        "文体活动", "文艺汇演",
+    }
+
     def __init__(
         self,
         config: dict = None,
@@ -75,6 +95,13 @@ class ChineseNewsFetcher:
         self.delay: float = config.get("request_delay_seconds", 2.0)
         self._session = session
         self._own_session = False
+
+    def _is_noise_title(self, title: str) -> bool:
+        """Quick check: is this title categorically noise?
+
+        Returns True if the title should be skipped at the source level.
+        """
+        return any(kw in title for kw in self._NOISE_KEYWORDS)
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None:
@@ -147,6 +174,11 @@ class ChineseNewsFetcher:
             if not title:
                 continue
 
+            # Pre-filter: skip categorical noise at source level
+            if self._is_noise_title(title):
+                logger.debug("新浪财经[%s]: skipped noise — %s", channel_name, title[:60])
+                continue
+
             ctime = entry.get("ctime", 0)
             pub_dt = _ts_to_datetime(int(ctime)) if ctime else datetime.now()
             intro = entry.get("intro", "")
@@ -217,6 +249,11 @@ class ChineseNewsFetcher:
         for entry in data.get("data", {}).get("items", [])[: self.max_items]:
             title = entry.get("title", "").strip()
             if not title:
+                continue
+
+            # Pre-filter: skip categorical noise at source level
+            if self._is_noise_title(title):
+                logger.debug("华尔街见闻[%s]: skipped noise — %s", channel_name, title[:60])
                 continue
 
             content_text = entry.get("content_text", "")

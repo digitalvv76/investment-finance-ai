@@ -326,7 +326,7 @@ class NewsMonitor:
         except Exception as e:
             logger.error(f"Deep lane background task failed: {e}")
 
-    async def_collect_impact_outcomes(self, window: str):
+    async def _collect_impact_outcomes(self, window: str):
         """Periodic task: collect market data for pending assessments."""
         try:
             from engine.impact_collector import ImpactCollector

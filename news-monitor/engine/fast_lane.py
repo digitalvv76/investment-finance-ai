@@ -13,6 +13,7 @@ from config.loader import ConfigLoader
 from engine.entity_extractor import EntityExtractor
 from engine.priority import PriorityScorer
 from engine.strategic_detector import StrategicDetector
+from engine.content_filter import geo_market_filter, content_quality_filter
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,10 @@ class FastLane:
         self._scorer = PriorityScorer()
         self._vector_store = vector_store
         self._strategic = StrategicDetector()
+
+        # People tiers (loaded from keywords.yaml)
+        self._people_tiers: dict[str, int] = {}  # name_lower → tier (1/2/3)
+        self._load_people_tiers(config)
 
         # Breaking markers (kept here for fast _is_breaking check)
         keywords = {}
@@ -72,6 +77,58 @@ class FastLane:
             pass
         return tickers
 
+    def _load_people_tiers(self, config: ConfigLoader):
+        """Load tiered key_people from keywords.yaml.
+
+        Builds a name→tier lookup for use in _detect_people_tier().
+        Falls back gracefully if keywords are unavailable.
+        """
+        try:
+            keywords = config.load_keywords()
+            for name in keywords.get('key_people_tier1', []):
+                self._people_tiers[name.lower()] = 1
+            for name in keywords.get('key_people_tier2', []):
+                self._people_tiers[name.lower()] = 2
+            for name in keywords.get('key_people_tier3', []):
+                self._people_tiers[name.lower()] = 3
+        except Exception:
+            pass
+        # Also populate from legacy key_people as tier 3 (safe default)
+        try:
+            keywords = config.load_keywords()
+            for name in keywords.get('key_people', []):
+                if name.lower() not in self._people_tiers:
+                    self._people_tiers[name.lower()] = 3
+        except Exception:
+            pass
+
+    def _detect_people_tier(self, text: str, entities: dict) -> tuple[bool, int]:
+        """Detect the highest-tier person mentioned in the text.
+
+        Returns (has_people: bool, highest_tier: int).
+        Tier 1 = market pricer, Tier 2 = influencer, Tier 3 = political.
+        Default tier 1 if person found but not in known list.
+        """
+        people = entities.get('people', [])
+        if not people:
+            # Also check raw text for known names (more robust)
+            text_lower = text.lower()
+            best_tier = 3
+            found_any = False
+            for name, tier in self._people_tiers.items():
+                if name.lower() in text_lower:
+                    found_any = True
+                    best_tier = min(best_tier, tier)
+            return (found_any, best_tier) if found_any else (False, 1)
+
+        # spaCy found people entities
+        best_tier = 1  # default: unknown person → assume high tier
+        for person_name in people:
+            tier = self._people_tiers.get(person_name.lower(), 1)
+            # Unknown names get tier 1 (safe: don't penalize unrecognized people)
+            best_tier = min(best_tier, tier)
+        return (True, best_tier)
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -81,9 +138,12 @@ class FastLane:
 
         For each item:
         1. Extract entities via EntityExtractor
-        2. Check breaking markers
-        3. Score via PriorityScorer
-        4. Return items that meet fast lane threshold (>= 0.3)
+        2. Detect people tier (tiered: 1=mkt pricer, 2=influencer, 3=political)
+        3. Content filter — demote non-US-political/single-stock/propaganda
+        4. Score via PriorityScorer (with tiered people bonus)
+        5. Strategic detection — government / NVIDIA investment (always pass)
+        6. Urgent keyword interrupt
+        7. Return items that meet fast lane threshold (>= 0.3)
         """
         pushed = []
 
@@ -94,18 +154,30 @@ class FastLane:
             entities = self._extractor.extract(text)
             tickers = set(entities.get('tickers', []))
             macro_tags = set(entities.get('indicators', []))
-            has_people = len(entities.get('people', [])) > 0
 
-            # 2. Breaking detection
+            # 2. Detect people tier (tiered: replaces flat has_people boolean)
+            has_people, people_tier = self._detect_people_tier(text, entities)
+            item._people_tier = people_tier
+
+            # 2.5. Content quality & geo-market filter (NEW)
+            # Runs BEFORE scoring to suppress noise before it gets any points.
+            source = getattr(item, 'source', '') or getattr(item, 'source_name', '') or ''
+            tickers_str = item.tickers_found or ','.join(tickers) if tickers else ''
+
+            geo_mult = geo_market_filter(text, source)
+            quality_mult = content_quality_filter(text, tickers_str)
+            item._filter_mult = round(geo_mult * quality_mult, 3)
+
+            # 3. Breaking detection
             item.is_breaking = self._is_breaking(text)
 
-            # 3. Tag the item with extracted entities
+            # 4. Tag the item with extracted entities
             item.tickers_found = ','.join(tickers) if tickers else ''
             item.macro_tags = ','.join(macro_tags) if macro_tags else ''
 
-            # 4. Priority scoring
+            # 5. Priority scoring (with tiered people)
             resonance = self._check_multi_source(text)
-            item.priority_score = self._scorer.score(
+            raw_score = self._scorer.score(
                 item,
                 tickers=tickers,
                 macro_tags=macro_tags,
@@ -113,11 +185,17 @@ class FastLane:
                 similar_count=resonance,
             )
 
-            # 5. Strategic event detection — government / NVIDIA investment
+            # Apply content filter multiplier AFTER raw scoring
+            item.priority_score = round(raw_score * item._filter_mult, 4)
+
+            # 6. Strategic event detection — government / NVIDIA investment
+            # Strategic events BYPASS the content filter (forced score=1.0)
             strategic = self._strategic.detect(text)
             if strategic:
                 best = strategic[0]
+                # Strategic events override ALL filtering
                 item.priority_score = max(item.priority_score, 1.0)
+                item._filter_mult = 1.0
                 item.macro_tags = (item.macro_tags + f',STRATEGIC_{best.category.upper()}').strip(',')
                 # Extract target company tickers near the match
                 related = self._strategic.extract_mentioned_tickers(text, set(self.watchlist))
@@ -126,11 +204,19 @@ class FastLane:
                         item.tickers_found.split(',') + list(related)
                     )).strip(',')
 
-            # 6. Urgent keyword interrupt — bypasses scoring threshold
+            # 7. Urgent keyword interrupt — bypasses scoring threshold
             is_urgent = self._check_urgent_keywords(text)
             if is_urgent:
                 item.priority_score = max(item.priority_score, 0.95)
                 item.macro_tags = (item.macro_tags + ',URGENT').strip(',')
+
+            # Log demotions for debugging
+            if item._filter_mult < 0.5:
+                logger.debug(
+                    "Content filter: ×%.2f → score=%.3f (raw=%.3f) — %s",
+                    item._filter_mult, item.priority_score, raw_score,
+                    (item.title or '')[:80],
+                )
 
             if item.priority_score >= 0.3:  # Fast lane threshold
                 item.status = 'fast_pushed'
