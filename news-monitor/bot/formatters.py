@@ -94,14 +94,17 @@ def _build_ticker_etf_line(tickers: str, macro_tags: str = "",
 
 
 def format_fast_alert(item: dict, analyst_note: str = "",
-                       event_category: str = "") -> str:
+                       event_category: str = "",
+                       impact_score: int = 0, confidence: int = 0) -> str:
     """Format a fast lane breaking news alert — Chinese display.
 
     Expected format:
     🔔 【NVDA】彭博社
     Nvidia cuts Q3 revenue guidance amid export restrictions
 
-    [analyst note in Chinese — 2-4 sentence narrative]
+    💥 冲击: 78分 | 置信度: 82%
+
+    [analyst note in Chinese]
 
     🎯 相关标的: NVDA(英伟达)  板块ETF: SMH(半导体) QQQ(纳指100)
     🔗 https://bloomberg.com/...
@@ -111,7 +114,6 @@ def format_fast_alert(item: dict, analyst_note: str = "",
     title = item.get('title', '')
     url = item.get('url', '')
     macro_tags = item.get('macro_tags', '')
-    impact = item.get('impact_assessment', None)
 
     # Translate source to Chinese if known
     source_cn = _translate_source(source)
@@ -137,17 +139,14 @@ def format_fast_alert(item: dict, analyst_note: str = "",
     ticker_badge = f"【{tickers}】" if tickers else ""
     header = f"{prefix} {ticker_badge}{source_cn}"
 
-    # Impact line if available
-    impact_line = ""
-    if impact:
-        impact_score = getattr(impact, 'impact_score', None) or impact.get('impact_score', 0)
-        direction = getattr(impact, 'direction', '') or impact.get('direction', '')
-        if impact_score:
-            dir_label = {"up": "📈", "down": "📉", "flat": "➡️"}.get(direction, "")
-            impact_line = f"\n💥 预估冲击: {impact_score}分 {dir_label}"
-
     # Build message body
-    msg = f"{header}\n{title}{impact_line}"
+    msg = f"{header}\n{title}"
+
+    # Impact score + confidence
+    if impact_score > 0:
+        msg += f"\n\n💥 冲击: {impact_score}分"
+        if confidence > 0:
+            msg += f" | 置信度: {confidence}%"
 
     # Analyst note (from ImpactEvaluator LLM)
     note = analyst_note or item.get('analyst_note', '')
@@ -294,18 +293,19 @@ def _translate_impact(impact: str) -> str:
 
 def format_pushover_alert(item: dict, title_cn: str = "",
                           analyst_note: str = "",
-                          event_category: str = "") -> tuple[str, str]:
+                          event_category: str = "",
+                          impact_score: int = 0, confidence: int = 0) -> tuple[str, str]:
     """Format a Pushover notification in Chinese — returns (title, body).
 
     Pushover limits: title ≤ 250 chars, body ≤ 1024 chars.
-    The format mirrors the Telegram Chinese message structure.
 
     Args:
         item: News item with title, source, tickers_found, macro_tags, url.
-        title_cn: Chinese translation of the title. If provided, used instead
-                  of the original English title in the body.
+        title_cn: Chinese translation of the title.
         analyst_note: Analyst-style narrative from ImpactEvaluator LLM.
         event_category: Event category for ETF mapping.
+        impact_score: 0-100 LLM impact prediction.
+        confidence: 0-100 LLM confidence.
     """
     title = item.get("title", "")[:120]
     source = item.get("source", "未知来源")
@@ -323,14 +323,20 @@ def format_pushover_alert(item: dict, title_cn: str = "",
     display_title = title_cn if title_cn else title
 
     parts = [f"📰 {display_title}"]
-    parts.append(f"来源: {source_cn}")
+
+    # Impact score + confidence
+    if impact_score > 0:
+        impact_line = f"\n💥 冲击: {impact_score}分"
+        if confidence > 0:
+            impact_line += f" | 置信度: {confidence}%"
+        parts.append(impact_line)
 
     # Analyst note
     note = analyst_note or item.get('analyst_note', '')
     if note:
         parts.append(f"\n{note}")
 
-    # Related ETFs (already includes ticker names, replaces old 标的/主题 lines)
+    # Related ETFs
     etf_line = _build_ticker_etf_line(tickers, macro, event_category)
     if etf_line:
         parts.append(f"\n{etf_line}")

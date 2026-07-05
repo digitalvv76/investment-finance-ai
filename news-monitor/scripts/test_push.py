@@ -52,7 +52,8 @@ async def test_telegram():
     )
 
     text = format_fast_alert(test_item, analyst_note=analyst_note,
-                             event_category="corporate")
+                             event_category="corporate",
+                             impact_score=78, confidence=82)
     print("  推送内容预览:")
     print("  " + "-" * 48)
     for line in text.split("\n"):
@@ -105,6 +106,8 @@ async def test_pushover():
         title_cn="英伟达因出口限制下调Q3营收指引",
         analyst_note=analyst_note,
         event_category="corporate",
+        impact_score=78,
+        confidence=82,
     )
 
     print("  Pushover 推送内容:")
@@ -166,6 +169,8 @@ async def main():
     print("  ┌─────────────────────────────────────┐")
     print("  │ 📰 【NVDA, AMD】彭博社               │")
     print("  │ Nvidia cuts Q3 revenue guidance...  │")
+    print("  │                                     │")
+    print("  │ 💥 冲击: 78分 | 置信度: 82%          │")
     print("  │                                     │")
     print("  │ 英伟达下调Q3营收指引，幅度超出我们     │")
     print("  │ 预期，主因对华出口限制收紧...         │")

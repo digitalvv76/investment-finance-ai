@@ -257,10 +257,14 @@ class AlertDispatcher:
 
         analyst_note = item.get("_analyst_note", "")
         event_category = item.get("_event_category", "")
+        impact_score = int(item.get("_impact_score", 0) or 0)
+        confidence = int(item.get("_confidence", 0) or 0)
         title, body = format_pushover_alert(
             item, title_cn=title_cn,
             analyst_note=analyst_note,
             event_category=event_category,
+            impact_score=impact_score,
+            confidence=confidence,
         )
         url = item.get("url", "")
 

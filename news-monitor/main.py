@@ -278,15 +278,21 @@ class NewsMonitor:
                     level = AlertLevel.NORMAL
                     reason = f"llm_review_not_actionable (was: {reason})"
 
-            # ---- Inject analyst note + event category for push formatters ----
+            # ---- Inject analyst note + impact scores for push formatters ----
             analyst_note = ""
             event_category = ""
+            impact_score = 0
+            confidence = 0
             if impact_assessment:
                 analyst_note = getattr(impact_assessment, 'analyst_note', '') or ''
                 event_category = getattr(impact_assessment, 'event_category', '') or ''
+                impact_score = int(getattr(impact_assessment, 'impact_score', 0) or 0)
+                confidence = int(getattr(impact_assessment, 'confidence', 0) or 0)
                 updated['analyst_note'] = analyst_note
                 updated['_analyst_note'] = analyst_note  # for alert_dispatcher
                 updated['_event_category'] = event_category
+                updated['_impact_score'] = impact_score
+                updated['_confidence'] = confidence
 
             # ---- Alert dispatching ----
             if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT):
@@ -305,6 +311,8 @@ class NewsMonitor:
                 await self.bot.push_alert(
                     updated, analyst_note=analyst_note,
                     event_category=event_category,
+                    impact_score=impact_score,
+                    confidence=confidence,
                 )
 
             # ---- Web dashboard broadcast (SSE real-time push) ---------

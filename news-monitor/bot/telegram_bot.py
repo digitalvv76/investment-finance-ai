@@ -49,7 +49,8 @@ class NewsBot:
         logger.info("Telegram bot stopped")
 
     async def push_alert(self, item: dict, analyst_note: str = "",
-                          event_category: str = ""):
+                          event_category: str = "",
+                          impact_score: int = 0, confidence: int = 0):
         """Push a fast lane alert — English original + Chinese translation.
 
         The English message includes analyst note, ticker CN names, and
@@ -70,9 +71,11 @@ class NewsBot:
         tickers = item.get('tickers_found', '')
         macro = item.get('macro_tags', '')
 
-        # --- English alert (includes analyst note + ETFs) ---
+        # --- English alert (includes analyst note + impact + ETFs) ---
         en_text = format_fast_alert(item, analyst_note=analyst_note,
-                                    event_category=event_category)
+                                    event_category=event_category,
+                                    impact_score=impact_score,
+                                    confidence=confidence)
         keyboard = build_feedback_keyboard(item['id'])
 
         try:
@@ -91,11 +94,13 @@ class NewsBot:
         cn_title = await self._translator.translate(title)
         if cn_title:
             cn_parts = [f"\U0001f1e8\U0001f1f3 {cn_title}"]
-            cn_parts.append(f"来源: {source}")
-            if tickers:
-                cn_parts.append(f"标的: {tickers}")
-            if macro:
-                cn_parts.append(f"主题: {macro}")
+
+            # Impact score + confidence
+            if impact_score > 0:
+                imp_line = f"\n💥 冲击: {impact_score}分"
+                if confidence > 0:
+                    imp_line += f" | 置信度: {confidence}%"
+                cn_parts.append(imp_line)
 
             # Analyst note (same as EN version — already in Chinese)
             note = analyst_note or item.get('analyst_note', '')
