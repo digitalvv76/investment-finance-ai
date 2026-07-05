@@ -319,31 +319,36 @@ def format_pushover_alert(item: dict, title_cn: str = "",
     display_title = title_cn if title_cn else title
     push_title = f"📰 {source_cn}：{display_title}"[:250]
 
-    # Body starts from impact line (title already shown in notification card)
+    # Body: analyst note → ETFs → URL → impact score at bottom
     parts = []
-
-    # Impact score + confidence
-    if impact_score > 0:
-        impact_line = f"💥 冲击: {impact_score}分"
-        if confidence > 0:
-            impact_line += f" | 置信度: {confidence}%"
-        parts.append(impact_line)
 
     # Analyst note
     note = analyst_note or item.get('analyst_note', '')
     if note:
-        parts.append(f"\n{note}")
+        parts.append(note)
 
     # Related ETFs
     etf_line = _build_ticker_etf_line(tickers, macro, event_category)
     if etf_line:
-        parts.append(f"\n{etf_line}")
+        if parts:
+            parts.append("")
+        parts.append(etf_line)
 
     if url:
+        if parts:
+            parts.append("")
         parts.append(f"🔗 {url}")
 
+    # Impact score + confidence — at the bottom
+    if impact_score > 0:
+        impact_line = f"💥 冲击: {impact_score}分"
+        if confidence > 0:
+            impact_line += f" | 置信度: {confidence}%"
+        if parts:
+            parts.append("")
+        parts.append(impact_line)
+
     body = "\n".join(parts)[:1024]
-    # Fallback: if nothing else to show, at least show the title
     if not body.strip():
         body = display_title[:1024]
     return push_title[:250], body
