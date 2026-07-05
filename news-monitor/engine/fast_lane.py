@@ -189,13 +189,11 @@ class FastLane:
             item.priority_score = round(raw_score * item._filter_mult, 4)
 
             # 6. Strategic event detection — government / NVIDIA investment
-            # Strategic events BYPASS the content filter (forced score=1.0)
+            # Strategic events can boost priority, but CANNOT override the
+            # geo-market filter for non-US political news with no US connector.
             strategic = self._strategic.detect(text)
             if strategic:
                 best = strategic[0]
-                # Strategic events override ALL filtering
-                item.priority_score = max(item.priority_score, 1.0)
-                item._filter_mult = 1.0
                 item.macro_tags = (item.macro_tags + f',STRATEGIC_{best.category.upper()}').strip(',')
                 # Extract target company tickers near the match
                 related = self._strategic.extract_mentioned_tickers(text, set(self.watchlist))
@@ -204,9 +202,24 @@ class FastLane:
                         item.tickers_found.split(',') + list(related)
                     )).strip(',')
 
+                # Only bypass the geo filter if this is a genuinely US-linked event.
+                # Non-US political news (geo_mult ≤ 0.2) stays demoted regardless.
+                if geo_mult > 0.2:
+                    item.priority_score = max(item.priority_score, 1.0)
+                    item._filter_mult = max(item._filter_mult, 0.8)
+                else:
+                    # Strategic event in a non-US country with no market
+                    # connector — keep the demotion.  E.g. Iran state funeral
+                    # is NOT a US strategic event even if it mentions "government".
+                    logger.debug(
+                        "Strategic match '%s' blocked by geo-filter (×%.2f): %s",
+                        best.category, geo_mult, (item.title or '')[:80],
+                    )
+
             # 7. Urgent keyword interrupt — bypasses scoring threshold
+            # Same rule: cannot override the geo filter for non-US political news.
             is_urgent = self._check_urgent_keywords(text)
-            if is_urgent:
+            if is_urgent and geo_mult > 0.2:
                 item.priority_score = max(item.priority_score, 0.95)
                 item.macro_tags = (item.macro_tags + ',URGENT').strip(',')
 

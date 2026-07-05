@@ -239,31 +239,22 @@ class AlertDispatcher:
     # ------------------------------------------------------------------
 
     async def _pushover(self, item: dict, priority: int, sound: str, **kwargs) -> bool:
-        """Send a Pushover notification.
+        """Send a Pushover notification with Chinese-formatted title + body.
 
         Args:
             priority: -2=silent, 0=normal, 1=high, 2=emergency (repeating).
             sound: Sound name from Pushover's sound library.
         """
-        title = item.get("title", "")[:250]
-        source = item.get("source", "")
-        url = item.get("url", "")
-        tickers = item.get("tickers_found", "")
-        macro = item.get("macro_tags", "")
+        from bot.formatters import format_pushover_alert
 
-        # Build message body
-        parts = [f"Source: {source}"]
-        if tickers:
-            parts.append(f"Tickers: {tickers}")
-        if macro:
-            parts.append(f"Tags: {macro}")
-        body = " | ".join(parts)
+        title, body = format_pushover_alert(item)
+        url = item.get("url", "")
 
         payload = {
             "token": self._pushover_token,
             "user": self._pushover_user,
             "title": title,
-            "message": body[:1024],
+            "message": body,
             "priority": priority,
             "sound": sound,
             **kwargs,
@@ -277,7 +268,7 @@ class AlertDispatcher:
         # URL for deep link
         if url:
             payload["url"] = url
-            payload["url_title"] = "Read full article"
+            payload["url_title"] = "阅读原文"
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -318,8 +309,8 @@ class AlertDispatcher:
         First message carries a Tasker-compatible tag for optional
         system-level automation on the phone side.
         """
-        prefix = item.get("_alert_prefix", "🔴🔴🔴 CRITICAL")
-        tasker_tag = item.get("_tasker_tag", "CRITICAL")
+        prefix = item.get("_alert_prefix", "🔴🔴🔴 紧急警报")
+        tasker_tag = item.get("_tasker_tag", "CRITICAL")  # Keep English for Tasker automation
 
         # Message 1: tagged for Tasker monitoring
         await push_fn(

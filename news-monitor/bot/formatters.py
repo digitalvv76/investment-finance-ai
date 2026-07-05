@@ -186,6 +186,66 @@ def _translate_impact(impact: str) -> str:
     return impact_map.get(str(impact).lower(), str(impact))
 
 
+def format_pushover_alert(item: dict) -> tuple[str, str]:
+    """Format a Pushover notification in Chinese — returns (title, body).
+
+    Pushover limits: title ≤ 250 chars, body ≤ 1024 chars.
+    The format mirrors the Telegram Chinese message structure.
+    """
+    title = item.get("title", "")[:120]
+    source = item.get("source", "未知来源")
+    tickers = item.get("tickers_found", "")
+    macro = item.get("macro_tags", "")
+    url = item.get("url", "")
+
+    source_cn = _translate_source(source)
+
+    # Title: prefix + ticker badge + source
+    ticker_badge = f"【{tickers}】" if tickers else ""
+    push_title = f"📰 {ticker_badge}{source_cn}"
+
+    # Body: Chinese labels matching Telegram CN message format
+    parts = [f"📰 {title}"]
+    parts.append(f"来源: {source_cn}")
+    if tickers:
+        parts.append(f"标的: {tickers}")
+    if macro:
+        # Translate common macro tags for readability
+        macro_cn = _translate_macro_tags(macro)
+        parts.append(f"主题: {macro_cn}")
+    if url:
+        parts.append(f"🔗 {url}")
+
+    return push_title[:250], "\n".join(parts)[:1024]
+
+
+def _translate_macro_tags(macro_tags: str) -> str:
+    """Translate macro tag strings to Chinese."""
+    _MACRO_CN = {
+        "STRATEGIC_GOV_INTERVENTION": "政府干预",
+        "STRATEGIC_NVDA_INVESTMENT": "英伟达投资",
+        "STRATEGIC_NVDA_ENDORSEMENT": "英伟达代言",
+        "STRATEGIC_NVDA_COMPETITIVE_THREAT": "竞争威胁",
+        "URGENT": "紧急",
+        "BREAKING": "突发",
+        "MACRO": "宏观",
+        "FOMC": "美联储",
+        "CPI": "通胀数据",
+        "GDP": "GDP",
+        "EARNINGS": "财报",
+        "M_AND_A": "并购",
+        "FDA": "FDA审批",
+        "CEO": "CEO变动",
+        "GEO_POLITICAL": "地缘政治",
+        "TARIFF": "关税",
+        "CHIPS": "芯片法案",
+        "AI": "人工智能",
+    }
+    tags = [t.strip() for t in macro_tags.split(",") if t.strip()]
+    translated = [_MACRO_CN.get(t, t) for t in tags]
+    return "，".join(translated)
+
+
 # Inline keyboard markup helpers (already Chinese)
 def build_feedback_keyboard(news_id: int) -> dict:
     """Build inline keyboard with Chinese feedback buttons.

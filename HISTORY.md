@@ -559,8 +559,127 @@ FastLane预筛选(≥0.30) → ImpactEvaluator(LLM) + EventMatcher(历史)
 
 ---
 
-## 2026-07-04T12:58+08:00 · 会话开始
+## 2026-07-04 — 信号体系重构 + 中文推送 + 生产部署 🚀
+
+### Phase 1: 信号校准 & 增强（凌晨 00:35-01:07）— 4 commits
+
+**1. 信号校准** (`9a831da` 00:35)
+- 对照用户反馈校准模型：80%→86%, 71%→95%
+- 🆕 `scripts/backtest_training_docx.py` — 回测脚本 (195行)
+- 🆕 `scripts/score_all_events.py` — 全量评分脚本 (58行)
+- `strategic_detector.py` — 微调
+
+**2. 英文关键词 + LLM Actionability Review** (`6c7fd8f` 00:42)
+- 🆕 `engine/actionability_review.py` — LLM 可执行性审查层 (151行)
+  - 判断新闻是否值得行动（vs 纯信息性）
+  - DeepSeek LLM 打分 + 理由
+- `engine/relevance.py` — 英文关键词扩展 (+45行)
+- `main.py` — 接入 ActionabilityReview 到管线
+
+**3. 时效性半衰期** (`5d2da95` 00:58)
+- 事件类型特定半衰期 — 慢事件不再被过早丢弃
+  - 货币政策/地缘政治: 长半衰期 (保留更久)
+  - 突发新闻/财报: 短半衰期 (快速衰减)
+- `engine/relevance.py` — timeliness_factor 重写 (+106/-16)
+
+**4. 新颖性去重** (`d6d7a48` 01:07)
+- ChromaDB 语义去重正式接入 novelty_factor
+- 事件类型半衰期统一 (timeliness + novelty 双维度)
+- `storage/vector_store.py` — 新增语义相似度查询 (+30行)
+- `engine/relevance.py` — novelty_factor 增强 (+62/-13)
+
+### Phase 2: Web 公开部署（下午 13:16-13:18）— 2 commits
+
+**5. Basic Auth + Docker** (`8f12f7a` 13:16)
+- 🆕 `web/auth.py` — HTTP Basic Auth 中间件 (92行)
+- 🆕 `docker/nginx.conf` — Nginx 反向代理配置 (83行)
+- `docker/Dockerfile` + `docker-compose.yml` — 公开部署适配
+- `web/routes.py` — 登录页面路由
+- `web/server.py` — auth 中间件集成
+
+**6. ECS 一键部署** (`3c9f8c6` 13:18)
+- 🆕 `scripts/deploy_ecs.sh` — Alibaba Cloud ECS 部署脚本 (136行)
+  - Docker 安装 → 代码拉取 → 容器启动 → 健康检查
+  - 支持 env vars 注入
+
+### Phase 3: 中文推送 + 内容质量门（晚上 21:07）— 1 commit
+
+**7. Content Filter + Chinese Push** (`875eddb` 21:07)
+- 🆕 `engine/content_filter.py` — 3层内容过滤器 (622行)
+  - **Layer 1 — 地理过滤**: 纯中国A股/港股 → 降级
+  - **Layer 2 — 质量过滤**: 垃圾标题/噪音源/低信息密度 → 拦截
+  - **Layer 3 — 语言过滤**: 中文源默认 ×0.5，须证明对美股有信号
+- **🇨🇳 Telegram 中文推送**:
+  - `bot/formatters.py` 大改 (+164/-?): 告警消息全中文化
+  - 来源翻译: Reuters→路透社, CNBC→CNBC财经, WSJ→华尔街日报
+  - 中文采集端预过滤: 噪音关键词在源头拦截
+- **分级人物评分** (`priority.py`):
+  - T1 (Jensen Huang/Powell 0.15), T2 (Musk 0.10), T3 (Trump/Xi 0.03)
+- **重磅个股放行**:
+  - mega-cap, FDA审批, M&A, CEO变动, >10%日内波动
+- 🆕 `tests/test_content_filter.py` — 287行新测试
+- `tests/test_formatters.py` — 中文格式化测试 (+42)
+- 修复 `main.py:329` 语法错误 (`def_collect` → `def _collect`)
+
+### 今日总计
+- **7 commits**, 23 files changed, +2481/-94 lines
+- **313 tests passed, 0 regression**
+- 核心管线演进:
+  ```
+  RSS/API/中文/Twitter → ContentFilter(3层) → FastLane → ActionabilityReview(LLM)
+  → ImpactEvaluator(LLM) + EventMatcher(51事件) 
+  → signal_score(impact×timeliness×novelty×relevance)
+  → AlertDispatcher → Telegram 中文推送
+  ```
+
+### 关键效果
+- 📱 手机推送从英文 → **全中文**，来源翻译，噪音大幅减少
+- 🎯 中文源不再滥发，必须证明对美国市场有冲击力
+- 🧠 信号从单维 → **四维乘积** (任一维弱则全局弱)
+- 🌐 Web Dashboard 可公开访问 (Basic Auth 保护)
+- 🚀 ECS 一键部署，Docker 生产就绪
 
 ---
 
-## 2026-07-04T19:20+08:00 · 会话开始
+## 2026-07-04T21:31+08:00 · 会话 — 系统健康检查
+
+- 用户要求检查系统运行状态
+- ✅ 313 tests passed (6 ChromaDB Windows 锁定错误, 已知问题)
+- ✅ 全部凭证就绪 (DeepSeek + Telegram + Pushover + FRED + Alpha Vantage)
+- ✅ 4 个新模块功能验证通过 (EventMatcher/Relevance/ImpactEvaluator/AlertDispatcher)
+- ⚠️ Windows GBK 编码问题 (verify_mcp.py 读 UTF-8 文件报错, 不影响功能)
+- ⚠️ .env → settings.json 5 个变量未同步
+- 用户指出遗漏了今晚全部开发记录 → 补写 HISTORY.md
+
+---
+
+## 2026-07-05T09:15+08:00 · 会话开始
+
+- 🐛 **Pushover 推送中文化修复**
+  - **问题**: 手机 Pushover 通知全英文，与 Telegram 中文推送不一致
+  - **根因**: `alert_dispatcher._pushover()` 直接发送原始英文字段 (`"Source:" / "Tickers:" / "Tags:"`)，完全绕过了中文化流程
+  - **修复**:
+    - `formatters.py`: 新增 `format_pushover_alert()` — 中文标题+正文（来源翻译、中文标签、macro tags 映射）
+    - `alert_dispatcher.py`: `_pushover()` 改用中文 formatter，URL 标题改为「阅读原文」，triple-push 前缀改为「🔴🔴🔴 紧急警报」
+    - 测试更新: 推送 payload 断言适配新中文格式
+  - 313 tests passed, 0 regressions
+
+- 🐛 **非美政治新闻绕过 geo filter 推送给用户**
+  - **问题**: 哈梅内伊国葬新闻被推送到手机，对美国股市无任何影响，不应推送
+  - **根因**: `fast_lane.py` 中战略事件检测和紧急关键词两个绕过机制完全无视 geo filter 的 ×0.2 降权
+  - **用户原则**: 非美国新闻必须对美国股市有明确重大影响才推送；伊朗国葬 ≠ 霍尔木兹封锁 ≠ 美股冲击
+  - **修复** (`fast_lane.py`):
+    - 战略事件绕过: 仅在 `geo_mult > 0.2` 时允许 (非美政治新闻不绕过)
+    - 紧急关键词绕过: 同样加 `geo_mult > 0.2` 约束
+    - 被 geo filter 拦截的战略事件记录 debug 日志，不推送
+
+---
+## 2026-07-05T09:15+08:00 · 会话开始
+  - **修复**:
+    - `formatters.py`: 新增 `format_pushover_alert()` — 中文标题+正文（来源翻译、中文标签、macro tags 映射）
+    - `alert_dispatcher.py`: `_pushover()` 改用中文 formatter，URL 标题改为「阅读原文」，triple-push 前缀改为「🔴🔴🔴 紧急警报」
+    - 测试更新: 推送 payload 断言适配新中文格式
+  - 313 tests passed, 0 regressions
+
+---
+## 2026-07-05T09:15+08:00 · 会话开始

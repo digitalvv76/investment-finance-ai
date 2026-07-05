@@ -189,7 +189,10 @@ async def test_pushover_emergency_payload():
         assert payload["sound"] == "spacealarm"
         assert payload["retry"] == 30
         assert payload["expire"] == 3600
-        assert "Market crash" in payload["title"]
+        # Chinese-formatted title: prefix + tickers + source
+        assert "SPY" in payload["title"] or "SPY" in payload["message"]
+        # Body contains Chinese labels and the English title
+        assert "Market crash" in payload["message"]
 
 
 @pytest.mark.asyncio
