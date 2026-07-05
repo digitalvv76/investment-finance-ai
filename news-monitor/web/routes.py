@@ -504,3 +504,197 @@ async def impact_health_events(request: web.Request) -> web.Response:
     limit = int(request.query.get("limit", 20))
     events = db.get_health_events(limit=limit)
     return _json(events)
+
+
+# ---------------------------------------------------------------------------
+# Deep analysis endpoint — triggered by Pushover HTML link
+# ---------------------------------------------------------------------------
+
+_DEEP_ANALYSIS_HTML = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>深度分析</title>
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #0d1117; color: #c9d1d9; padding: 12px; line-height: 1.6;
+         min-height: 100vh; }}
+  .card {{ background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+           padding: 16px; max-width: 720px; margin: 0 auto; }}
+  h1 {{ font-size: 1.1em; color: #58a6ff; margin-bottom: 10px; word-break: break-word; }}
+  .meta {{ color: #8b949e; font-size: 0.8em; margin-bottom: 14px; display: flex; flex-wrap: wrap; gap: 8px; }}
+  .analysis {{ white-space: pre-wrap; background: #0d1117; border-left: 3px solid #58a6ff;
+               padding: 12px 14px; border-radius: 4px; font-size: 0.9em; }}
+  .loading {{ text-align: center; padding: 48px 20px; color: #8b949e; }}
+  .loading .dot {{ display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                  background: #58a6ff; margin: 0 4px; animation: bounce 1.4s infinite ease-in-out; }}
+  .loading .dot:nth-child(2) {{ animation-delay: 0.2s; }}
+  .loading .dot:nth-child(3) {{ animation-delay: 0.4s; }}
+  @keyframes bounce {{ 0%, 80%, 100% {{ transform: scale(0); }} 40% {{ transform: scale(1); }} }}
+  .error {{ color: #f85149; background: #1f1519; padding: 12px; border-radius: 6px; font-size: 0.9em; }}
+  .links {{ margin-top: 14px; display: flex; gap: 12px; flex-wrap: wrap; }}
+  .links a {{ color: #58a6ff; text-decoration: none; font-size: 0.85em; padding: 6px 12px;
+              background: #21262d; border-radius: 6px; border: 1px solid #30363d; }}
+  .links a:hover {{ background: #30363d; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔍 {title}</h1>
+  <div class="meta">
+    <span>📰 {source}</span>
+    <span>🏷️ {tickers}</span>
+  </div>
+  <div id="result"><div class="loading">正在深度分析<div style="margin-top:12px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div></div>
+  <div class="links">{original_link}</div>
+</div>
+<script>
+  const newsId = {news_id};
+  const pollInterval = 2000;
+  const maxPolls = 60;
+  let polls = 0;
+
+  async function check() {{
+    polls++;
+    try {{
+      const resp = await fetch('/api/news/' + newsId + '/analyze/result');
+      if (!resp.ok) throw new Error('not ready');
+      const data = await resp.json();
+      if (data.analysis) {{
+        document.getElementById('result').innerHTML =
+          '<div class="analysis">' + escapeHtml(data.analysis) + '</div>';
+        return;
+      }}
+    }} catch(e) {{}}
+    if (polls < maxPolls) setTimeout(check, pollInterval);
+    else document.getElementById('result').innerHTML =
+      '<div class="error">分析超时，请稍后重试</div>';
+  }}
+
+  function escapeHtml(text) {{
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }}
+
+  // Kick off analysis on the server side
+  fetch('/api/news/' + newsId + '/analyze/start', {{ method: 'POST' }})
+    .catch(() => {{}});
+
+  setTimeout(check, 1500);
+</script>
+</body>
+</html>"""
+
+
+async def deep_analysis_handler(request: web.Request) -> web.Response:
+    """Return the deep analysis HTML page (loading state + JS polling).
+
+    GET /api/news/{id}/analyze
+    """
+    news_id = int(request.match_info["id"])
+    db = _get_db(request)
+    news_dict = db.get_news_by_id(news_id)
+
+    if not news_dict:
+        return web.Response(
+            text="<html><body style='color:#f85149;background:#0d1117;padding:20px;font-family:sans-serif'><h2>News not found</h2></body></html>",
+            content_type="text/html", status=404,
+        )
+
+    html = _DEEP_ANALYSIS_HTML.format(
+        news_id=news_id,
+        title=news_dict.get("title", "(no title)")[:120],
+        source=news_dict.get("source", "unknown"),
+        tickers=news_dict.get("tickers_found", "") or "—",
+        original_link=_format_original_link(news_dict),
+    )
+    return web.Response(text=html, content_type="text/html")
+
+
+async def deep_analysis_start(request: web.Request) -> web.Response:
+    """Trigger deep analysis asynchronously.  Called via JS fetch from the loading page.
+
+    POST /api/news/{id}/analyze/start
+    """
+    news_id = int(request.match_info["id"])
+    db = _get_db(request)
+    deep_lane = request.app.get("deep_lane")
+
+    news_dict = db.get_news_by_id(news_id)
+    if not news_dict or not deep_lane:
+        return _json({"ok": False}, status=404)
+
+    # Don't re-run if already done
+    if news_dict.get("llm_analysis"):
+        return _json({"ok": True, "cached": True})
+
+    # Fire and forget — result is persisted to DB, polled by /result endpoint
+    asyncio.ensure_future(_run_and_persist(deep_lane, news_dict, db))
+    return _json({"ok": True})
+
+
+async def deep_analysis_result(request: web.Request) -> web.Response:
+    """Poll for the analysis result.  Returns JSON.
+
+    GET /api/news/{id}/analyze/result
+    """
+    news_id = int(request.match_info["id"])
+    db = _get_db(request)
+    news_dict = db.get_news_by_id(news_id)
+
+    if not news_dict:
+        return _json({"analysis": None, "error": "not found"}, status=404)
+
+    analysis = news_dict.get("llm_analysis", "")
+    if analysis:
+        return _json({"analysis": analysis, "done": True})
+    return _json({"analysis": None, "done": False}, status=202)
+
+
+async def _run_and_persist(deep_lane, news_dict: dict, db) -> None:
+    """Run deep analysis in background, persist to DB."""
+    try:
+        from storage.models import NewsItem
+        item = _newsitem_from_dict(news_dict)
+        result = await asyncio.wait_for(
+            deep_lane.process_on_demand(item),
+            timeout=60.0,
+        )
+        if result.llm_analysis:
+            db.update_news_status(
+                result.id or news_dict["id"], news_dict.get("status", "deep_pushed"),
+                llm_analysis=result.llm_analysis,
+            )
+    except asyncio.TimeoutError:
+        logger.error("Deep analysis timed out for news #%s", news_dict.get("id"))
+    except Exception as e:
+        logger.error("Deep analysis failed for news #%s: %s", news_dict.get("id"), e)
+
+
+def _format_original_link(news_dict: dict) -> str:
+    url = news_dict.get("url", "")
+    if url:
+        return f'<a class="back" href="{url}" target="_blank">📎 查看原文 →</a>'
+    return ""
+
+
+def _newsitem_from_dict(d: dict):
+    """Build a NewsItem from a DB row dict."""
+    from storage.models import NewsItem
+    return NewsItem(
+        id=d.get("id", 0),
+        title=d.get("title", ""),
+        source=d.get("source", ""),
+        url=d.get("url", ""),
+        content_snippet=d.get("content_snippet", ""),
+        tickers_found=d.get("tickers_found", ""),
+        macro_tags=d.get("macro_tags", ""),
+        sentiment=d.get("sentiment", ""),
+        sentiment_score=d.get("sentiment_score", 0.0),
+        priority_score=d.get("priority_score", 0.0),
+        entities=d.get("entities", ""),
+        status=d.get("status", ""),
+    )

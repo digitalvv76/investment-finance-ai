@@ -46,8 +46,10 @@ def _parse_credentials() -> Optional[tuple[str, str]]:
 async def basic_auth_middleware(request: web.Request, handler) -> web.StreamResponse:
     """Require HTTP Basic Authentication for all requests except health checks."""
 
-    # ----- skip auth for health endpoints -----
+    # ----- skip auth for health endpoints and public deep-analysis pages -----
     if request.path in _AUTH_SKIP_EXACT or request.path.startswith("/health"):
+        return await handler(request)
+    if request.path.startswith("/api/news/") and "/analyze" in request.path:
         return await handler(request)
 
     creds = _parse_credentials()

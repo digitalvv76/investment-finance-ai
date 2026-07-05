@@ -15,7 +15,10 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime, timedelta
 from typing import Optional
+
+import yfinance as yf
 
 from config.loader import ConfigLoader
 from storage.database import Database
@@ -25,6 +28,15 @@ from engine.sentiment import SentimentAnalyzer
 from engine.priority import PriorityScorer, URGENT_THRESHOLD, IMPORTANT_THRESHOLD
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Market enrichment — fetched before LLM analysis to ground reasoning in
+# real-time price data.  Runs with a hard 8-second timeout so it never
+# blocks the user-facing deep analysis button.
+# ---------------------------------------------------------------------------
+_ENRICH_TIMEOUT = 8.0         # total budget for all market data fetches
+_SPX_SYMBOL = "^GSPC"
+_VIX_SYMBOL = "^VIX"
 
 # Default LLM prompt template — 4-step structured Chain-of-Thought
 ANALYSIS_PROMPT = """You are a financial markets strategist serving a professional investor. Analyze this news with structured reasoning — do NOT just summarize.
@@ -39,11 +51,11 @@ Sentiment: {sentiment} (score: {sentiment_score:.2f})
 
 Follow this exact 4-step structure. If you lack information for any step, state "信息不足" rather than guessing.
 
-Step 1 — 事件定性: Classify this event. Is it Macro (interest rate / policy), Sector (supply-demand / technology), or Company-specific (earnings / management)? State the category and why.
+Step 1 — 事件定性: Classify this event. Is it Macro (interest rate / policy), Sector (supply-demand / technology), or Company-specific (earnings / management)? State the category and why. If real-time market data is provided above, note whether the current price action already reflects this news.
 
-Step 2 — 传导路径: Trace the impact chain. Which sectors/positions are directly affected? Through what mechanism (cost, demand, valuation multiples)? Be specific about the causal logic.
+Step 2 — 传导路径: Trace the impact chain. Which sectors/positions are directly affected? Through what mechanism (cost, demand, valuation multiples)? Be specific about the causal logic. Reference the real-time price data and moving averages above — are the affected tickers already at key technical levels?
 
-Step 3 — 组合映射: Map to the investor's portfolio. Given the holdings and investment rules in the knowledge base, provide 1-3 concrete action scenarios (观望 / 减仓 / 加仓) with trigger conditions for each.
+Step 3 — 组合映射: Map to the investor's portfolio. Given the holdings and investment rules in the knowledge base, provide 1-3 concrete action scenarios (观望 / 减仓 / 加仓) with trigger conditions for each. Use the current prices and MA positions from the market data to suggest specific entry/exit levels.
 
 Step 4 — 置信度: Rate your analysis confidence as 高 / 中 / 低. If 低, explicitly state what information is missing and what to monitor.
 
@@ -93,7 +105,7 @@ class DeepLane:
         # Detect LLM provider from environment
         self._provider = self._detect_provider()
         self._model = self._provider["default_model"]
-        self._max_tokens = 800
+        self._max_tokens = 1500
         self._api_key = os.environ.get(self._provider["env_key"], "")
 
         if config:
@@ -236,6 +248,122 @@ class DeepLane:
         return item
 
     # ------------------------------------------------------------------
+    # Market enrichment (real-time data → grounds LLM analysis)
+    # ------------------------------------------------------------------
+
+    async def _fetch_market_enrichment(self, tickers_field: str) -> str:
+        """Fetch real-time market data for the tickers mentioned in the news.
+
+        Returns a compact text block suitable for injection into the LLM
+        prompt, or an empty string if no data could be fetched within the
+        time budget.
+
+        Data collected (all via yfinance, free, no API key):
+          - Per-ticker: price, day change %, volume, vs 20/50 MA
+          - Macro: SPX change %, VIX level
+        """
+        tickers = [t.strip().upper() for t in tickers_field.split(",") if t.strip()]
+        # Filter to valid ticker-like strings
+        tickers = [t for t in tickers if t.isalpha() and 1 <= len(t) <= 5]
+        if not tickers:
+            return ""
+
+        symbols = tickers + [_SPX_SYMBOL, _VIX_SYMBOL]
+        end = datetime.now() + timedelta(days=1)
+        start = datetime.now() - timedelta(days=90)  # enough for 20/50 MA
+
+        try:
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(
+                None,
+                lambda: yf.download(
+                    symbols, start=start.strftime("%Y-%m-%d"),
+                    end=end.strftime("%Y-%m-%d"),
+                    progress=False, auto_adjust=True,
+                ),
+            )
+        except Exception:
+            return ""
+
+        if data is None or data.empty:
+            return ""
+
+        lines = ["[REAL-TIME MARKET DATA — use this to ground your analysis]"]
+        closes = data.get("Close")
+
+        # Per-ticker snapshot
+        for ticker in tickers:
+            try:
+                if len(symbols) == 1:
+                    series = closes
+                else:
+                    series = closes[ticker] if ticker in closes.columns else None
+                if series is None or series.dropna().empty:
+                    continue
+                series = series.dropna()
+                price = round(float(series.iloc[-1]), 2)
+                prev = float(series.iloc[-2]) if len(series) >= 2 else price
+                chg_pct = round((price - prev) / prev * 100, 2) if prev != 0 else 0.0
+
+                # Moving averages
+                ma20 = round(float(series.rolling(20).mean().iloc[-1]), 2) if len(series) >= 20 else None
+                ma50 = round(float(series.rolling(50).mean().iloc[-1]), 2) if len(series) >= 50 else None
+                vs_ma20 = ""
+                if ma20 and ma20 != 0:
+                    vs_ma20 = f" ({'above' if price > ma20 else 'below'} 20MA {ma20})"
+                vs_ma50 = ""
+                if ma50 and ma50 != 0:
+                    vs_ma50 = f" ({'above' if price > ma50 else 'below'} 50MA {ma50})"
+
+                # Volume spike
+                vol_ok = False
+                try:
+                    vol_series = data.get("Volume")
+                    if vol_series is not None:
+                        if len(symbols) == 1:
+                            vol = vol_series
+                        else:
+                            vol = vol_series[ticker] if ticker in vol_series.columns else None
+                        if vol is not None and not vol.dropna().empty:
+                            vol = vol.dropna()
+                            latest_vol = int(vol.iloc[-1])
+                            avg_vol = int(vol.rolling(20).mean().iloc[-1]) if len(vol) >= 20 else latest_vol
+                            vol_ratio = round(latest_vol / avg_vol, 1) if avg_vol > 0 else 1.0
+                            vol_str = f" | Vol {latest_vol:,} ({vol_ratio}x avg)"
+                            vol_ok = True
+                except Exception:
+                    pass
+                if not vol_ok:
+                    vol_str = ""
+
+                lines.append(
+                    f"  {ticker}: ${price} ({chg_pct:+.2f}% today){vs_ma20}{vs_ma50}{vol_str}"
+                )
+            except Exception:
+                continue
+
+        # Macro snapshot (SPX + VIX)
+        try:
+            for sym, label in [(_SPX_SYMBOL, "SPX"), (_VIX_SYMBOL, "VIX")]:
+                if len(symbols) == 1:
+                    s = closes
+                else:
+                    s = closes[sym] if sym in closes.columns else None
+                if s is not None and not s.dropna().empty:
+                    s = s.dropna()
+                    val = round(float(s.iloc[-1]), 2)
+                    prev_val = float(s.iloc[-2]) if len(s) >= 2 else val
+                    chg = round((val - prev_val) / prev_val * 100, 2) if prev_val != 0 else 0.0
+                    lines.append(f"  {label}: {val} ({chg:+.2f}%)")
+        except Exception:
+            pass
+
+        if len(lines) == 1:
+            return ""  # no data collected
+
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
 
@@ -244,6 +372,10 @@ class DeepLane:
 
         Uses the user's custom analysis framework if set via /analyze set,
         otherwise defaults to the built-in 4-step CoT prompt.
+
+        Before calling the LLM, fetches real-time market data (price,
+        technicals, macro) for the tickers mentioned in the news so the
+        analysis is grounded in current conditions, not just the text.
 
         Returns the LLM's analysis text, or fallback on failure.
         """
@@ -262,15 +394,33 @@ class DeepLane:
             except Exception:
                 pass
 
-        # Get training context from knowledge base
-        extra_context = ""
+        # Build extra context: knowledge base + real-time market data
+        extra_parts = []
+
+        # 1. Training / knowledge base context
         if self.db:
             try:
                 ctx = self.db.get_training_context(max_chars=1500)
                 if ctx:
-                    extra_context = f"Knowledge Base (investor's framework):\n{ctx}"
+                    extra_parts.append(f"Knowledge Base (investor's framework):\n{ctx}")
             except Exception:
                 pass
+
+        # 2. Real-time market enrichment (with hard timeout)
+        tickers = item.tickers_found or ""
+        try:
+            enrichment = await asyncio.wait_for(
+                self._fetch_market_enrichment(tickers),
+                timeout=_ENRICH_TIMEOUT,
+            )
+            if enrichment:
+                extra_parts.append(enrichment)
+        except asyncio.TimeoutError:
+            logger.debug("Market enrichment timed out — proceeding without it")
+        except Exception as e:
+            logger.debug("Market enrichment failed: %s — proceeding without it", e)
+
+        extra_context = "\n\n".join(extra_parts) if extra_parts else ""
 
         # Use custom framework or default
         template = custom_framework if custom_framework else ANALYSIS_PROMPT

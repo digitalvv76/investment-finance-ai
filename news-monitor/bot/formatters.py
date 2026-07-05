@@ -1,5 +1,6 @@
 """Message formatters for Telegram Bot output — all in Chinese."""
 
+import os
 from typing import Dict, List, Optional
 
 # ---------------------------------------------------------------------------
@@ -312,6 +313,7 @@ def format_pushover_alert(item: dict, title_cn: str = "",
     tickers = item.get("tickers_found", "")
     macro = item.get("macro_tags", "")
     url = item.get("url", "")
+    news_id = item.get("id", 0)
 
     source_cn = _translate_source(source)
 
@@ -319,7 +321,7 @@ def format_pushover_alert(item: dict, title_cn: str = "",
     display_title = title_cn if title_cn else title
     push_title = f"📰 {source_cn}：{display_title}"[:250]
 
-    # Body: analyst note → ETFs → URL → impact score at bottom
+    # Body: analyst note → ETFs → links → impact score at bottom
     parts = []
 
     # Analyst note
@@ -334,10 +336,17 @@ def format_pushover_alert(item: dict, title_cn: str = "",
             parts.append("")
         parts.append(etf_line)
 
+    # Action links
+    links = []
+    if news_id:
+        dash_url = os.environ.get("WEB_DASHBOARD_URL", "http://localhost:8080")
+        links.append(f'<a href="{dash_url}/api/news/{news_id}/analyze">🔍 深度分析</a>')
     if url:
+        links.append(f'<a href="{url}">📎 阅读原文</a>')
+    if links:
         if parts:
             parts.append("")
-        parts.append(f"🔗 {url}")
+        parts.append(" · ".join(links))
 
     # Impact score + confidence — at the bottom
     if impact_score > 0:

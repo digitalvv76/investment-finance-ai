@@ -37,6 +37,7 @@ from web.routes import (
     impact_latest, impact_health, impact_stats,
     impact_calibration, impact_prompts, impact_detail, impact_outcomes,
     impact_health_events,
+    deep_analysis_handler, deep_analysis_start, deep_analysis_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ class WebDashboard:
         curator=None,
         trainer=None,
         learner=None,
+        deep_lane=None,
         port: int = 8080,
         host: str = "0.0.0.0",
     ) -> None:
@@ -63,6 +65,7 @@ class WebDashboard:
         self.curator = curator
         self.trainer = trainer
         self.learner = learner
+        self.deep_lane = deep_lane
         self.port = port
         self.host = host
 
@@ -84,6 +87,7 @@ class WebDashboard:
         app["curator"] = self.curator
         app["trainer"] = self.trainer
         app["learner"] = self.learner
+        app["deep_lane"] = self.deep_lane
         app["sse_manager"] = self._sse
         app["impact_evaluator"] = getattr(self, "impact_evaluator", None)
 
@@ -139,6 +143,9 @@ class WebDashboard:
         app.router.add_get("/api/impact/events", impact_health_events)
         app.router.add_get("/api/impact/{id}", impact_detail)
         app.router.add_get("/api/impact/{id}/outcomes", impact_outcomes)
+        app.router.add_get("/api/news/{id}/analyze", deep_analysis_handler)
+        app.router.add_post("/api/news/{id}/analyze/start", deep_analysis_start)
+        app.router.add_get("/api/news/{id}/analyze/result", deep_analysis_result)
 
         # ---- Static files ----
         static_dir = _HERE / "static"

@@ -178,8 +178,11 @@ _THREAT_PATTERN = '|'.join(re.escape(a) for a in (COMPETITIVE_THREAT_CN + COMPET
 
 # Pattern 2a: NVIDIA/Huang + investment action → nvda_investment
 # Matches: "英伟达入股XX公司" or "黄仁勋领投YY B轮"
+# 80-char window for English (e.g. "Jensen Huang, the CEO of NVIDIA, announced
+# yesterday that the company would invest $500M in..."), 30 chars is plenty for
+# compact Chinese but breaks on English sentences with appositives/clauses.
 NVDA_ACTION_RE = re.compile(
-    rf'({_NVDA_PATTERN}).{{0,30}}?({_ACTION_PATTERN}).{{0,30}}?',
+    rf'({_NVDA_PATTERN}).{{0,80}}?({_ACTION_PATTERN}).{{0,80}}?',
     re.IGNORECASE
 )
 

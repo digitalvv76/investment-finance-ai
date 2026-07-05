@@ -160,20 +160,59 @@ class ImpactEvaluator:
     SDK_TIMEOUT = 30.0
     HARD_TIMEOUT = 45.0
 
+    # Provider configs: (env_key, display_name, is_openai_compat, base_url)
+    _PROVIDERS = [
+        ("DEEPSEEK_API_KEY",   "deepseek",  True,  "https://api.deepseek.com"),
+        ("ANTHROPIC_API_KEY",  "anthropic", False, None),
+    ]
+
     def __init__(self):
         self.health = HealthMonitor()
-        self._client = None
+        self._clients: dict[str, object] = {}       # provider_name → client
+        self._last_provider: str = ""                # which provider served the last successful call
 
-    def _get_client(self):
-        if self._client is None:
-            api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-            if api_key:
-                self._client = OpenAI(
+    @property
+    def last_provider(self) -> str:
+        return self._last_provider
+
+    def _get_client(self, provider_name: str):
+        """Get or create an LLM client for the named provider.
+
+        Returns None if the required API key is not set.
+        """
+        if provider_name in self._clients:
+            return self._clients[provider_name]
+
+        for env_key, name, is_openai, base_url in self._PROVIDERS:
+            if name != provider_name:
+                continue
+            api_key = os.environ.get(env_key, "")
+            if not api_key:
+                return None
+            if is_openai:
+                client = OpenAI(
                     api_key=api_key,
-                    base_url="https://api.deepseek.com",
+                    base_url=base_url,
                     timeout=self.SDK_TIMEOUT,
                 )
-        return self._client
+            else:
+                import anthropic
+                client = anthropic.Anthropic(
+                    api_key=api_key,
+                    timeout=self.SDK_TIMEOUT,
+                )
+            self._clients[provider_name] = client
+            return client
+
+        return None
+
+    def _available_providers(self) -> list[str]:
+        """Return list of provider names that have API keys configured."""
+        available = []
+        for env_key, name, _, _ in self._PROVIDERS:
+            if os.environ.get(env_key, ""):
+                available.append(name)
+        return available
 
     async def evaluate(self, item: NewsItem, market_context: str = "",
                        calibration_hint: str = "",
@@ -199,53 +238,57 @@ class ImpactEvaluator:
             f"Content: {item.content_snippet[:800]}\n"
         )
 
-        # 3. LLM call with retry (API failures + hard timeout)
+        # 3. LLM call: primary → retry once → fallback to Anthropic
+        providers = self._available_providers()
+        if not providers:
+            logger.warning("ImpactEval: no LLM provider configured (set DEEPSEEK_API_KEY or ANTHROPIC_API_KEY)")
+            self.health.record_failure("no_client")
+            return None
+
         raw = None
         t0 = time.monotonic()
-        for attempt in range(2):
-            try:
-                client = self._get_client()
-                if not client:
-                    logger.warning("ImpactEval: no LLM client available")
-                    self.health.record_failure("no_client")
-                    return None
+        primary = providers[0]
+        fallback = providers[1] if len(providers) > 1 else None
 
-                # Run synchronous OpenAI SDK in a thread to avoid blocking event loop.
-                # HARD_TIMEOUT guards against hangs (network dropout, server overload).
-                resp = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        client.chat.completions.create,
-                        model=os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        temperature=0.3,
-                        max_tokens=1200,
-                    ),
-                    timeout=self.HARD_TIMEOUT,
+        for provider_name in ([primary] + ([fallback] if fallback else [])):
+            client = self._get_client(provider_name)
+            if not client:
+                continue
+
+            for attempt in range(2):
+                try:
+                    resp = await self._call_llm(
+                        client, provider_name, system_prompt, user_prompt,
+                    )
+                    raw = resp
+                    self._last_provider = provider_name
+                    break  # success
+                except asyncio.TimeoutError:
+                    logger.error(
+                        "ImpactEval %s attempt %d: timed out after %.0fs",
+                        provider_name, attempt + 1, self.HARD_TIMEOUT,
+                    )
+                    if attempt == 0:
+                        continue
+                except Exception as e:
+                    logger.error(
+                        "ImpactEval %s attempt %d failed: %s",
+                        provider_name, attempt + 1, e,
+                    )
+                    if attempt == 0:
+                        continue
+
+            if raw is not None:
+                break  # success — don't try fallback
+
+            if fallback and provider_name == primary:
+                logger.warning(
+                    "ImpactEval: %s exhausted, falling back to %s",
+                    primary, fallback,
                 )
-                raw = resp.choices[0].message.content
-                break  # API call succeeded, exit retry loop
-
-            except asyncio.TimeoutError:
-                logger.error(
-                    "ImpactEval attempt %d: LLM call timed out after %.0fs",
-                    attempt + 1, self.HARD_TIMEOUT,
-                )
-                if attempt == 0:
-                    continue  # retry once
-                self.health.record_failure("hard_timeout")
-                return None
-
-            except Exception as e:
-                logger.error("ImpactEval API attempt %d failed: %s", attempt + 1, e)
-                if attempt == 0:
-                    continue  # retry once
-                self.health.record_failure(str(e)[:200])
-                return None
 
         if raw is None:
+            self.health.record_failure("all_providers_exhausted")
             return None
 
         latency = (time.monotonic() - t0) * 1000
@@ -264,6 +307,41 @@ class ImpactEvaluator:
             logger.error("ImpactEval parse failed: %s", e)
             self.health.record_failure(f"parse_error: {str(e)[:200]}")
             return None
+
+    async def _call_llm(self, client, provider_name: str,
+                        system_prompt: str, user_prompt: str) -> str:
+        """Call a single LLM provider. Returns raw response text or raises."""
+        if provider_name == "deepseek":
+            model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+            resp = await asyncio.wait_for(
+                asyncio.to_thread(
+                    client.chat.completions.create,
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=1200,
+                ),
+                timeout=self.HARD_TIMEOUT,
+            )
+            return resp.choices[0].message.content
+        else:  # anthropic
+            import anthropic
+            model = os.environ.get("ANTHROPIC_MODEL", "claude-fable-5")
+            resp = await asyncio.wait_for(
+                asyncio.to_thread(
+                    client.messages.create,
+                    model=model,
+                    max_tokens=1200,
+                    messages=[{"role": "user", "content": system_prompt + "\n\n" + user_prompt}],
+                ),
+                timeout=self.HARD_TIMEOUT,
+            )
+            if resp.content and len(resp.content) > 0:
+                return resp.content[0].text.strip()
+            raise RuntimeError("Anthropic returned empty response")
 
     def _parse_response(self, raw: str, prompt_version: str,
                         latency_ms: int) -> Optional[ImpactAssessment]:

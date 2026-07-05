@@ -56,3 +56,4 @@ scripts/*.pyc
 *.swo
 
 .vercel
+opencli-extension-v1.0.22/

@@ -84,7 +84,21 @@ def _newsitem_from_dict(news_dict: dict) -> NewsItem:
 # Command handlers
 # ═══════════════════════════════════════════════════════════════════════════
 
-async def cmd_start(update, context, db: Database):
+async def cmd_start(update, context, db: Database, deep_lane=None, **kwargs):
+    """Handle /start command, including deep-link triggered analysis.
+
+    Telegram deep links use the format:
+      https://t.me/NewsmoniBbot?start=analyze_123
+
+    When a user opens this link, Telegram sends ``/start analyze_123``
+    to the bot.  We intercept the ``analyze_`` prefix to trigger on-demand
+    deep analysis for the given news item.
+    """
+    args = context.args or []
+    if args and args[0].startswith("analyze_"):
+        await _handle_deep_link_analyze(update, args[0], db, deep_lane)
+        return
+
     await update.message.reply_text(
         "\U0001f4ca 金融新闻监控系统\n\n"
         "可用命令：\n"
@@ -101,6 +115,43 @@ async def cmd_start(update, context, db: Database):
         "/daily   — 生成每日简报\n"
         "/help    — 显示此消息"
     )
+
+
+async def _handle_deep_link_analyze(update, param: str, db, deep_lane):
+    """Handle a deep-link triggered analysis request.
+
+    Param format: ``analyze_NEWS_ID`` (e.g. ``analyze_123``).
+    """
+    try:
+        news_id = int(param.split("_", 1)[1])
+    except (IndexError, ValueError):
+        await update.message.reply_text("❌ 无效的分析请求。")
+        return
+
+    if not deep_lane:
+        await update.message.reply_text("⚠️ 深度分析引擎未就绪。")
+        return
+
+    news_dict = db.get_news_by_id(news_id)
+    if not news_dict:
+        await update.message.reply_text(f"❌ 新闻 #{news_id} 不存在。")
+        return
+
+    await update.message.reply_text(f"🔍 正在深度分析：{news_dict.get('title', '')[:80]}...")
+
+    try:
+        from storage.models import NewsItem
+        item = _newsitem_from_dict(news_dict)
+        result = await deep_lane.process_on_demand(item)
+        if result.llm_analysis:
+            await update.message.reply_text(
+                f"📊 深度分析：{news_dict.get('title', '')[:80]}\n\n{result.llm_analysis}"
+            )
+        else:
+            await update.message.reply_text("分析完成，但未获取到详细洞察。")
+    except Exception as e:
+        logger.error(f"Deep-link analysis failed for news #{news_id}: {e}")
+        await update.message.reply_text(f"❌ 分析失败：{e}")
 
 
 async def cmd_status(update, context, db: Database):
@@ -764,7 +815,7 @@ def register_handlers(app: Application, db: Database,
 
     H = lambda fn, **kw: _make_handler(fn, db, **(kw or {}))
 
-    app.add_handler(CommandHandler("start",     H(cmd_start)))
+    app.add_handler(CommandHandler("start",     H(cmd_start, **extras)))
     app.add_handler(CommandHandler("status",    H(cmd_status)))
     app.add_handler(CommandHandler("filter",    H(cmd_filter)))
     app.add_handler(CommandHandler("mute",      H(cmd_mute)))

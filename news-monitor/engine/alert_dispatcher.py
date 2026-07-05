@@ -275,6 +275,7 @@ class AlertDispatcher:
             "message": body,
             "priority": priority,
             "sound": sound,
+            "html": 1,  # enables <a href> links in the message body
             **kwargs,
         }
 
@@ -283,7 +284,7 @@ class AlertDispatcher:
             payload.setdefault("retry", 30)    # retry every 30 seconds (more aggressive)
             payload.setdefault("expire", 3600)  # stop after 1 hour
 
-        # URL for deep link
+        # URL for deep link (supplementary — body already has HTML links)
         if url:
             payload["url"] = url
             payload["url_title"] = "阅读原文"

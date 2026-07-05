@@ -12,6 +12,7 @@ import asyncio
 import logging
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # Load .env from repo root BEFORE any module reads os.environ.
@@ -162,7 +163,7 @@ class NewsMonitor:
             from web.server import WebDashboard
             self.web_dashboard = WebDashboard(
                 db=self.db, curator=self.curator, trainer=self.trainer,
-                learner=self.learner, port=web_port,
+                learner=self.learner, deep_lane=self.deep_lane, port=web_port,
             )
             # Make evaluator available for /api/impact/health endpoint
             self.web_dashboard.impact_evaluator = self.impact_evaluator
@@ -359,12 +360,26 @@ class NewsMonitor:
             logger.error("ImpactCollector[%s] failed: %s", window, e)
 
     async def _run_collector_loop(self):
-        """Run collector at 15m/1h/4h intervals."""
+        """Run impact collector at 15m/1h/4h intervals.
+
+        Each window fires independently — 15m runs every 15 min, 1h every
+        60 min, 4h every 240 min.  Assessments are only collected when their
+        created_at is old enough for the target window.
+        """
+        last_1h = datetime.now()
+        last_4h = datetime.now()
         while True:
             await asyncio.sleep(15 * 60)
             await self._collect_impact_outcomes("15m")
-            # 1h and 4h windows are handled by a separate check
-            # that looks at created_at age
+
+            now = datetime.now()
+            if (now - last_1h).total_seconds() >= 3600:
+                await self._collect_impact_outcomes("1h")
+                last_1h = now
+
+            if (now - last_4h).total_seconds() >= 14400:
+                await self._collect_impact_outcomes("4h")
+                last_4h = now
 
     # -----------------------------------------------------------------
     # Lifecycle

@@ -90,21 +90,24 @@ class TestImpactCollector:
         c = ImpactCollector.__new__(ImpactCollector)
         score = c._normalize_score(
             spx_change=-2.1, vix_change=18.0,
-            sector_count=5, bonds_moved=True, fx_moved=False, commodities_moved=True
+            sector_changes={"XLK": 2.5, "XLF": 1.8, "XLE": -0.9, "XLV": 0.6, "XLI": 1.2},
+            ticker_changes={"NVDA": 5.2, "AMD": 3.1},
+            breadth="broad_market",
         )
-        # spx: min(2.1/3,1)*100=70 *0.4 = 28
-        # vix: min(18/15,1)*100=100 *0.25 = 25
-        # sector: 5/11*100=45.5 *0.2 = 9.1
-        # cross: (1+0+1)/3*100=66.7 *0.15 = 10
-        # total ≈ 72
-        assert 65 < score < 80
+        # spx: min(2.1/3,1)*100*0.35 = 24.5
+        # vix: min(18/15,1)*100*0.20 = 20.0
+        # sector_breadth: 5 sectors/6 * 100 * 0.20 = 16.7
+        # ticker: avg(|5.2|,|3.1|)/8*100*0.25 = 13.0
+        # breadth_mult = 0.85
+        # raw ≈ (24.5 + 20 + 16.7 + 13) * 0.85 ≈ 63
+        assert 55 < score < 75
 
     def test_normalize_actual_score_zero(self):
         from engine.impact_collector import ImpactCollector
         c = ImpactCollector.__new__(ImpactCollector)
         score = c._normalize_score(
-            spx_change=0, vix_change=0, sector_count=0,
-            bonds_moved=False, fx_moved=False, commodities_moved=False
+            spx_change=0, vix_change=0,
+            sector_changes={}, ticker_changes={}, breadth="single_stock",
         )
         assert score == 0.0
 
@@ -112,9 +115,18 @@ class TestImpactCollector:
         from engine.impact_collector import ImpactCollector
         c = ImpactCollector.__new__(ImpactCollector)
         score = c._normalize_score(
-            spx_change=-5.0, vix_change=30.0, sector_count=11,
-            bonds_moved=True, fx_moved=True, commodities_moved=True
+            spx_change=-5.0, vix_change=30.0,
+            sector_changes={"XLK": 7, "XLF": 5, "XLE": 4, "XLV": 3, "XLI": 1.5, "XLP": 0.8,
+                            "XLU": 0.7, "XLY": 2, "XLC": 3, "XLRE": 1, "XLB": 0.9},
+            ticker_changes={"NVDA": 15, "AAPL": 8},
+            breadth="cross_asset",
         )
+        # spx: min(5/3,1)*100*0.35 = 35
+        # vix: min(30/15,1)*100*0.20 = 20
+        # sector_breadth: min(11/6,1)*100*0.20 = 20
+        # ticker: min(avg(15,8)/8,1)*100*0.25 = 25
+        # breadth_mult = 1.0
+        # raw = (35+20+20+25) * 1.0 = 100 → capped at 100
         assert score == 100.0
 
 

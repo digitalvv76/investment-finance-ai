@@ -70,6 +70,6 @@ impact_push:
 
 # Web dashboard configuration
 web:
-  enabled: false         # Set to true or set WEB_PORT env var
+  enabled: true         # Set to true or set WEB_PORT env var
   port: 8080
   host: "0.0.0.0"
