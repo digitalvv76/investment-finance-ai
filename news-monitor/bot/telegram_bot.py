@@ -8,15 +8,11 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 from bot.formatters import format_fast_alert, format_deep_analysis, build_feedback_keyboard
 from bot.handlers import register_handlers
+from bot.translator import get_translator
 from storage.database import Database
 from config.loader import ConfigLoader
 
 logger = logging.getLogger(__name__)
-
-TRANSLATE_PROMPT = """Translate this financial news headline to Chinese. Keep it concise and accurate. Preserve ticker symbols (like NVDA, AAPL) as-is. Only output the Chinese translation, nothing else.
-
-English: {text}
-Chinese:"""
 
 
 class NewsBot:
@@ -29,22 +25,7 @@ class NewsBot:
         self.curator = curator
         self.trainer = trainer
         self._app: Optional[Application] = None
-        self._translate_client = None
-
-    def _get_translate_client(self):
-        """Lazy-init DeepSeek client for translation."""
-        if self._translate_client is None:
-            api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-            if api_key:
-                try:
-                    from openai import OpenAI
-                    self._translate_client = OpenAI(
-                        api_key=api_key,
-                        base_url="https://api.deepseek.com",
-                    )
-                except ImportError:
-                    pass
-        return self._translate_client
+        self._translator = get_translator()
 
     async def start(self):
         """Start the bot in polling mode."""
@@ -100,7 +81,7 @@ class NewsBot:
             return  # Don't send CN if EN failed
 
         # --- Chinese translation ---
-        cn_title = await self._translate(title)
+        cn_title = await self._translator.translate(title)
         if cn_title:
             cn_parts = [f"\U0001f1e8\U0001f1f3 {cn_title}"]
             cn_parts.append(f"来源: {source}")
@@ -119,27 +100,6 @@ class NewsBot:
                 )
             except Exception as e:
                 logger.error(f"Push failed (CN): {e}")
-
-    async def _translate(self, text: str) -> str:
-        """Translate English text to Chinese via DeepSeek."""
-        if not text:
-            return ""
-        client = self._get_translate_client()
-        if not client:
-            return ""
-        try:
-            prompt = TRANSLATE_PROMPT.format(text=text[:500])
-            response = client.chat.completions.create(
-                model="deepseek-chat",
-                max_tokens=200,
-                temperature=0.1,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            if response.choices and len(response.choices) > 0:
-                return response.choices[0].message.content.strip()
-        except Exception as e:
-            logger.debug(f"Translation failed: {e}")
-        return ""
 
     async def push_deep_analysis(self, item: dict):
         """Push deep analysis as a follow-up message."""

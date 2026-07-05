@@ -246,8 +246,16 @@ class AlertDispatcher:
             sound: Sound name from Pushover's sound library.
         """
         from bot.formatters import format_pushover_alert
+        from bot.translator import get_translator
 
-        title, body = format_pushover_alert(item)
+        # Translate title to Chinese via DeepSeek
+        title_en = item.get("title", "")
+        title_cn = ""
+        if title_en:
+            translator = get_translator()
+            title_cn = await translator.translate(title_en)
+
+        title, body = format_pushover_alert(item, title_cn=title_cn)
         url = item.get("url", "")
 
         payload = {

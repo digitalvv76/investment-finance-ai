@@ -180,8 +180,12 @@ async def test_pushover_emergency_payload():
         mock_resp.status = 200
         mock_post.return_value.__aenter__.return_value = mock_resp
 
-        result = await dispatcher._pushover_emergency(item)
-        assert result is True
+        # Mock the translator to return a known Chinese string (avoids real API call)
+        with patch("bot.translator.TitleTranslator.translate", new_callable=AsyncMock) as mock_translate:
+            mock_translate.return_value = "市场崩盘：美联储紧急会议"
+
+            result = await dispatcher._pushover_emergency(item)
+            assert result is True
 
         call_args = mock_post.call_args
         payload = call_args[1]["json"]
@@ -189,10 +193,10 @@ async def test_pushover_emergency_payload():
         assert payload["sound"] == "spacealarm"
         assert payload["retry"] == 30
         assert payload["expire"] == 3600
-        # Chinese-formatted title: prefix + tickers + source
+        # Title bar: prefix + tickers + source in Chinese
         assert "SPY" in payload["title"] or "SPY" in payload["message"]
-        # Body contains Chinese labels and the English title
-        assert "Market crash" in payload["message"]
+        # Body contains the Chinese-translated title, not the English original
+        assert "市场崩盘" in payload["message"]
 
 
 @pytest.mark.asyncio

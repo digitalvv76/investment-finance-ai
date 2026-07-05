@@ -186,11 +186,16 @@ def _translate_impact(impact: str) -> str:
     return impact_map.get(str(impact).lower(), str(impact))
 
 
-def format_pushover_alert(item: dict) -> tuple[str, str]:
+def format_pushover_alert(item: dict, title_cn: str = "") -> tuple[str, str]:
     """Format a Pushover notification in Chinese — returns (title, body).
 
     Pushover limits: title ≤ 250 chars, body ≤ 1024 chars.
     The format mirrors the Telegram Chinese message structure.
+
+    Args:
+        item: News item with title, source, tickers_found, macro_tags, url.
+        title_cn: Chinese translation of the title. If provided, used instead
+                  of the original English title in the body.
     """
     title = item.get("title", "")[:120]
     source = item.get("source", "未知来源")
@@ -204,13 +209,14 @@ def format_pushover_alert(item: dict) -> tuple[str, str]:
     ticker_badge = f"【{tickers}】" if tickers else ""
     push_title = f"📰 {ticker_badge}{source_cn}"
 
-    # Body: Chinese labels matching Telegram CN message format
-    parts = [f"📰 {title}"]
+    # Body: use Chinese translation if available, otherwise original title
+    display_title = title_cn if title_cn else title
+
+    parts = [f"📰 {display_title}"]
     parts.append(f"来源: {source_cn}")
     if tickers:
         parts.append(f"标的: {tickers}")
     if macro:
-        # Translate common macro tags for readability
         macro_cn = _translate_macro_tags(macro)
         parts.append(f"主题: {macro_cn}")
     if url:
