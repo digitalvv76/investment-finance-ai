@@ -324,18 +324,13 @@ def format_pushover_alert(item: dict, title_cn: str = "",
 
     parts = [f"📰 {display_title}"]
     parts.append(f"来源: {source_cn}")
-    if tickers:
-        parts.append(f"标的: {tickers}")
-    if macro:
-        macro_cn = _translate_macro_tags(macro)
-        parts.append(f"主题: {macro_cn}")
 
     # Analyst note
     note = analyst_note or item.get('analyst_note', '')
     if note:
         parts.append(f"\n{note}")
 
-    # Related ETFs
+    # Related ETFs (already includes ticker names, replaces old 标的/主题 lines)
     etf_line = _build_ticker_etf_line(tickers, macro, event_category)
     if etf_line:
         parts.append(f"\n{etf_line}")
