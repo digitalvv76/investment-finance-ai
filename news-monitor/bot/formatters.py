@@ -315,18 +315,16 @@ def format_pushover_alert(item: dict, title_cn: str = "",
 
     source_cn = _translate_source(source)
 
-    # Title: prefix + ticker badge + source
-    ticker_badge = f"【{tickers}】" if tickers else ""
-    push_title = f"📰 {ticker_badge}{source_cn}"
-
-    # Body: use Chinese translation if available, otherwise original title
+    # Title: source + Chinese title (tickers already shown in body ETF line)
     display_title = title_cn if title_cn else title
+    push_title = f"📰 {source_cn}：{display_title}"[:250]
 
-    parts = [f"📰 {display_title}"]
+    # Body starts from impact line (title already shown in notification card)
+    parts = []
 
     # Impact score + confidence
     if impact_score > 0:
-        impact_line = f"\n💥 冲击: {impact_score}分"
+        impact_line = f"💥 冲击: {impact_score}分"
         if confidence > 0:
             impact_line += f" | 置信度: {confidence}%"
         parts.append(impact_line)
@@ -344,7 +342,11 @@ def format_pushover_alert(item: dict, title_cn: str = "",
     if url:
         parts.append(f"🔗 {url}")
 
-    return push_title[:250], "\n".join(parts)[:1024]
+    body = "\n".join(parts)[:1024]
+    # Fallback: if nothing else to show, at least show the title
+    if not body.strip():
+        body = display_title[:1024]
+    return push_title[:250], body
 
 
 def _translate_macro_tags(macro_tags: str) -> str:

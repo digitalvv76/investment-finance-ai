@@ -173,6 +173,8 @@ async def test_pushover_emergency_payload():
         "url": "https://example.com",
         "tickers_found": "SPY,QQQ",
         "macro_tags": "monetary_policy",
+        "_impact_score": 95,
+        "_confidence": 88,
     }
 
     with patch("aiohttp.ClientSession.post") as mock_post:
@@ -193,10 +195,12 @@ async def test_pushover_emergency_payload():
         assert payload["sound"] == "spacealarm"
         assert payload["retry"] == 30
         assert payload["expire"] == 3600
-        # Title bar: prefix + tickers + source in Chinese
-        assert "SPY" in payload["title"] or "SPY" in payload["message"]
-        # Body contains the Chinese-translated title, not the English original
-        assert "市场崩盘" in payload["message"]
+        # Title: source + Chinese headline (tickers in body ETF line)
+        assert "市场崩盘" in payload["title"]
+        # Body: starts with impact score, includes ETF line with tickers
+        assert "冲击: 95分" in payload["message"]
+        assert "置信度: 88%" in payload["message"]
+        assert "SPY" in payload["message"]
 
 
 @pytest.mark.asyncio
