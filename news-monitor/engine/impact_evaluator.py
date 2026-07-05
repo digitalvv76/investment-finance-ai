@@ -289,6 +289,7 @@ class ImpactEvaluator:
             similar_events=json.dumps(data.get("similar_historical_events", [])),
             expected_moves=json.dumps(data.get("expected_asset_moves", {})),
             calibration_note=str(data.get("calibration_note", "")),
+            analyst_note=str(data.get("analyst_note", "")),
             prompt_version=prompt_version,
             latency_ms=latency_ms,
         )

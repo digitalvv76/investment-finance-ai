@@ -90,6 +90,7 @@ class ImpactAssessment:
     similar_events: str = ""            # JSON array
     expected_moves: str = ""            # JSON dict
     calibration_note: str = ""
+    analyst_note: str = ""              # 2-4 sentence analyst-style narrative in Chinese
     low_confidence: bool = False
     prompt_version: str = "v1"
     latency_ms: int = 0

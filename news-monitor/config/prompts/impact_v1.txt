@@ -44,5 +44,6 @@ OUTPUT FORMAT (strict JSON, no markdown wrapping):
     "fx": "<direction> <magnitude>",
     "commodities": "<direction> <magnitude>"
   },
-  "calibration_note": "Based on past assessments, this evaluator tends to [over/under]estimate [type] events by ~[X] points"
+  "calibration_note": "Based on past assessments, this evaluator tends to [over/under]estimate [type] events by ~[X] points",
+  "analyst_note": "以买方股票分析师口吻，用2-4句中文写出对此事件的判断。叙事化行文，包含：发生了什么 → 为什么重要 → 投资含义。使用'我们认为'、'建议关注'、'值得留意'等分析师用语。不要罗列数据，要写出判断。"
 }

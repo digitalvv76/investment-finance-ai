@@ -112,6 +112,7 @@ class Database:
                     similar_events TEXT DEFAULT '',
                     expected_moves TEXT DEFAULT '',
                     calibration_note TEXT DEFAULT '',
+                    analyst_note TEXT DEFAULT '',
                     low_confidence INTEGER DEFAULT 0,
                     prompt_version TEXT DEFAULT 'v1',
                     latency_ms INTEGER DEFAULT 0,
@@ -150,6 +151,11 @@ class Database:
                 );
                 CREATE INDEX IF NOT EXISTS idx_health_type ON health_events(event_type);
             """)
+            # Migration: add analyst_note column to existing databases
+            try:
+                conn.execute("ALTER TABLE impact_assessments ADD COLUMN analyst_note TEXT DEFAULT ''")
+            except Exception:
+                pass  # column already exists
 
     def insert_news(self, item: NewsItem) -> int:
         with self._get_conn() as conn:
@@ -291,13 +297,13 @@ class Database:
                 INSERT INTO impact_assessments
                 (news_id, impact_score, confidence, event_category, surprise_level,
                  breadth, reasoning_chain, similar_events, expected_moves,
-                 calibration_note, low_confidence, prompt_version, latency_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 calibration_note, analyst_note, low_confidence, prompt_version, latency_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 a.news_id, a.impact_score, a.confidence, a.event_category,
                 a.surprise_level, a.breadth, a.reasoning_chain, a.similar_events,
-                a.expected_moves, a.calibration_note, int(a.low_confidence),
-                a.prompt_version, a.latency_ms
+                a.expected_moves, a.calibration_note, a.analyst_note,
+                int(a.low_confidence), a.prompt_version, a.latency_ms
             ))
             a.id = c.lastrowid
             return c.lastrowid

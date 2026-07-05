@@ -48,8 +48,14 @@ class NewsBot:
             await self._app.shutdown()
         logger.info("Telegram bot stopped")
 
-    async def push_alert(self, item: dict):
-        """Push a fast lane alert — English + Chinese translation."""
+    async def push_alert(self, item: dict, analyst_note: str = "",
+                          event_category: str = ""):
+        """Push a fast lane alert — English original + Chinese translation.
+
+        The English message includes analyst note, ticker CN names, and
+        sector ETFs.  The Chinese message is a translation of the title
+        followed by the same analyst note and ETF line.
+        """
         if not self._app:
             logger.warning("Bot not initialized, can't push")
             return
@@ -64,8 +70,9 @@ class NewsBot:
         tickers = item.get('tickers_found', '')
         macro = item.get('macro_tags', '')
 
-        # --- English alert ---
-        en_text = format_fast_alert(item)
+        # --- English alert (includes analyst note + ETFs) ---
+        en_text = format_fast_alert(item, analyst_note=analyst_note,
+                                    event_category=event_category)
         keyboard = build_feedback_keyboard(item['id'])
 
         try:
@@ -89,6 +96,18 @@ class NewsBot:
                 cn_parts.append(f"标的: {tickers}")
             if macro:
                 cn_parts.append(f"主题: {macro}")
+
+            # Analyst note (same as EN version — already in Chinese)
+            note = analyst_note or item.get('analyst_note', '')
+            if note:
+                cn_parts.append(f"\n{note}")
+
+            # Related tickers + sector ETFs
+            from bot.formatters import _build_ticker_etf_line
+            etf_line = _build_ticker_etf_line(tickers, macro, event_category)
+            if etf_line:
+                cn_parts.append(f"\n{etf_line}")
+
             if url:
                 cn_parts.append(f"\U0001f517 {url}")
 

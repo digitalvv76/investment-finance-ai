@@ -278,6 +278,16 @@ class NewsMonitor:
                     level = AlertLevel.NORMAL
                     reason = f"llm_review_not_actionable (was: {reason})"
 
+            # ---- Inject analyst note + event category for push formatters ----
+            analyst_note = ""
+            event_category = ""
+            if impact_assessment:
+                analyst_note = getattr(impact_assessment, 'analyst_note', '') or ''
+                event_category = getattr(impact_assessment, 'event_category', '') or ''
+                updated['analyst_note'] = analyst_note
+                updated['_analyst_note'] = analyst_note  # for alert_dispatcher
+                updated['_event_category'] = event_category
+
             # ---- Alert dispatching ----
             if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT):
                 tg_push = self.alert_dispatcher.wrap_telegram_push(self.bot)
@@ -292,7 +302,10 @@ class NewsMonitor:
                     result.level.value, result.channels_used, result.reason,
                 )
             elif self.bot:
-                await self.bot.push_alert(updated)
+                await self.bot.push_alert(
+                    updated, analyst_note=analyst_note,
+                    event_category=event_category,
+                )
 
             # ---- Web dashboard broadcast (SSE real-time push) ---------
             if self.web_dashboard:

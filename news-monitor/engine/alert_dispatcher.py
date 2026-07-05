@@ -255,7 +255,13 @@ class AlertDispatcher:
             translator = get_translator()
             title_cn = await translator.translate(title_en)
 
-        title, body = format_pushover_alert(item, title_cn=title_cn)
+        analyst_note = item.get("_analyst_note", "")
+        event_category = item.get("_event_category", "")
+        title, body = format_pushover_alert(
+            item, title_cn=title_cn,
+            analyst_note=analyst_note,
+            event_category=event_category,
+        )
         url = item.get("url", "")
 
         payload = {

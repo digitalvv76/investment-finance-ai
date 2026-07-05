@@ -1,14 +1,109 @@
 """Message formatters for Telegram Bot output — all in Chinese."""
 
-from typing import Dict
+from typing import Dict, List, Optional
+
+# ---------------------------------------------------------------------------
+# ETF / Ticker mapping tables
+# ---------------------------------------------------------------------------
+
+# Ticker → Chinese name
+_TICKER_CN: Dict[str, str] = {
+    "NVDA": "英伟达", "AMD": "超威半导体", "INTC": "英特尔",
+    "AVGO": "博通", "TSM": "台积电", "AAPL": "苹果",
+    "MSFT": "微软", "GOOGL": "谷歌", "META": "Meta",
+    "AMZN": "亚马逊", "TSLA": "特斯拉", "JPM": "摩根大通",
+    "GS": "高盛", "BAC": "美国银行", "WFC": "富国银行",
+    "C": "花旗", "XOM": "埃克森美孚", "CVX": "雪佛龙",
+    "JNJ": "强生", "PFE": "辉瑞", "LLY": "礼来",
+    "SPY": "标普500", "QQQ": "纳指100",
+}
+
+# Ticker → related sector ETFs
+_TICKER_TO_ETF: Dict[str, List[str]] = {
+    "NVDA": ["SMH", "SOXX", "QQQ"], "AMD": ["SMH", "SOXX"],
+    "INTC": ["SMH", "SOXX"], "AVGO": ["SMH", "SOXX", "QQQ"],
+    "TSM": ["SMH", "SOXX"], "AAPL": ["QQQ", "XLK"],
+    "MSFT": ["QQQ", "XLK"], "GOOGL": ["QQQ", "XLK"],
+    "META": ["QQQ", "XLK"], "AMZN": ["QQQ", "XLK"],
+    "TSLA": ["QQQ"], "JPM": ["XLF"], "GS": ["XLF"],
+    "BAC": ["XLF"], "WFC": ["XLF"], "C": ["XLF"],
+    "XOM": ["XLE"], "CVX": ["XLE"],
+    "JNJ": ["XLV"], "PFE": ["XLV"], "LLY": ["XLV"],
+}
+
+# ETF → Chinese name
+_ETF_CN: Dict[str, str] = {
+    "SMH": "半导体", "SOXX": "半导体", "QQQ": "纳指100",
+    "SPY": "标普500", "XLK": "科技板块", "XLF": "金融板块",
+    "XLE": "能源板块", "XLV": "医疗保健", "XLI": "工业板块",
+    "TLT": "长期国债", "GLD": "黄金", "USO": "原油",
+    "IWM": "罗素2000",
+}
+
+# Event category → related ETFs (for macro/news-driven events)
+_EVENT_TO_ETF: Dict[str, List[str]] = {
+    "monetary": ["TLT", "SPY", "GLD"],
+    "geopolitical": ["GLD", "USO", "XLE"],
+    "macro_data": ["TLT", "SPY", "XLF"],
+    "CHIPS": ["SMH", "SOXX"],
+    "TARIFF": ["XLI", "XLE", "SPY"],
+    "AI": ["SMH", "QQQ", "XLK"],
+    "ENERGY": ["XLE", "USO"],
+}
 
 
-def format_fast_alert(item: dict) -> str:
+def _build_ticker_etf_line(tickers: str, macro_tags: str = "",
+                           event_category: str = "") -> str:
+    """Build a Chinese display string showing tickers, their Chinese names,
+    and related sector ETFs.  Returns empty string when nothing to show."""
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    if not ticker_list:
+        return ""
+
+    # Build ticker display with Chinese names
+    ticker_parts = []
+    etf_set: set = set()
+
+    for tk in ticker_list:
+        cn = _TICKER_CN.get(tk, "")
+        ticker_parts.append(f"{tk}({cn})" if cn else tk)
+        # Collect related ETFs
+        for etf in _TICKER_TO_ETF.get(tk, []):
+            etf_set.add(etf)
+
+    # Also add event-driven ETFs from macro_tags or event_category
+    macro_upper = macro_tags.upper() if macro_tags else ""
+    cat_lower = (event_category or "").lower()
+    for key, etfs in _EVENT_TO_ETF.items():
+        if key in macro_upper or key.lower() in cat_lower:
+            for etf in etfs:
+                etf_set.add(etf)
+
+    # Always include SPY as baseline for broad-market events
+    if cat_lower in ("monetary", "geopolitical", "macro_data"):
+        etf_set.add("SPY")
+
+    parts = [f"🎯 相关标的: {' '.join(ticker_parts)}"]
+    if etf_set:
+        etf_display = " ".join(
+            f"{e}({_ETF_CN.get(e, e)})" for e in sorted(etf_set)
+        )
+        parts.append(f"  板块ETF: {etf_display}")
+
+    return "\n".join(parts)
+
+
+def format_fast_alert(item: dict, analyst_note: str = "",
+                       event_category: str = "") -> str:
     """Format a fast lane breaking news alert — Chinese display.
 
     Expected format:
     🔔 【NVDA】彭博社
     Nvidia cuts Q3 revenue guidance amid export restrictions
+
+    [analyst note in Chinese — 2-4 sentence narrative]
+
+    🎯 相关标的: NVDA(英伟达)  板块ETF: SMH(半导体) QQQ(纳指100)
     🔗 https://bloomberg.com/...
     """
     tickers = item.get('tickers_found', '')
@@ -51,7 +146,18 @@ def format_fast_alert(item: dict) -> str:
             dir_label = {"up": "📈", "down": "📉", "flat": "➡️"}.get(direction, "")
             impact_line = f"\n💥 预估冲击: {impact_score}分 {dir_label}"
 
+    # Build message body
     msg = f"{header}\n{title}{impact_line}"
+
+    # Analyst note (from ImpactEvaluator LLM)
+    note = analyst_note or item.get('analyst_note', '')
+    if note:
+        msg += f"\n\n{note}"
+
+    # Related tickers + sector ETFs
+    etf_line = _build_ticker_etf_line(tickers, macro_tags, event_category)
+    if etf_line:
+        msg += f"\n\n{etf_line}"
 
     if url:
         msg += f"\n🔗 {url}"
@@ -186,7 +292,9 @@ def _translate_impact(impact: str) -> str:
     return impact_map.get(str(impact).lower(), str(impact))
 
 
-def format_pushover_alert(item: dict, title_cn: str = "") -> tuple[str, str]:
+def format_pushover_alert(item: dict, title_cn: str = "",
+                          analyst_note: str = "",
+                          event_category: str = "") -> tuple[str, str]:
     """Format a Pushover notification in Chinese — returns (title, body).
 
     Pushover limits: title ≤ 250 chars, body ≤ 1024 chars.
@@ -196,6 +304,8 @@ def format_pushover_alert(item: dict, title_cn: str = "") -> tuple[str, str]:
         item: News item with title, source, tickers_found, macro_tags, url.
         title_cn: Chinese translation of the title. If provided, used instead
                   of the original English title in the body.
+        analyst_note: Analyst-style narrative from ImpactEvaluator LLM.
+        event_category: Event category for ETF mapping.
     """
     title = item.get("title", "")[:120]
     source = item.get("source", "未知来源")
@@ -219,6 +329,17 @@ def format_pushover_alert(item: dict, title_cn: str = "") -> tuple[str, str]:
     if macro:
         macro_cn = _translate_macro_tags(macro)
         parts.append(f"主题: {macro_cn}")
+
+    # Analyst note
+    note = analyst_note or item.get('analyst_note', '')
+    if note:
+        parts.append(f"\n{note}")
+
+    # Related ETFs
+    etf_line = _build_ticker_etf_line(tickers, macro, event_category)
+    if etf_line:
+        parts.append(f"\n{etf_line}")
+
     if url:
         parts.append(f"🔗 {url}")
 
