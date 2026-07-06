@@ -176,10 +176,20 @@ class AlertDispatcher:
             # --- score-based classification ---
             # NOTE: priority alone can trigger CRITICAL for systemic events (bailouts, wars, etc.)
             # but earnings drama / CEO commentary without strategic signal stays at IMPORTANT.
-            if priority_score >= CRITICAL_PRIORITY:
-                level, reason = AlertLevel.CRITICAL, f"priority_score={priority_score:.2f} >= {CRITICAL_PRIORITY}"
-            elif priority_score >= IMPORTANT_PRIORITY:
-                level, reason = AlertLevel.IMPORTANT, f"priority_score={priority_score:.2f} >= {IMPORTANT_PRIORITY}"
+            #
+            # For watchlist stocks (rel_mult > 0.5), lower the IMPORTANT threshold from
+            # 0.45 to 0.35 — the user explicitly wants to know about these companies.
+            is_watchlist = rel_mult > 0.5
+            imp_threshold = 0.35 if is_watchlist else IMPORTANT_PRIORITY
+            crit_threshold = CRITICAL_PRIORITY  # same for both paths
+
+            if priority_score >= crit_threshold:
+                level, reason = AlertLevel.CRITICAL, f"priority_score={priority_score:.2f} >= {crit_threshold}"
+            elif priority_score >= imp_threshold:
+                level, reason = AlertLevel.IMPORTANT, (
+                    f"priority_score={priority_score:.2f} >= {imp_threshold}"
+                    + (" (watchlist)" if is_watchlist else "")
+                )
             else:
                 return AlertLevel.NORMAL, "routine news"
 

@@ -38,8 +38,9 @@ _ENRICH_TIMEOUT = 8.0         # total budget for all market data fetches
 _SPX_SYMBOL = "^GSPC"
 _VIX_SYMBOL = "^VIX"
 
-# Default LLM prompt template — 4-step structured Chain-of-Thought
-ANALYSIS_PROMPT = """You are a financial markets strategist serving a professional investor. Analyze this news with structured reasoning — do NOT just summarize.
+# Default LLM prompt template — concise, action-oriented flash note.
+# 150-250 words, 3 sections, single recommendation.  No academic essays.
+ANALYSIS_PROMPT = """You are a buy-side analyst writing a flash note for a portfolio manager. Be CONCISE. Be ACTIONABLE. Do NOT write an academic essay.
 
 Title: {title}
 Source: {source}
@@ -49,17 +50,20 @@ Sentiment: {sentiment} (score: {sentiment_score:.2f})
 
 {extra_context}
 
-Follow this exact 4-step structure. If you lack information for any step, state "信息不足" rather than guessing.
+Write a short flash note in Chinese with exactly these 3 sections. 150-250 words total.
 
-Step 1 — 事件定性: Classify this event. Is it Macro (interest rate / policy), Sector (supply-demand / technology), or Company-specific (earnings / management)? State the category and why. If real-time market data is provided above, note whether the current price action already reflects this news.
+CRITICAL RULES:
+- Only quote numbers that are explicitly provided in the market data above. If no real-time data is available, say "需查当前价格" rather than guessing.
+- ONLY mention tickers listed in the investor's watchlist or the news tickers. Do not invent unrelated stocks.
+- The "Action" must be ONE recommendation. Pick one and commit.
 
-Step 2 — 传导路径: Trace the impact chain. Which sectors/positions are directly affected? Through what mechanism (cost, demand, valuation multiples)? Be specific about the causal logic. Reference the real-time price data and moving averages above — are the affected tickers already at key technical levels?
+1. What happened (1-2 sentences)
 
-Step 3 — 组合映射: Map to the investor's portfolio. Given the holdings and investment rules in the knowledge base, provide 1-3 concrete action scenarios (观望 / 减仓 / 加仓) with trigger conditions for each. Use the current prices and MA positions from the market data to suggest specific entry/exit levels.
+2. Market impact (2-3 sentences)
 
-Step 4 — 置信度: Rate your analysis confidence as 高 / 中 / 低. If 低, explicitly state what information is missing and what to monitor.
+3. Action (1-2 sentences)
 
-Respond in Chinese. Be analytical, not journalistic."""
+Confidence: High/Medium/Low"""
 
 # User-customizable analysis framework (stored in DB preferences)
 DEFAULT_ANALYSIS_FRAMEWORK = "default"
@@ -263,12 +267,32 @@ class DeepLane:
           - Macro: SPX change %, VIX level
         """
         tickers = [t.strip().upper() for t in tickers_field.split(",") if t.strip()]
-        # Filter to valid ticker-like strings
         tickers = [t for t in tickers if t.isalpha() and 1 <= len(t) <= 5]
-        if not tickers:
-            return ""
 
-        symbols = tickers + [_SPX_SYMBOL, _VIX_SYMBOL]
+        # Also include watchlist tickers most likely impacted by this news
+        try:
+            from engine.relevance import _get_watchlist
+            wl = _get_watchlist()
+            related = set()
+            for wt in wl:
+                if wt in ("BTC", "ETH", "SOL"):
+                    continue  # handled via crypto suffixes below
+                related.add(wt)
+            # Add top watchlist tickers (max 5 extra to avoid rate limiting)
+            extra = list(related)[:5]
+            for t in extra:
+                if t not in tickers:
+                    tickers.append(t)
+        except Exception:
+            pass
+
+        # Map crypto tickers to yfinance symbols
+        crypto_map = {"BTC": "BTC-USD", "ETH": "ETH-USD", "SOL": "SOL-USD"}
+        symbols = []
+        for t in tickers:
+            symbols.append(crypto_map.get(t, t))
+        symbols += [_SPX_SYMBOL, _VIX_SYMBOL]
+
         end = datetime.now() + timedelta(days=1)
         start = datetime.now() - timedelta(days=90)  # enough for 20/50 MA
 
@@ -291,13 +315,15 @@ class DeepLane:
         lines = ["[REAL-TIME MARKET DATA — use this to ground your analysis]"]
         closes = data.get("Close")
 
-        # Per-ticker snapshot
+        # Per-ticker snapshot — use yfinance symbol for column lookup
+        lookup = {t: crypto_map.get(t, t) for t in tickers}
         for ticker in tickers:
             try:
+                yf_sym = lookup[ticker]
                 if len(symbols) == 1:
                     series = closes
                 else:
-                    series = closes[ticker] if ticker in closes.columns else None
+                    series = closes[yf_sym] if yf_sym in closes.columns else None
                 if series is None or series.dropna().empty:
                     continue
                 series = series.dropna()
@@ -394,15 +420,31 @@ class DeepLane:
             except Exception:
                 pass
 
-        # Build extra context: knowledge base + real-time market data
+        # Build extra context: portfolio/watchlist + knowledge base + market data
         extra_parts = []
 
-        # 1. Training / knowledge base context
+        # 1. Watchlist & portfolio — gives LLM the investor's actual holdings
+        from engine.relevance import get_portfolio_summary
+        try:
+            ps = get_portfolio_summary()
+            wl = ps.get("watchlist_tickers", [])
+            pf = ps.get("portfolio_tickers", [])
+            if wl or pf:
+                lines = ["[INVESTOR PORTFOLIO — focus your analysis here]"]
+                if pf:
+                    lines.append(f"Portfolio: {', '.join(pf)}")
+                if wl:
+                    lines.append(f"Watchlist: {', '.join(wl)}")
+                extra_parts.append("\n".join(lines))
+        except Exception:
+            pass
+
+        # 2. Training / knowledge base context
         if self.db:
             try:
-                ctx = self.db.get_training_context(max_chars=1500)
+                ctx = self.db.get_training_context(max_chars=800)
                 if ctx:
-                    extra_parts.append(f"Knowledge Base (investor's framework):\n{ctx}")
+                    extra_parts.append(f"Knowledge Base:\n{ctx}")
             except Exception:
                 pass
 

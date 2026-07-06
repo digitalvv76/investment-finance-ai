@@ -690,6 +690,68 @@ FastLane预筛选(≥0.30) → ImpactEvaluator(LLM) + EventMatcher(历史)
 
 ---
 
+## 2026-07-04 — 内容质量门禁 + 中文推送 + 个股大事件放行 🚦
+
+### 内容过滤器 (commit `875eddb`)
+- 🆕 `engine/content_filter.py` — 3 层过滤器，在 PriorityScorer 之前运行 (+622 行)
+  - **Stage A geo_market_filter**: 非美政治事件降权 (伊朗/委内瑞拉/朝鲜等 ×0.15-0.6)
+  - **Stage B content_quality_filter**: CCP 宣传 ×0.15、A 股单票噪音 ×0.3、政治八卦 ×0.3
+  - 中文来源默认 ×0.5 — 需主动证明美股关联才能拿满分
+  - 霍尔木兹海峡/原油/制裁等全球系统性信号可豁免降权
+- 🧠 **关键人物分层评分** (Tier 1/2/3)
+  - T1 市场定价者 (Jensen Huang/Powell/Warsh) → 0.15
+  - T2 市场影响者 (Musk/Buffett) → 0.10
+  - T3 政治人物 (Trump/Xi) → 0.03
+- 📱 **Telegram 消息中文化** — 来源名翻译 (彭博社/路透社/华尔街日报 等), 全部中文展示
+- 🏢 **美股大事件放行** — 巨无霸公司/FDA 审批/M&A/$1B+/CEO 变更 不受单票噪音过滤
+- 🐛 修复: `main.py:329` `def_collect` → `def _collect` 语法错误
+- 313 tests passed, 0 regression
+
+---
+
+## 2026-07-05 — 推送格式全链路升级 📱
+
+> 7 commits 密集迭代，将推送从"机器标签"升级为"分析师级别"的中文格式
+
+### Pushover 中文格式化 (commits `5bba92d` → `23a65c8`)
+
+| Commit | 说明 |
+|--------|------|
+| `5bba92d` | Pushover 全中文化 — 标题/正文/标签, 紧急警报前缀, 非美政治新闻 geo-filter 不再被战略事件绕过 |
+| `9b11f11` | 🆕 `bot/translator.py` — 共享 DeepSeek 翻译模块, Pushover 标题自动英译中, Telegram 重构复用 |
+| `0107843` | 🆕 分析师笔记 + 中文标的 + 板块 ETF 映射 — ImpactEvaluator 输出 `analyst_note`, 推送含 NVDA(英伟达) SMH(半导体) 等 |
+| `cbc012a` | 去除 Pushover 冗余行 — 标的/主题行已由 ETF 映射覆盖 |
+| `3b3523d` | 冲击分 + 置信度显示 — 去除来源/标签冗余行, Telegram+Pushover 双通道更新 |
+| `346871c` | 去除 Pushover 标题 ticker badge — 已在正文 ETF 行展示 |
+| `23a65c8` | Pushover 正文重组 — 分析师笔记置顶 (App 列表预览可见), 冲击分置底 |
+
+### 推送效果对比
+
+**升级前:**
+```
+🔔 [NVDA] BLOOMBERG
+Nvidia cuts guidance...
+来源: Bloomberg | 标的: NVDA | 主题: CHIPS
+```
+
+**升级后:**
+```
+📰 彭博社：英伟达因出口限制下调Q3营收指引
+英伟达下调Q3营收指引，幅度超出预期...
+🎯 相关标的: NVDA(英伟达)  板块ETF: SMH(半导体) QQQ(纳指100)
+🔗 bloomberg.com  ·  🔍 深度分析
+💥 冲击: 78分 | 置信度: 82%
+```
+
+### 修改文件
+- `bot/formatters.py` — 格式化为核心 (ETF 映射/中文翻译/冲击分)
+- `bot/translator.py` — 新建共享翻译模块
+- `engine/alert_dispatcher.py` — Pushover 翻译集成
+- `scripts/test_push.py` — 双通道测试脚本
+- 27 tests pass, 0 regression
+
+---
+
 ## 2026-07-06 — 深度分析升级 + 市场反馈闭环 + LLM备用 🧠
 
 ### 深度分析升级 (Telegram + Pushover Web)
@@ -753,3 +815,7 @@ FastLane预筛选(≥0.30) → ImpactEvaluator(LLM) + EventMatcher(历史)
 - 🔑 SSH 永久修复: 公钥认证 (id_ed25519) + PasswordAuthentication yes + systemctl enable sshd
 - 🐛 修复: yfinance 依赖未写入 requirements.txt (→ `cd32d73`)
 - 📱 推送验证: Telegram ✅ + Pushover ✅ 双通道正常
+
+---
+
+## 2026-07-06T16:25+08:00 · 会话开始

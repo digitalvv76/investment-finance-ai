@@ -111,19 +111,23 @@ COMPETITIVE_THREAT_EN = [
 
 ENDORSEMENT_ACTIONS_EN = [
     "endorse", "endorses", "partnership", "strategic partner", "collaboration",
-    "trillion dollar", "next trillion", "next big",
+    "trillion dollar", "trillion-dollar", "next trillion-dollar",
     "bet on", "bets on", "bet big", "bullish on", "tout", "touts", "champion",
     "joint venture", "exclusive partner",
     # Verbal market signals
     "buy their stock", "produce more", "ramp up production",
     "they are great", "reinvent", "reinventing",
     "critical partner", "key partner",
-    # Jensen-specific endorsement signals
+    # Jensen-specific endorsement signals (broad matching: verb + target company)
     "declares", "calls them", "says they", "praises", "hails",
-    "will become", "next", "elevate", "elevates",
+    "will become", "elevate", "elevates",
     "urges", "urged", "tell investors", "tells investors",
     "collaborate", "collaborates", "collaborating",
     "next major field", "the next",
+    # Catch "Jensen Huang says Marvell is doing incredible work"
+    "says", "calls", "said", "called", "is doing", "are doing",
+    "\"incredible", "\"amazing", "\"extraordinary", "\"critical",
+    "\"game-changing", "\"breakthrough",
 ]
 
 SUBSIDY_ACTIONS_CN = [
@@ -242,6 +246,9 @@ class StrategicDetector:
             # Product launches (not strategic)
             r'(发布.*(新品|产品|GPU|芯片|显卡|手机|game|游戏))',
             r'(launch|release).*(product|GPU|chip|graphics card)',
+            # Product delays / manufacturing issues (not endorsement)
+            r'(delay|delayed|snag|snags|push\s*back|postpone|reschedule)',
+            r'(manufacturing|production).*(issue|problem|snag|bottleneck|constraint)',
             # Stock price movements (not strategic)
             r'(股价|stock\s+(price|up|down|rise|fall|surge|drop))',
             # Analyst ratings (not strategic)
@@ -251,6 +258,14 @@ class StrategicDetector:
             r'(generic|仿制|drug|药品|treatment|therapy)',
             # NVIDIA's own stock movement / market cap (not endorsement of others)
             r'(NVIDIA|英伟达|NVDA).*(蒸发|暴跌|市值|股价|下跌|drop|market\s+cap|wipe)',
+            # Geopolitical sanctions (not US government investment)
+            # Bidirectional: "Iran ... sanctions" or "sanctions ... Iran"
+            r'(sanction|制裁).*(iran|north\s*korea|russia|venezuela)',
+            r'(iran|north\s*korea|russia|venezuela).*(sanction|制裁)',
+            # Sanction relief / oil export topics are geopolitical, not US investment
+            r'sanctions?\s+relief', r'oil\s+(export|inventor|shipment)',
+            r'(OPEC|opec|crude\s+oil|oil\s+price).*(iran|sanction)',
+            r'(iran|sanction).*(OPEC|opec|crude\s+oil|oil\s+price)',
         ]
     ]
 

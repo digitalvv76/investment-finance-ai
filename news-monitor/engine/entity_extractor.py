@@ -59,6 +59,14 @@ class EntityExtractor:
         # Company-name → ticker map for crypto/fintech entities that often
         # appear in news with their full name rather than the stock symbol.
         self._company_to_ticker = {
+            # Major tech — names often appear in headlines instead of tickers
+            "nvidia": "NVDA", "apple": "AAPL", "microsoft": "MSFT",
+            "google": "GOOGL", "alphabet": "GOOGL", "amazon": "AMZN",
+            "meta": "META", "tesla": "TSLA", "palantir": "PLTR",
+            "intel": "INTC", "amd": "AMD", "broadcom": "AVGO",
+            "marvell": "MRVL", "lam research": "LRCX",
+            "arm holdings": "ARM", "arm": "ARM",
+            "rocket lab": "RKLB", "spacex": "SPCX",
             # Crypto-exposed equities (publicly traded)
             "coinbase": "COIN", "microstrategy": "MSTR",
             "riot blockchain": "RIOT", "riot platforms": "RIOT",
@@ -68,6 +76,13 @@ class EntityExtractor:
             "block": "SQ", "square": "SQ",
             "affirm": "AFRM", "sofi": "SOFI",
             "robinhood": "HOOD",
+            # Nuclear / energy
+            "oklo": "OKLO", "nuscale": "SMR",
+            # Space / defense
+            "kratos": "KTOS", "ast spacemobile": "ASTS",
+            "rigetti": "RGTI", "tempus": "TEM", "nebis": "NBIS",
+            # ETFs
+            "ark innovation": "ARKK",
         }
 
         # Known entities from keywords config

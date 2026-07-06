@@ -22,6 +22,14 @@
 - **A 股数据源** — cn-finance MCP 包不存在，TradingView SHA/SHE 扫描回退方案可用但未实测
 - **Crypto trading** — Binance API key 未配置
 
+## 🔑 部署检查清单 (每次部署必做)
+
+- [ ] `scp .env` 到 ECS（Key 变更时）
+- [ ] `scp` 修改的代码文件
+- [ ] Docker rebuild (`docker compose up -d --build`)
+- [ ] 验证：`docker logs news-monitor | grep 'chat_id\|Monitor running'`
+- [ ] 新 Key 同步：`.env` → `.env.example` → `settings.json`
+
 ## ⚠️ 上次踩坑 (本次会话已修复)
 
 - HISTORY.md 漏写 7/4-7/5 共 8 个 commits → 已补全

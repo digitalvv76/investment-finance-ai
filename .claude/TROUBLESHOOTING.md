@@ -115,6 +115,19 @@ systemctl enable sshd && systemctl restart sshd
 
 ---
 
+## Telegram
+
+### chat_id 丢失 → Telegram 推送静默失败
+**症状**: HTTP 200 但手机收不到，或 `push_alert()` 静默返回无报错。
+**根因**: `preferences` 表里 `telegram_chat_id` 为空。Docker 重建时数据库 volume 可能被重置。
+**修复**: 
+1. 手动写入：`INSERT INTO preferences VALUES ('telegram_chat_id', '7305690438', datetime('now'))` 
+2. 现在启动时自动检测——`_auto_detect_chat_id()` 会调 Telegram API 找回
+**预防**: 
+- Docker volume `news_data` 持久化数据库
+- 启动时自动运行 `_auto_detect_chat_id()`
+- 每次收到 `/start` 自动更新 chat_id
+
 ## Git / 部署
 
 ### HISTORY.md 漏写导致下次会话不知道做了什么

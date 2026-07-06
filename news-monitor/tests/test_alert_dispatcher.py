@@ -68,10 +68,20 @@ def test_classify_critical_by_nvda_investment(dispatcher):
 
 
 def test_classify_nvda_endorsement_below_threshold(dispatcher):
-    """Low-confidence nvda_endorsement → NOT critical (falls to score)."""
+    """Low-confidence nvda_endorsement → NOT critical (falls to score).
+
+    With default rel_mult=1.0 (simulating watchlist stock), 0.38 >= 0.35
+    new watchlist threshold → IMPORTANT.  Previously this was NORMAL at 0.45.
+    """
     matches = [StrategicMatch("nvda_endorsement", "Jensen Huang says nice thing", 0.65)]
     level, reason = dispatcher.classify(0.38, matches)
-    assert level == AlertLevel.NORMAL  # score 0.38 < 0.45, nvda conf 0.65 < 0.70
+    assert level == AlertLevel.IMPORTANT  # score 0.38 >= watchlist threshold 0.35
+
+def test_classify_non_watchlist_below_threshold(dispatcher):
+    """Non-watchlist stock with moderate score → NORMAL."""
+    matches = [StrategicMatch("nvda_endorsement", "Jensen Huang says nice thing", 0.65)]
+    level, reason = dispatcher.classify(0.38, matches, rel_mult=0.3, has_tickers=True, is_macro=False)
+    assert level == AlertLevel.NORMAL  # rel_mult=0.3 = not in watchlist, 0.38 < 0.45
 
 
 def test_classify_gov_trumps_score(dispatcher):
@@ -82,7 +92,13 @@ def test_classify_gov_trumps_score(dispatcher):
 
 
 def test_classify_empty_matches(dispatcher):
+    """0.38 with default rel_mult=1.0 → treated as watchlist → IMPORTANT (≥0.35)."""
     level, reason = dispatcher.classify(0.38, [])
+    assert level == AlertLevel.IMPORTANT
+
+def test_classify_empty_matches_non_watchlist(dispatcher):
+    """0.38 with rel_mult=0.3 → non-watchlist → NORMAL (<0.45)."""
+    level, reason = dispatcher.classify(0.38, [], rel_mult=0.3, has_tickers=True, is_macro=False)
     assert level == AlertLevel.NORMAL
 
 
@@ -307,8 +323,9 @@ def test_end_to_end_classification_with_real_detector(strategic):
     assert level == AlertLevel.CRITICAL
     assert "gov_intervention" in reason
 
-    # Normal text → NORMAL
+    # Apple earnings — Apple in FALLBACK_TICKERS, default rel=1.0 → watchlist stock
+    # 0.38 >= 0.35 watchlist threshold → IMPORTANT
     text2 = "Apple reports quarterly earnings, stock up 3%"
     matches2 = strategic.detect(text2)
     level2, reason2 = dispatcher.classify(0.38, matches2)
-    assert level2 == AlertLevel.NORMAL
+    assert level2 == AlertLevel.IMPORTANT

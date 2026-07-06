@@ -45,6 +45,10 @@
         "BINANCE_API_KEY": "${BINANCE_API_KEY}",
         "BINANCE_SECRET_KEY": "${BINANCE_SECRET_KEY}"
       }
+    },
+    "anysearch": {
+      "type": "streamable-http",
+      "url": "https://api.anysearch.com/mcp"
     }
   }
 }

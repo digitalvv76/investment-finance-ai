@@ -42,6 +42,7 @@ services:
     environment:
       # Always enable web dashboard in container
       - WEB_PORT=8080
+      - WEB_DASHBOARD_URL=http://47.76.50.77:8080
       # Basic Auth credentials (from .env, empty = no auth)
       - WEB_USERNAME=${WEB_USERNAME:-}
       - WEB_PASSWORD=${WEB_PASSWORD:-}

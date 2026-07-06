@@ -27,6 +27,40 @@ class NewsBot:
         self._app: Optional[Application] = None
         self._translator = get_translator()
 
+    async def _auto_detect_chat_id(self):
+        """Auto-detect and persist chat_id from recent Telegram conversations.
+
+        Called once on startup when no chat_id is saved yet.  This ensures
+        the bot can push messages even if the user hasn't explicitly sent
+        /start — any prior conversation with the bot will be discovered.
+        """
+        existing = self._get_chat_id()
+        if existing:
+            logger.info("Telegram chat_id: %d (from database)", existing)
+            return
+
+        logger.info("No chat_id saved — auto-detecting from Telegram API ...")
+        try:
+            resp = await self._app.bot.get_updates(limit=10, timeout=5)
+            seen: set[int] = set()
+            for update in resp:
+                chat = update.effective_chat
+                if chat and chat.id not in seen:
+                    seen.add(chat.id)
+            if seen:
+                # Use the most recently active chat
+                chat_id = max(seen)  # higher IDs = more recent
+                self.set_chat_id(chat_id)
+                logger.info("Auto-detected chat_id: %d (saved to database)", chat_id)
+            else:
+                logger.warning(
+                    "No chat_id found — Telegram pushes will fail until "
+                    "someone sends a message to the bot.  Open Telegram, "
+                    "search for the bot, and send any message."
+                )
+        except Exception as e:
+            logger.warning("chat_id auto-detection failed: %s", e)
+
     async def start(self):
         """Start the bot in polling mode."""
         self._app = Application.builder().token(self.token).build()
@@ -34,8 +68,11 @@ class NewsBot:
         # Register command and callback handlers
         register_handlers(self._app, self.db, self.deep_lane, self.learner, self.curator, self.trainer)
 
-        # Start polling
+        # Initialize and auto-detect chat_id BEFORE starting polling
         await self._app.initialize()
+        await self._auto_detect_chat_id()
+
+        # Start polling
         await self._app.start()
         await self._app.updater.start_polling()
         logger.info("Telegram bot started (polling mode)")
