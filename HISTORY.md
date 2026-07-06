@@ -735,3 +735,13 @@ FastLane预筛选(≥0.30) → ImpactEvaluator(LLM) + EventMatcher(历史)
 ---
 
 ## 2026-07-06T10:51+08:00 · 会话开始
+
+### 本次会话完成
+- 📋 HISTORY.md 同步: commit `9808d42` 大幅内容补写 (→ `0217811`)
+- 🎯 阈值校准: CRITICAL_PRIORITY 0.65→0.55, IMPORTANT_PRIORITY 0.50→0.45
+  - Bootstrap 网格搜索: F1=0.857 (16 samples: 4 real + 12 synthetic)
+  - 7 个测试用例同步更新, 313 tests 零回归 (→ `68bd8c1`)
+- 🔧 模块注册: web/* + translator 5 个新模块加入 module_registry.json (→ `2ee0aa7`)
+- 🔧 dev_checklist: ChromaDB Windows 错误不再算测试失败 (→ `7501e6a`)
+- 🔐 凭证同步: PYTHONIOENCODING 补入 .env + sync_env_to_settings 全绿
+- ⏳ ECS 部署: 安全组已开放 22/8080, 但 sshd 服务未响应 (需重启 ECS)
