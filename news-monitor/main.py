@@ -259,10 +259,14 @@ class NewsMonitor:
             )
 
             # ---- Classify alert level (impact-first, legacy fallback) ----
+            has_tickers = bool(item.tickers_found and item.tickers_found.strip())
+            is_macro = bool(item.macro_tags and item.macro_tags.strip())
             level, reason = self.alert_dispatcher.classify(
                 item.priority_score, strategic_matches,
                 impact_assessment=impact_assessment,
                 rel_mult=rel_mult,
+                has_tickers=has_tickers,
+                is_macro=is_macro,
             )
 
             # ---- LLM Actionability Review (borderline cases only) ----

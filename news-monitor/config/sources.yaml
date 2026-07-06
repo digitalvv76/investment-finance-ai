@@ -29,7 +29,7 @@ tier_2_playwright:  # Browser-based scraping
     selectors:
       headline: "h2, [class*='title'], [class*='Title']"
       link: "a[href^='/']"
-    frequency_tier: "fast"
+    frequency_tier: "heartbeat"  # was "fast" — ZeroHedge breaking news needs 1min polling
 
 tier_3_api_triggers:  # API-based event triggers (no scraping)
   - name: "SEC EDGAR 8-K"

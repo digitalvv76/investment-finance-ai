@@ -114,6 +114,8 @@ class AlertDispatcher:
         is_breaking: bool = False,
         impact_assessment=None,  # ImpactAssessment | None
         rel_mult: float = 1.0,   # relevance multiplier from portfolio/watchlist
+        has_tickers: bool = False,  # does the news mention individual stocks?
+        is_macro: bool = False,     # is this a macro/geopolitical/systemic event?
     ) -> tuple[AlertLevel, str]:
         """Determine alert level from priority score + strategic signals + impact prediction.
 
@@ -122,6 +124,11 @@ class AlertDispatcher:
         composite formula is: (impact_score × 0.7 + confidence × 0.3) × rel_mult.
 
         rel_mult ranges 0.3–1.5 based on portfolio/watchlist match (1.0 = neutral).
+
+        **Watchlist gate**: for individual stock news (has_tickers=True) that is
+        NOT macro/geopolitical (is_macro=False), the alert level is capped at
+        NORMAL unless rel_mult shows portfolio/watchlist relevance (rel_mult > 0.5).
+        This prevents phone pushes for stocks the user doesn't own or track.
 
         Returns (AlertLevel, reason_string).
         """
@@ -134,46 +141,63 @@ class AlertDispatcher:
             composite = round((impact * 0.7 + conf * 0.3) * rel_mult, 1)
 
             if composite >= CRITICAL_PRIORITY * 100:   # 70
-                return AlertLevel.CRITICAL, (
+                level, reason = AlertLevel.CRITICAL, (
                     f"high_impact: composite={composite} "
                     f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
                 )
             elif composite >= IMPORTANT_PRIORITY * 100:  # 50
-                return AlertLevel.IMPORTANT, (
+                level, reason = AlertLevel.IMPORTANT, (
                     f"moderate_impact: composite={composite} "
                     f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
                 )
             else:
-                return AlertLevel.NORMAL, (
+                level, reason = AlertLevel.NORMAL, (
                     f"low_impact: composite={composite} "
                     f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
                 )
-
-        # --- LEGACY: score + strategic classification (fallback) ---
-        gov_matches = [m for m in strategic_matches if m.category == "gov_intervention"]
-        if gov_matches:
-            top = max(m.confidence for m in gov_matches)
-            return AlertLevel.CRITICAL, f"gov_intervention match (conf={top:.2f})"
-
-        # --- auto-CRITICAL: high-confidence NVIDIA strategic event ---
-        nvda_critical = [
-            m for m in strategic_matches
-            if m.category in ("nvda_investment", "nvda_endorsement", "nvda_competitive_threat")
-            and m.confidence >= STRATEGIC_CRITICAL_CONF
-        ]
-        if nvda_critical:
-            top = max(m.confidence for m in nvda_critical)
-            return AlertLevel.CRITICAL, f"nvda strategic event (conf={top:.2f})"
-
-        # --- score-based classification ---
-        # NOTE: priority alone can trigger CRITICAL for systemic events (bailouts, wars, etc.)
-        # but earnings drama / CEO commentary without strategic signal stays at IMPORTANT.
-        if priority_score >= CRITICAL_PRIORITY:
-            return AlertLevel.CRITICAL, f"priority_score={priority_score:.2f} >= {CRITICAL_PRIORITY}"
-        elif priority_score >= IMPORTANT_PRIORITY:
-            return AlertLevel.IMPORTANT, f"priority_score={priority_score:.2f} >= {IMPORTANT_PRIORITY}"
+            # Fall through to watchlist gate below
         else:
-            return AlertLevel.NORMAL, "routine news"
+            # --- LEGACY: score + strategic classification (fallback) ---
+            gov_matches = [m for m in strategic_matches if m.category == "gov_intervention"]
+            if gov_matches:
+                top = max(m.confidence for m in gov_matches)
+                return AlertLevel.CRITICAL, f"gov_intervention match (conf={top:.2f})"
+
+            # --- auto-CRITICAL: high-confidence NVIDIA strategic event ---
+            nvda_critical = [
+                m for m in strategic_matches
+                if m.category in ("nvda_investment", "nvda_endorsement", "nvda_competitive_threat")
+                and m.confidence >= STRATEGIC_CRITICAL_CONF
+            ]
+            if nvda_critical:
+                top = max(m.confidence for m in nvda_critical)
+                return AlertLevel.CRITICAL, f"nvda strategic event (conf={top:.2f})"
+
+            # --- score-based classification ---
+            # NOTE: priority alone can trigger CRITICAL for systemic events (bailouts, wars, etc.)
+            # but earnings drama / CEO commentary without strategic signal stays at IMPORTANT.
+            if priority_score >= CRITICAL_PRIORITY:
+                level, reason = AlertLevel.CRITICAL, f"priority_score={priority_score:.2f} >= {CRITICAL_PRIORITY}"
+            elif priority_score >= IMPORTANT_PRIORITY:
+                level, reason = AlertLevel.IMPORTANT, f"priority_score={priority_score:.2f} >= {IMPORTANT_PRIORITY}"
+            else:
+                return AlertLevel.NORMAL, "routine news"
+
+        # --- WATCHLIST GATE ---
+        # For individual stock news that the user doesn't own or track,
+        # cap the alert at NORMAL (no phone push, Telegram silent only).
+        # Macro/geopolitical events (FOMC, CPI, war) always pass through.
+        # gov_intervention strategic matches always pass through.
+        is_stock_news = has_tickers and not is_macro
+        is_untracked = rel_mult <= 0.5
+        if is_stock_news and is_untracked and level != AlertLevel.NORMAL:
+            logger.info(
+                "Watchlist gate: demoting %s -> NORMAL (rel=%.2f, has_tickers=%s, is_macro=%s)",
+                level.value, rel_mult, has_tickers, is_macro,
+            )
+            return AlertLevel.NORMAL, f"not_in_watchlist (was: {reason})"
+
+        return level, reason
 
     # ------------------------------------------------------------------
     # Channel dispatch

@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 
 # Ticker → Chinese name
 _TICKER_CN: Dict[str, str] = {
+    # US equities
     "NVDA": "英伟达", "AMD": "超威半导体", "INTC": "英特尔",
     "AVGO": "博通", "TSM": "台积电", "AAPL": "苹果",
     "MSFT": "微软", "GOOGL": "谷歌", "META": "Meta",
@@ -17,10 +18,17 @@ _TICKER_CN: Dict[str, str] = {
     "C": "花旗", "XOM": "埃克森美孚", "CVX": "雪佛龙",
     "JNJ": "强生", "PFE": "辉瑞", "LLY": "礼来",
     "SPY": "标普500", "QQQ": "纳指100",
+    # Crypto-exposed equities (publicly traded stocks)
+    "COIN": "Coinbase", "MSTR": "MicroStrategy",
+    "RIOT": "Riot区块链", "MARA": "Marathon挖矿",
+    "CLSK": "CleanSpark", "HUT": "Hut 8挖矿", "WULF": "TeraWulf挖矿",
+    # Fintech
+    "SQ": "Block", "AFRM": "Affirm", "SOFI": "SoFi", "HOOD": "Robinhood",
 }
 
 # Ticker → related sector ETFs
 _TICKER_TO_ETF: Dict[str, List[str]] = {
+    # US equities
     "NVDA": ["SMH", "SOXX", "QQQ"], "AMD": ["SMH", "SOXX"],
     "INTC": ["SMH", "SOXX"], "AVGO": ["SMH", "SOXX", "QQQ"],
     "TSM": ["SMH", "SOXX"], "AAPL": ["QQQ", "XLK"],
@@ -30,6 +38,14 @@ _TICKER_TO_ETF: Dict[str, List[str]] = {
     "BAC": ["XLF"], "WFC": ["XLF"], "C": ["XLF"],
     "XOM": ["XLE"], "CVX": ["XLE"],
     "JNJ": ["XLV"], "PFE": ["XLV"], "LLY": ["XLV"],
+    # Crypto-exposed equities → fintech/blockchain ecosystem
+    "COIN": ["QQQ", "XLK", "IBIT", "MSTR"],
+    "MSTR": ["QQQ", "IBIT", "COIN"],
+    "RIOT": ["MARA", "COIN"],
+    "MARA": ["RIOT", "COIN"],
+    "CLSK": ["COIN"], "HUT": ["COIN"], "WULF": ["COIN"],
+    # Fintech
+    "SQ": ["QQQ", "XLK"], "AFRM": ["QQQ"], "SOFI": ["XLF"], "HOOD": ["QQQ", "XLF"],
 }
 
 # ETF → Chinese name
@@ -39,6 +55,8 @@ _ETF_CN: Dict[str, str] = {
     "XLE": "能源板块", "XLV": "医疗保健", "XLI": "工业板块",
     "TLT": "长期国债", "GLD": "黄金", "USO": "原油",
     "IWM": "罗素2000",
+    # Crypto-exposed equities
+    "IBIT": "比特币ETF", "COIN": "Coinbase", "MSTR": "MicroStrategy",
 }
 
 # Event category → related ETFs (for macro/news-driven events)
@@ -50,6 +68,7 @@ _EVENT_TO_ETF: Dict[str, List[str]] = {
     "TARIFF": ["XLI", "XLE", "SPY"],
     "AI": ["SMH", "QQQ", "XLK"],
     "ENERGY": ["XLE", "USO"],
+    "REGULATORY": ["XLF", "SPY", "QQQ"],
 }
 
 
@@ -76,7 +95,8 @@ def _build_ticker_etf_line(tickers: str, macro_tags: str = "",
     macro_upper = macro_tags.upper() if macro_tags else ""
     cat_lower = (event_category or "").lower()
     for key, etfs in _EVENT_TO_ETF.items():
-        if key in macro_upper or key.lower() in cat_lower:
+        key_lower = key.lower()
+        if key in macro_upper or key_lower in cat_lower:
             for etf in etfs:
                 etf_set.add(etf)
 

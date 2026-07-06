@@ -66,7 +66,14 @@ class PromptVersionManager:
 def _validate_input(item: NewsItem) -> tuple[bool, str]:
     if not item.title or len(item.title.strip()) < 5:
         return False, "title_too_short"
-    if not item.content_snippet or len(item.content_snippet) < 50:
+    # Breaking news items (ZeroHedge/Twitter flashes) often have the full
+    # news value in the title with little or no body text.  Accept items
+    # where the title alone carries enough signal for analysis.
+    content_len = max(
+        len(item.content_snippet or ""),
+        len(item.title or ""),
+    )
+    if content_len < 50:
         return False, "content_too_short"
     if "\x00" in item.title:
         return False, "null_byte_in_title"
