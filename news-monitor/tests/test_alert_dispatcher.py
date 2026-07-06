@@ -134,7 +134,7 @@ async def test_dispatch_important_no_pushover(dispatcher, sample_item):
     """IMPORTANT without Pushover config → Telegram alert only."""
     # Ensure Pushover is disabled
     dispatcher._pushover_token = ""
-    dispatcher._pushover_user = ""
+    dispatcher._pushover_users = []
 
     push_calls = []
 
@@ -153,7 +153,7 @@ async def test_dispatch_important_no_pushover(dispatcher, sample_item):
 async def test_dispatch_critical_triple_push(dispatcher, sample_item):
     """CRITICAL items get triple push (3 Telegram messages)."""
     dispatcher._pushover_token = ""
-    dispatcher._pushover_user = ""
+    dispatcher._pushover_users = []
 
     push_calls = []
 
@@ -180,7 +180,7 @@ async def test_pushover_emergency_payload():
     """Verify Pushover emergency message has correct priority/sound fields."""
     dispatcher = AlertDispatcher()
     dispatcher._pushover_token = "test_token"
-    dispatcher._pushover_user = "test_user"
+    dispatcher._pushover_users = ["test_user"]
 
     item = {
         "id": 1,
@@ -224,7 +224,7 @@ async def test_pushover_high_payload():
     """Verify Pushover high priority message structure."""
     dispatcher = AlertDispatcher()
     dispatcher._pushover_token = "test_token"
-    dispatcher._pushover_user = "test_user"
+    dispatcher._pushover_users = ["test_user"]
 
     item = {"title": "Earnings beat", "source": "Reuters", "url": ""}
 
@@ -246,7 +246,7 @@ async def test_pushover_http_error_handled():
     """HTTP error should not raise, just log and return False."""
     dispatcher = AlertDispatcher()
     dispatcher._pushover_token = "test"
-    dispatcher._pushover_user = "test"
+    dispatcher._pushover_users = ["test"]
 
     with patch("aiohttp.ClientSession.post") as mock_post:
         mock_resp = MagicMock()
@@ -265,19 +265,19 @@ async def test_pushover_http_error_handled():
 
 def test_pushover_available(dispatcher):
     dispatcher._pushover_token = "abc"
-    dispatcher._pushover_user = "xyz"
+    dispatcher._pushover_users = ["xyz"]
     assert dispatcher.pushover_available is True
 
 
 def test_pushover_not_available(dispatcher):
     dispatcher._pushover_token = ""
-    dispatcher._pushover_user = ""
+    dispatcher._pushover_users = []
     assert dispatcher.pushover_available is False
 
 
 def test_pushover_partial_not_available(dispatcher):
     dispatcher._pushover_token = "abc"
-    dispatcher._pushover_user = ""
+    dispatcher._pushover_users = []
     assert dispatcher.pushover_available is False
 
 

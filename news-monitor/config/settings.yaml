@@ -40,6 +40,7 @@ api_keys:
   anthropic: "${ANTHROPIC_API_KEY}"
   pushover_app: "${PUSHOVER_APP_TOKEN}"
   pushover_user: "${PUSHOVER_USER_KEY}"
+  pushover_user_2: "${PUSHOVER_USER_KEY_2}"
 
 # Alert dispatch configuration
 alerts:

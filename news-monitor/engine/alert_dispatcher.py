@@ -97,11 +97,16 @@ class AlertDispatcher:
 
     def __init__(self) -> None:
         self._pushover_token = os.environ.get("PUSHOVER_APP_TOKEN", "")
-        self._pushover_user = os.environ.get("PUSHOVER_USER_KEY", "")
+        # Support multiple phones: PUSHOVER_USER_KEY (primary) + PUSHOVER_USER_KEY_2 (secondary)
+        self._pushover_users: list[str] = []
+        for key in [os.environ.get("PUSHOVER_USER_KEY", ""),
+                    os.environ.get("PUSHOVER_USER_KEY_2", "")]:
+            if key:
+                self._pushover_users.append(key)
 
     @property
     def pushover_available(self) -> bool:
-        return bool(self._pushover_token and self._pushover_user)
+        return bool(self._pushover_token and self._pushover_users)
 
     # ------------------------------------------------------------------
     # Classification
@@ -302,40 +307,45 @@ class AlertDispatcher:
         )
         url = item.get("url", "")
 
-        payload = {
-            "token": self._pushover_token,
-            "user": self._pushover_user,
-            "title": title,
-            "message": body,
-            "priority": priority,
-            "sound": sound,
-            "html": 1,  # enables <a href> links in the message body
-            **kwargs,
-        }
+        # Send to all registered phones
+        success_count = 0
+        for user_key in self._pushover_users:
+            payload = {
+                "token": self._pushover_token,
+                "user": user_key,
+                "title": title,
+                "message": body,
+                "priority": priority,
+                "sound": sound,
+                "html": 1,  # enables <a href> links in the message body
+                **kwargs,
+            }
 
-        # Emergency priority requires retry + expire
-        if priority == 2:
-            payload.setdefault("retry", 30)    # retry every 30 seconds (more aggressive)
-            payload.setdefault("expire", 3600)  # stop after 1 hour
+            # Emergency priority requires retry + expire
+            if priority == 2:
+                payload.setdefault("retry", 30)    # retry every 30 seconds (more aggressive)
+                payload.setdefault("expire", 3600)  # stop after 1 hour
 
-        # URL for deep link (supplementary — body already has HTML links)
-        if url:
-            payload["url"] = url
-            payload["url_title"] = "阅读原文"
+            # URL for deep link (supplementary — body already has HTML links)
+            if url:
+                payload["url"] = url
+                payload["url_title"] = "阅读原文"
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(PUSHOVER_API, json=payload, timeout=10) as resp:
-                    if resp.status == 200:
-                        logger.info("Pushover sent [priority=%d]: %s", priority, title[:60])
-                        return True
-                    else:
-                        body_text = await resp.text()
-                        logger.error("Pushover failed [%d]: %s", resp.status, body_text[:200])
-                        return False
-        except Exception as e:
-            logger.error("Pushover error: %s", e)
-            return False
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(PUSHOVER_API, json=payload, timeout=10) as resp:
+                        if resp.status == 200:
+                            logger.info("Pushover sent [priority=%d, user=%s...]: %s",
+                                        priority, user_key[:8], title[:60])
+                            success_count += 1
+                        else:
+                            body_text = await resp.text()
+                            logger.error("Pushover failed [%d, user=%s...]: %s",
+                                         resp.status, user_key[:8], body_text[:200])
+            except Exception as e:
+                logger.error("Pushover error [user=%s...]: %s", user_key[:8], e)
+
+        return success_count > 0
 
     async def _pushover_emergency(self, item: dict) -> bool:
         """Emergency Pushover: repeats every 30s until user acknowledges."""
