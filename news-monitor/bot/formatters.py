@@ -310,6 +310,7 @@ _SOURCE_CN: Dict[str, str] = {
     "@newsquawk": "Newsquawk",
     "@zerohedge": "ZeroHedge推特",
     "@fxhedgers": "FxHedgers",
+    "@semianalysis": "SemiAnalysis",
 }
 
 

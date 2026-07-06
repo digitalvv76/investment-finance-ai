@@ -818,4 +818,27 @@ Nvidia cuts guidance...
 
 ---
 
-## 2026-07-06T16:25+08:00 · 会话开始
+## 2026-07-06 — 推送质量打磨 + 深度分析 v2 + 策略检测修复
+
+### 核心改進
+- ✅ **推送规则完善**: 关注名单阈值 0.35 / 非关注不推手机 / StrategicDetector 误报修复
+- ✅ **Finnhub 新闻源**: 21 个 watchlist 标的每 5 分钟轮询个股新闻
+- ✅ **深度分析 v2**: 简洁快报 (400字) + 真实价格 + watchlist 上下文
+- ✅ **ECS 稳定运行**: 3GB 内存，Twitter 恢复，Docker 代理修复
+- ✅ **AnySearch MCP**: 已安装，按需深挖用
+- ✅ **会话管理**: SESSION.md + TROUBLESHOOTING.md + chat_id 自检
+- ✅ **阈值校准**: CRITICAL 0.55 / IMPORTANT 0.35 / WATCHLIST_GATE 0.35
+
+### 修改文件
+- `engine/priority.py` — 阈值调优 + @SemiAnalysis 源 (0.09)
+- `engine/strategic_detector.py` — 误报修复
+- `engine/deep_lane.py` — v2 简洁快报
+- `collector/finnhub_fetcher.py` — 新建，个股新闻轮询
+- `bot/formatters.py` — 深度分析格式 + @SemiAnalysis 显示名
+- `config/sources.yaml` — Finnhub + @SemiAnalysis Twitter 源
+- `.claude/SESSION.md` — 当前状态
+- `.claude/TROUBLESHOOTING.md` — 踩坑记录 21 条
+
+---
+
+## 2026-07-06T22:06+08:00 · 会话开始 — 补充 @SemiAnalysis 源 + HISTORY.md 补录

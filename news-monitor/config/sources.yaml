@@ -68,6 +68,7 @@ twitter:
     - "@Newsquawk"         # Real-time breaking news parsing service
     - "@zerohedge"         # ZeroHedge, contrarian finance blog
     - "@Fxhedgers"         # FX/rates commentary
+    - "@SemiAnalysis"      # SemiAnalysis — semiconductor/AI supply chain deep research
 
 # -------------------------------------------------------------------
 # Chinese financial news — JSON API endpoints (no RSS required)

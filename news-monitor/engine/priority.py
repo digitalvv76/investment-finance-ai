@@ -65,6 +65,7 @@ SOURCE_AUTHORITY: Dict[str, float] = {
     "@newsquawk": 0.07,
     "@zerohedge": 0.03,
     "@fxhedgers": 0.05,
+    "@semianalysis": 0.09,  # Semiconductor/AI supply chain — very high signal
     # —— Tier 2: Chinese supplementary sources (low authority) ——
     "新浪财经·7x24综合快讯": 0.02,
     "新浪财经·7x24全球财经": 0.02,
