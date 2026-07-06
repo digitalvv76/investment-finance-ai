@@ -1,5 +1,5 @@
 {
-  "_description": "Test suite registry. Maps each test file to the modules it covers (reverse index of module manifests). conftest.py and test runners are excluded.",
+  "_description": "Test suite registry. Maps each test file to the modules it covers (reverse index of module manifests). Test modules and test runners.",
   "modules": {
     "tests/test_alert_dispatcher.py": {
       "tests": [],

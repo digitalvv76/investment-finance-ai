@@ -7,7 +7,7 @@
     },
     "engine/deep_lane.py": {
       "tests": ["tests/test_deep_lane.py"],
-      "related_scripts": [],
+      "related_scripts": ["scripts/acceptance_test.py"],
       "also_tests": ["tests/test_fast_lane.py"]
     },
     "engine/fast_lane.py": {
@@ -41,7 +41,7 @@
       "also_tests": []
     },
     "engine/impact_collector.py": {
-      "tests": [],
+      "tests": ["tests/test_impact_push.py"],
       "related_scripts": ["scripts/calibrate_thresholds.py"],
       "also_tests": []
     },
