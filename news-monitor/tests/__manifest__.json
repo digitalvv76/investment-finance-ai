@@ -1,0 +1,150 @@
+{
+  "_description": "Test suite registry. Maps each test file to the modules it covers (reverse index of module manifests). conftest.py and test runners are excluded.",
+  "modules": {
+    "tests/test_alert_dispatcher.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_chinese_fetcher.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_cluster.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_config.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_content_filter.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_curator.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_database.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_dedup.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_deep_lane.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_digest.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_entity_extractor.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_event_matcher.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_exchange_calendar.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_fast_lane.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_formatters.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_handlers.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_impact_evaluator.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_impact_push.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_learner.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_playwright_fetcher.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_priority.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_rss_fetcher.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_scheduler.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_sentiment.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_strategic_detector.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_twitter_fetcher.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/test_vector_store.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/run_tests.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "tests/run_config_tests.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    }
+  }
+}

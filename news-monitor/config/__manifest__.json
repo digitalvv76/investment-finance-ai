@@ -1,0 +1,9 @@
+{
+  "modules": {
+    "config/loader.py": {
+      "tests": ["tests/test_config.py"],
+      "related_scripts": [],
+      "also_tests": ["tests/test_database.py", "tests/test_scheduler.py", "tests/test_fast_lane.py"]
+    }
+  }
+}

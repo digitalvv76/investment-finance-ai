@@ -1,0 +1,90 @@
+{
+  "_description": "Utility scripts. These are support tools, not runtime modules. Entries exist for pre-commit validation when a script is modified.",
+  "modules": {
+    "scripts/acceptance_test.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/backtest_signal.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/backtest_training_docx.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/backup_state.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/calibrate_thresholds.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/dev_checklist.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/install_service.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/pre_commit_check.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/score_all_events.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/score_news_only.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/score_training_cases.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/session_startup.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/sync_env_to_settings.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/test_new_fetchers.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/test_phone_alert.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/test_push.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/verify_env.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    }
+  }
+}

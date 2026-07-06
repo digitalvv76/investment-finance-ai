@@ -1,0 +1,49 @@
+{
+  "modules": {
+    "collector/scheduler.py": {
+      "tests": ["tests/test_scheduler.py"],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "collector/rss_fetcher.py": {
+      "tests": ["tests/test_rss_fetcher.py"],
+      "related_scripts": ["scripts/acceptance_test.py"],
+      "also_tests": []
+    },
+    "collector/twitter_fetcher.py": {
+      "tests": ["tests/test_twitter_fetcher.py"],
+      "related_scripts": ["scripts/test_new_fetchers.py"],
+      "also_tests": []
+    },
+    "collector/chinese_fetcher.py": {
+      "tests": ["tests/test_chinese_fetcher.py"],
+      "related_scripts": ["scripts/test_new_fetchers.py"],
+      "also_tests": []
+    },
+    "collector/finnhub_fetcher.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "collector/playwright_fetcher.py": {
+      "tests": ["tests/test_playwright_fetcher.py"],
+      "related_scripts": ["scripts/test_new_fetchers.py"],
+      "also_tests": []
+    },
+    "collector/api_fetcher.py": {
+      "tests": [],
+      "related_scripts": ["scripts/acceptance_test.py"],
+      "also_tests": []
+    },
+    "collector/dedup.py": {
+      "tests": ["tests/test_dedup.py"],
+      "related_scripts": ["scripts/acceptance_test.py"],
+      "also_tests": []
+    },
+    "collector/exchange_calendar.py": {
+      "tests": ["tests/test_exchange_calendar.py"],
+      "related_scripts": [],
+      "also_tests": []
+    }
+  }
+}
