@@ -1,0 +1,185 @@
+{
+  "_description": "Module-to-test-to-script dependency map. Used by session_startup.py, pre_commit_check.py, and dev_checklist.py. Update when adding new modules or tests.",
+  "_convention": "Most engine/<name>.py modules map to tests/test_<name>.py. Only non-convention mappings are listed.",
+  "modules": {
+    "bot/digest.py": {
+      "tests": ["tests/test_digest.py"],
+      "related_scripts": []
+    },
+    "bot/formatters.py": {
+      "tests": ["tests/test_formatters.py"],
+      "related_scripts": ["scripts/test_signal.py"],
+      "_note": "test_signal.py imports format_fast_alert and format_deep_analysis"
+    },
+    "bot/handlers.py": {
+      "tests": ["tests/test_handlers.py"],
+      "related_scripts": []
+    },
+    "bot/telegram_bot.py": {
+      "tests": [],
+      "related_scripts": ["scripts/test_signal.py", "scripts/test_phone_alert.py"]
+    },
+    "bot/translator.py": {
+      "tests": [],
+      "related_scripts": [],
+      "_note": "DeepSeek title translator shared by formatters + alert_dispatcher"
+    },
+
+    "collector/api_fetcher.py": {
+      "tests": [],
+      "related_scripts": ["scripts/acceptance_test.py"]
+    },
+    "collector/chinese_fetcher.py": {
+      "tests": ["tests/test_chinese_fetcher.py"],
+      "related_scripts": ["scripts/test_new_fetchers.py"]
+    },
+    "collector/dedup.py": {
+      "tests": ["tests/test_dedup.py"],
+      "related_scripts": ["scripts/acceptance_test.py"]
+    },
+    "collector/exchange_calendar.py": {
+      "tests": ["tests/test_exchange_calendar.py"],
+      "related_scripts": []
+    },
+    "collector/playwright_fetcher.py": {
+      "tests": ["tests/test_playwright_fetcher.py"],
+      "related_scripts": ["scripts/test_new_fetchers.py"]
+    },
+    "collector/rss_fetcher.py": {
+      "tests": ["tests/test_rss_fetcher.py"],
+      "related_scripts": ["scripts/acceptance_test.py"]
+    },
+    "collector/scheduler.py": {
+      "tests": ["tests/test_scheduler.py"],
+      "related_scripts": []
+    },
+    "collector/twitter_fetcher.py": {
+      "tests": ["tests/test_twitter_fetcher.py"],
+      "related_scripts": ["scripts/test_new_fetchers.py"]
+    },
+
+    "config/loader.py": {
+      "tests": ["tests/test_config.py"],
+      "related_scripts": [],
+      "also_tests": ["tests/test_database.py", "tests/test_scheduler.py", "tests/test_fast_lane.py"],
+      "_note": "Config changes can affect any module; runs config + DB + scheduler + fast_lane"
+    },
+
+    "engine/actionability_review.py": {
+      "tests": [],
+      "related_scripts": []
+    },
+    "engine/alert_dispatcher.py": {
+      "tests": ["tests/test_alert_dispatcher.py", "tests/test_impact_push.py"],
+      "related_scripts": ["scripts/test_phone_alert.py", "scripts/test_signal.py"]
+    },
+    "engine/cluster.py": {
+      "tests": ["tests/test_cluster.py"],
+      "related_scripts": []
+    },
+    "engine/content_filter.py": {
+      "tests": ["tests/test_content_filter.py"],
+      "related_scripts": []
+    },
+    "engine/curator.py": {
+      "tests": ["tests/test_curator.py"],
+      "related_scripts": []
+    },
+    "engine/deep_lane.py": {
+      "tests": ["tests/test_deep_lane.py"],
+      "related_scripts": ["scripts/acceptance_test.py"]
+    },
+    "engine/entity_extractor.py": {
+      "tests": ["tests/test_entity_extractor.py"],
+      "related_scripts": ["scripts/acceptance_test.py"]
+    },
+    "engine/event_matcher.py": {
+      "tests": ["tests/test_event_matcher.py"],
+      "related_scripts": []
+    },
+    "engine/fast_lane.py": {
+      "tests": ["tests/test_fast_lane.py"],
+      "related_scripts": ["scripts/acceptance_test.py"]
+    },
+    "engine/impact_collector.py": {
+      "tests": [],
+      "related_scripts": []
+    },
+    "engine/impact_evaluator.py": {
+      "tests": ["tests/test_impact_evaluator.py", "tests/test_impact_push.py"],
+      "related_scripts": ["scripts/acceptance_test.py"]
+    },
+    "engine/impact_learner.py": {
+      "tests": [],
+      "related_scripts": []
+    },
+    "engine/learner.py": {
+      "tests": ["tests/test_learner.py"],
+      "related_scripts": ["scripts/acceptance_test.py"]
+    },
+    "engine/priority.py": {
+      "tests": ["tests/test_priority.py"],
+      "related_scripts": [],
+      "also_tests": ["tests/test_fast_lane.py", "tests/test_deep_lane.py"]
+    },
+    "engine/relevance.py": {
+      "tests": ["tests/test_impact_push.py"],
+      "related_scripts": ["scripts/score_all_events.py", "scripts/backtest_signal.py"]
+    },
+    "engine/sentiment.py": {
+      "tests": ["tests/test_sentiment.py"],
+      "related_scripts": ["scripts/acceptance_test.py"]
+    },
+    "engine/strategic_detector.py": {
+      "tests": ["tests/test_strategic_detector.py", "tests/test_alert_dispatcher.py", "tests/test_impact_push.py"],
+      "related_scripts": ["scripts/score_training_cases.py", "scripts/backtest_training_docx.py"]
+    },
+    "engine/trainer.py": {
+      "tests": ["tests/test_learner.py"],
+      "related_scripts": []
+    },
+
+    "main.py": {
+      "tests": [],
+      "related_scripts": ["scripts/acceptance_test.py"],
+      "also_tests": ["tests/test_fast_lane.py", "tests/test_deep_lane.py", "tests/test_alert_dispatcher.py"],
+      "_note": "Orchestrator — changes affect the full pipeline"
+    },
+
+    "storage/database.py": {
+      "tests": ["tests/test_database.py"],
+      "related_scripts": ["scripts/acceptance_test.py"]
+    },
+    "storage/models.py": {
+      "tests": ["__ALL__"],
+      "related_scripts": ["scripts/acceptance_test.py"],
+      "_note": "Schema changes require full test suite"
+    },
+    "storage/vector_store.py": {
+      "tests": ["tests/test_vector_store.py"],
+      "related_scripts": []
+    },
+
+    "web/auth.py": {
+      "tests": [],
+      "related_scripts": [],
+      "_note": "HTTP Basic Auth middleware"
+    },
+    "web/routes.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": ["tests/test_deep_lane.py"],
+      "_note": "Web API routes including /api/news/{id}/analyze async endpoint"
+    },
+    "web/server.py": {
+      "tests": [],
+      "related_scripts": [],
+      "_note": "Quart web server entry point"
+    },
+    "web/sse_manager.py": {
+      "tests": [],
+      "related_scripts": [],
+      "_note": "Server-Sent Events manager for async analysis status"
+    }
+  }
+}
