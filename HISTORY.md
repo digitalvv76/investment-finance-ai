@@ -683,3 +683,55 @@ FastLane预筛选(≥0.30) → ImpactEvaluator(LLM) + EventMatcher(历史)
 
 ---
 ## 2026-07-05T09:15+08:00 · 会话开始
+
+---
+
+## 2026-07-05T21:54+08:00 · 会话开始
+
+---
+
+## 2026-07-06 — 深度分析升级 + 市场反馈闭环 + LLM备用 🧠
+
+### 深度分析升级 (Telegram + Pushover Web)
+- 🆕 `engine/deep_lane.py` — 实时市场数据采集 (yfinance) → 注入LLM上下文 (+164行)
+  - 每只ticker: 现价/涨跌幅/vs 20MA/vs 50MA/成交量倍数
+  - 宏观: SPX涨跌 + VIX水平, 8s硬超时降级保护
+- Telegram「深度分析」按钮现在包含实时价格+MA位置
+- Pushover通知嵌入 🔍 深度分析 HTML链接 → 手机浏览器打开
+- 🆕 `web/routes.py` — `/api/news/{id}/analyze` 异步分析端点 (+194行)
+  - 加载页(暗色主题+动画) → JS轮询结果 → 自动渲染
+- max_tokens 800→1500 (升级后输出更长)
+
+### P1: LLM备用机制
+- `impact_evaluator.py` — 双provider自动切换 (+178/-?)
+  - DeepSeek (主) → Anthropic Claude Fable 5 (备)
+  - 各自1次重试, 全部失败才放弃
+  - OpenAI SDK 兼容层调用
+
+### P0: 市场反馈闭环
+- `impact_collector.py` — 重写为真实数据采集 (+413/-?)
+  - yfinance → Alpha Vantage → 0.0 (三级降级)
+  - 自动更新calibration_state (EMA平滑偏差追踪)
+  - 采集窗口: 15m/1h/4h, 独立判断时效性
+  - `_normalize_score`: SPX(35%)+VIX(20%)+行业(20%)+ticker(25%)
+- `main.py` — 采集循环 15m/1h/4h 独立触发
+
+### P1: 阈值校准基础设施
+- 🆕 `scripts/calibrate_thresholds.py` — 364行
+  - 反馈+impact_outcomes → 标注数据集
+  - 网格搜索 CRITICAL/IMPORTANT → F1最优
+  - 数据不足时bootstrap模式 + 分数分布诊断
+  - `--apply` 直接写入 alert_dispatcher
+
+### 修复
+- `strategic_detector.py` — NVDA_ACTION_RE 窗口 30→80字符, 修复英文长句漏报
+- `web/auth.py` — `/api/news/*/analyze` 免密 (手机浏览器无法填Basic Auth)
+- `.gitignore` — 新增 opencli-extension
+
+### 修改文件
+- 15 files, +1343/-117 lines
+- 313 tests pass, 6 ChromaDB errors (Windows known)
+
+---
+
+## 2026-07-06T10:51+08:00 · 会话开始
