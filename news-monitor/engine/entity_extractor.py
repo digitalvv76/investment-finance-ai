@@ -11,14 +11,23 @@ logger = logging.getLogger(__name__)
 
 # Fallback tickers for when config is unavailable
 FALLBACK_TICKERS = {
-    # US equities
+    # US equities — core
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
     "AMD", "INTC", "BA", "JPM", "GS", "WMT", "XOM", "CVX",
     "NFLX", "CRM", "ORCL", "ADBE", "PYPL", "DIS", "NKE",
+    # Watchlist — semiconductors / AI
+    "PLTR", "SOXX", "SOXL", "LRCX", "ARM", "MRVL",
+    "MRAAY", "CBRS",
+    # Watchlist — space / defense
+    "SPCX", "RKLB", "KTOS", "ASTS",
+    # Watchlist — quantum / nuclear / emerging tech
+    "RGTI", "OKLO", "SMR", "TEM", "NBIS",
+    # Watchlist — ETFs / other
+    "BOT", "ARKK",
     # Crypto-exposed US equities (publicly traded stocks, NOT crypto tokens)
     "COIN", "MSTR", "RIOT", "MARA", "CLSK", "HUT", "WULF",
     # Fintech / payments (relevant to regulatory/licensing news)
-    "SQ", "PYPL", "AFRM", "SOFI", "HOOD",
+    "SQ", "AFRM", "SOFI", "HOOD",
 }
 
 

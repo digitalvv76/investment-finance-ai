@@ -23,7 +23,14 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Path offsets differ: Windows needs parents[2] (D:/class1), Docker needs
+# parents[1] (/app). Try both — use the one that has .claude/memory/.
+_module_file = Path(__file__).resolve()
+_PROJECT_ROOT = _module_file.parents[2]  # Windows: D:/class1
+if not (_PROJECT_ROOT / ".claude" / "memory").is_dir():
+    _PROJECT_ROOT = _module_file.parents[1]  # Docker: /app
+if not (_PROJECT_ROOT / ".claude" / "memory").is_dir():
+    _PROJECT_ROOT = _module_file.parents[3]  # Windows alt
 _PORTFOLIO_PATH = _PROJECT_ROOT / ".claude" / "memory" / "portfolio-state.md"
 _WATCHLIST_PATH = _PROJECT_ROOT / ".claude" / "memory" / "watchlist-state.md"
 

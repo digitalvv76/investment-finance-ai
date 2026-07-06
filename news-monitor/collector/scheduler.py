@@ -11,6 +11,7 @@ from collector.playwright_fetcher import PlaywrightFetcher
 from collector.api_fetcher import APIFetcher
 from collector.twitter_fetcher import TwitterFetcher
 from collector.chinese_fetcher import ChineseNewsFetcher
+from collector.finnhub_fetcher import FinnhubNewsFetcher
 from config.loader import ConfigLoader
 from storage.database import Database
 from storage.models import NewsItem
@@ -48,21 +49,32 @@ class NewsScheduler:
         self.chinese_fetcher = ChineseNewsFetcher(
             self.sources.get('chinese_sources', {})
         )
+        self.finnhub_fetcher = FinnhubNewsFetcher(
+            watchlist=self._load_watchlist()
+        )
 
     def _load_watchlist(self) -> list:
-        """Load watchlist from .claude/memory/watchlist-state.md."""
-        tickers = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"]
+        """Load watchlist from .claude/memory/watchlist-state.md.
+
+        Tries multiple parent levels because the repo root differs between
+        Windows (D:/class1 = parents[3]) and Docker (/app = parents[2]).
+        """
+        tickers = ["NVDA", "TSLA", "SPCX", "PLTR", "SOXX", "SOXL", "RKLB",
+                   "KTOS", "BOT", "LRCX", "MRAAY", "CBRS", "ARM", "MRVL",
+                   "ASTS", "RGTI", "TEM", "NBIS", "OKLO", "SMR", "ARKK"]
         try:
             from pathlib import Path
-            # Resolve relative to this file, not the process CWD
-            _project_root = Path(__file__).resolve().parents[3]
-            watchlist_path = _project_root / ".claude" / "memory" / "watchlist-state.md"
-            if watchlist_path.exists():
-                content = watchlist_path.read_text()
-                import re
-                found = re.findall(r'\|\s*([A-Z]{1,5})\s*\|', content)
-                if found:
-                    tickers = [t for t in found if t.isalpha() and len(t) <= 5]
+            import re
+            module_file = Path(__file__).resolve()
+            # Try parents[2] (Docker: /app) and parents[3] (Windows: D:/class1)
+            for offset in (2, 3):
+                candidate = module_file.parents[offset] / ".claude" / "memory" / "watchlist-state.md"
+                if candidate.exists():
+                    content = candidate.read_text()
+                    found = re.findall(r'\|\s*([A-Z]{1,5})\s*\|', content)
+                    if found:
+                        tickers = [t for t in found if t.isalpha() and len(t) <= 5]
+                    break
         except Exception:
             pass
         return tickers
@@ -122,7 +134,7 @@ class NewsScheduler:
             logger.debug("Heartbeat: no new items")
 
     async def _tick_5min(self):
-        """5-minute tick: remaining Playwright sources + Twitter."""
+        """5-minute tick: remaining Playwright sources + Twitter + Finnhub."""
         sources = [
             s for s in self.sources.get('tier_2_playwright', [])
             if s.get('frequency_tier') != 'heartbeat'
@@ -132,12 +144,20 @@ class NewsScheduler:
             src_items = await self.playwright_fetcher.fetch_source(source)
             items.extend(src_items)
 
-        # Twitter/X feeds via Nitter RSS proxy
+        # Twitter/X feeds via Playwright + auth cookie
         try:
             twitter_items = await self.twitter_fetcher.fetch_all()
             items.extend(twitter_items)
         except Exception as e:
             logger.warning("Twitter fetch failed: %s", e)
+
+        # Finnhub per-ticker news — fills the gap for mid-cap watchlist
+        # stocks that don't appear on macro Twitter feeds or major RSS.
+        try:
+            finnhub_items = await self.finnhub_fetcher.fetch_all()
+            items.extend(finnhub_items)
+        except Exception as e:
+            logger.warning("Finnhub fetch failed: %s", e)
 
         if items:
             await self._insert_and_notify(items)
@@ -249,3 +269,4 @@ class NewsScheduler:
         await self.api_fetcher.close()
         await self.twitter_fetcher.shutdown()
         await self.chinese_fetcher.close()
+        await self.finnhub_fetcher.close()

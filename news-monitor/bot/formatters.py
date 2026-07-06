@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 
 # Ticker → Chinese name
 _TICKER_CN: Dict[str, str] = {
-    # US equities
+    # Core US equities
     "NVDA": "英伟达", "AMD": "超威半导体", "INTC": "英特尔",
     "AVGO": "博通", "TSM": "台积电", "AAPL": "苹果",
     "MSFT": "微软", "GOOGL": "谷歌", "META": "Meta",
@@ -18,7 +18,19 @@ _TICKER_CN: Dict[str, str] = {
     "C": "花旗", "XOM": "埃克森美孚", "CVX": "雪佛龙",
     "JNJ": "强生", "PFE": "辉瑞", "LLY": "礼来",
     "SPY": "标普500", "QQQ": "纳指100",
-    # Crypto-exposed equities (publicly traded stocks)
+    # Watchlist — 半导体/AI
+    "PLTR": "Palantir", "SOXX": "半导体ETF", "SOXL": "3倍半导体",
+    "LRCX": "拉姆研究", "ARM": "Arm控股", "MRVL": "Marvell",
+    "MRAAY": "村田制作所", "CBRS": "嘉宝集团",
+    # Watchlist — 航天/国防
+    "SPCX": "SpaceX", "RKLB": "Rocket Lab", "KTOS": "Kratos国防",
+    "ASTS": "AST太空移动",
+    # Watchlist — 量子/核能/新兴科技
+    "RGTI": "Rigetti量子", "OKLO": "Oklo核能", "SMR": "NuScale核能",
+    "TEM": "Tempus AI医疗", "NBIS": "Nebius云",
+    # Watchlist — ETF/其他
+    "BOT": "Botanix制药", "ARKK": "ARK创新ETF",
+    # Crypto-exposed equities
     "COIN": "Coinbase", "MSTR": "MicroStrategy",
     "RIOT": "Riot区块链", "MARA": "Marathon挖矿",
     "CLSK": "CleanSpark", "HUT": "Hut 8挖矿", "WULF": "TeraWulf挖矿",
@@ -28,7 +40,7 @@ _TICKER_CN: Dict[str, str] = {
 
 # Ticker → related sector ETFs
 _TICKER_TO_ETF: Dict[str, List[str]] = {
-    # US equities
+    # Core US equities
     "NVDA": ["SMH", "SOXX", "QQQ"], "AMD": ["SMH", "SOXX"],
     "INTC": ["SMH", "SOXX"], "AVGO": ["SMH", "SOXX", "QQQ"],
     "TSM": ["SMH", "SOXX"], "AAPL": ["QQQ", "XLK"],
@@ -38,7 +50,19 @@ _TICKER_TO_ETF: Dict[str, List[str]] = {
     "BAC": ["XLF"], "WFC": ["XLF"], "C": ["XLF"],
     "XOM": ["XLE"], "CVX": ["XLE"],
     "JNJ": ["XLV"], "PFE": ["XLV"], "LLY": ["XLV"],
-    # Crypto-exposed equities → fintech/blockchain ecosystem
+    # Watchlist — 半导体/AI
+    "PLTR": ["QQQ", "XLK", "SOXX"], "SOXX": ["SMH", "QQQ"], "SOXL": ["SOXX", "SMH"],
+    "LRCX": ["SMH", "SOXX"], "ARM": ["QQQ", "SOXX"], "MRVL": ["SMH", "SOXX", "QQQ"],
+    "MRAAY": ["SOXX"], "CBRS": ["QQQ"],
+    # Watchlist — 航天/国防
+    "SPCX": ["QQQ", "ITA"], "RKLB": ["ITA"], "KTOS": ["ITA", "PPA"],
+    "ASTS": ["QQQ"],
+    # Watchlist — 量子/核能/新兴科技
+    "RGTI": ["QQQ"], "OKLO": ["QQQ", "URA"], "SMR": ["QQQ", "URA"],
+    "TEM": ["QQQ", "XLV"], "NBIS": ["QQQ"],
+    # Watchlist — ETF/其他
+    "BOT": ["XLV", "IBB"], "ARKK": ["QQQ"],
+    # Crypto-exposed equities
     "COIN": ["QQQ", "XLK", "IBIT", "MSTR"],
     "MSTR": ["QQQ", "IBIT", "COIN"],
     "RIOT": ["MARA", "COIN"],
@@ -55,6 +79,8 @@ _ETF_CN: Dict[str, str] = {
     "XLE": "能源板块", "XLV": "医疗保健", "XLI": "工业板块",
     "TLT": "长期国债", "GLD": "黄金", "USO": "原油",
     "IWM": "罗素2000",
+    # Watchlist ETFs
+    "ITA": "航天国防", "PPA": "国防军工", "URA": "铀矿核能", "IBB": "生物医药",
     # Crypto-exposed equities
     "IBIT": "比特币ETF", "COIN": "Coinbase", "MSTR": "MicroStrategy",
 }
@@ -62,13 +88,16 @@ _ETF_CN: Dict[str, str] = {
 # Event category → related ETFs (for macro/news-driven events)
 _EVENT_TO_ETF: Dict[str, List[str]] = {
     "monetary": ["TLT", "SPY", "GLD"],
-    "geopolitical": ["GLD", "USO", "XLE"],
+    "geopolitical": ["GLD", "USO", "XLE", "ITA", "PPA"],
     "macro_data": ["TLT", "SPY", "XLF"],
     "CHIPS": ["SMH", "SOXX"],
     "TARIFF": ["XLI", "XLE", "SPY"],
     "AI": ["SMH", "QQQ", "XLK"],
-    "ENERGY": ["XLE", "USO"],
+    "ENERGY": ["XLE", "USO", "URA"],
     "REGULATORY": ["XLF", "SPY", "QQQ"],
+    "DEFENSE": ["ITA", "PPA", "KTOS"],
+    "NUCLEAR": ["URA", "OKLO", "SMR"],
+    "SPACE": ["ITA", "SPCX", "RKLB"],
 }
 
 

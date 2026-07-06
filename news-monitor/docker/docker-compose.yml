@@ -46,19 +46,24 @@ services:
       - WEB_USERNAME=${WEB_USERNAME:-}
       - WEB_PASSWORD=${WEB_PASSWORD:-}
       - TZ=America/New_York
+      # ECS has direct internet — override dev proxy from .env
+      - HTTPS_PROXY=
+      - HTTP_PROXY=
 
     # ---- Persistent Volumes ----
     # Survives container restarts & image rebuilds
     volumes:
       - news_data:/app/data
       - news_logs:/app/logs
+      - ./config/sources.yaml:/app/config/sources.yaml
+      - ../../.claude/memory:/app/.claude/memory
 
     # ---- Resource Limits ----
     # 2 GB recommended: Chromium ≈500M, Python+spaCy ≈300M, LLM headroom
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 3G
         reservations:
           memory: 512M
 

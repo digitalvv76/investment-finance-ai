@@ -124,7 +124,7 @@ class1/
 |--------|------|--------|------|
 | `yfinance` | ✅ 正常 | ~30+ | Yahoo Finance 美股数据 (2026-06-30 验证通过) |
 | `finance` | ✅ 正常 | 11 | 多源聚合 + 组合追踪 (需 ALPHA_VANTAGE_API_KEY) |
-| `stock-scanner` | ✅ 正常 | 45+ | **最全面** — 含 TradingView/CoinGecko/SEC EDGAR/Options/Reddit |
+| `stock-scanner` | ✅ 正常 | 66 | **最全面** — 含 TradingView/Finnhub/CoinGecko/SEC EDGAR/Options/Reddit |
 | `coingecko` | ⚠️ 待验证 | ~13 | 更新为 `@coingecko/coingecko-mcp`，stock-scanner 已内置冗余 |
 | `fred` | ✅ 正常 | ~10 | FRED 美联储宏观数据 (2026-07-01 验证: CPI/利率/就业均正常) |
 | `cn-finance` | ❌ 不可用 | 0 | PyPI 包不存在 (2026-06-30)。回退: stock-scanner TradingView SH/SZ 交易所扫描 |
@@ -165,6 +165,7 @@ class1/
 |------|----------|----------|------|
 | FRED | `FRED_API_KEY` | https://fred.stlouisfed.org/docs/api/api_key.html | 推荐 |
 | Alpha Vantage | `ALPHA_VANTAGE_API_KEY` | https://www.alphavantage.co/support/#api-key | 推荐 |
+| Finnhub | `FINNHUB_API_KEY` | https://finnhub.io/register | 推荐 |
 | Binance | `BINANCE_API_KEY` / `BINANCE_SECRET_KEY` | Binance API 管理 | 可选 |
 
 设置方式：
