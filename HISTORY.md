@@ -841,4 +841,51 @@ Nvidia cuts guidance...
 
 ---
 
+## 2026-07-06T22:06+08:00 · 会话 — V2 规划启动 + 可靠性加固 + V1 收尾
+
+### V1 收尾
+- ✅ `@SemiAnalysis` Twitter 源补充 + HISTORY.md 同步
+- ✅ 第二台手机 Pushover 推送 (`PUSHOVER_USER_KEY_2`)
+- ✅ 深度分析链接修复 (Vercel HTTPS 代理 `/api/*`)
+- ✅ ECS 可靠性方案: swap 已有 2GB / logrotate 部署 / deploy.sh 一键部署 / UptimeRobot 监控
+- ✅ 根目录清理: 4 临时文件删除 + 4 截图移至 docs/img/
+- ✅ V1 版本固定: `v1.0.0` tag + `v1-stable` 分支（生产锁定）
+- ✅ 关机保存规则写入记忆 + 用户定位更新（金融专家，委托技术）
+
+### V2 规划启动
+- ✅ 协作模式确认: 混合模式 C / 默认推荐直接执行 / 不可逆操作确认
+- ✅ 架构方向: 管道模式（采集→清洗→分析→推送 各层独立）
+- ✅ 开发策略: B 架构重构为主 / 分批迭代 / Phase 1 开发规范先行
+- ✅ V2 Phase 1 设计文档 + 实施计划
+
+### V2 Phase 1 执行 (进行中)
+- ✅ Task 1: 9 个 `__manifest__.json` 文件创建（87 模块条目）
+- ✅ Task 2: pre_commit_check.py 更新（提交格式检查 + manifest 门禁）
+- ⏳ Task 3-6: 未完成（session_startup 扫描 / pre-push 保护 / registry 废弃 / 端到端验证）
+
+### 踩坑新增
+- 深度分析链接显示错误新闻 → Vercel 缺 `/api/*` 代理 → vercel.json 添加 rewrite
+- web API 端点必须走 Vercel HTTPS，不能直接用 ECS IP
+- Task 2 子代理漏 commit、误删 NVDA PDF → 已恢复
+
+### 修改文件
+- `vercel.json` — 新增 `/api/:path*` rewrite
+- `deploy.sh` — 新建，一键部署到 ECS
+- `news-monitor/engine/alert_dispatcher.py` — 多用户 Pushover 支持
+- `news-monitor/bot/formatters.py` — @SemiAnalysis 显示名
+- `news-monitor/config/sources.yaml` — @SemiAnalysis Twitter 源
+- `news-monitor/config/settings.yaml` — pushover_user_2 映射
+- `news-monitor/scripts/verify_env.py` — 双 user key 验证
+- `news-monitor/scripts/install_service.py` — PUSHOVER_USER_KEY_2
+- `news-monitor/*/__manifest__.json` — 9 个模块清单
+- `news-monitor/scripts/pre_commit_check.py` — 提交格式 + manifest 门禁
+- `.claude/TROUBLESHOOTING.md` — 新增深度分析链接条目
+- `.claude/memory/` — 新增 shutdown-checklist, vercel-proxy-architecture, 更新 user-profile
+- `docs/superpowers/specs/` — V2 Phase 1 设计文档
+- `docs/superpowers/plans/` — V2 Phase 1 实施计划
+- `docs/img/` — 4 张截图移入
+- 删除: 4 临时文件
+
+---
+
 ## 2026-07-06T22:06+08:00 · 会话开始 — 补充 @SemiAnalysis 源 + HISTORY.md 补录

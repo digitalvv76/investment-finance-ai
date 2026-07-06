@@ -1,40 +1,38 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-06 21:00 CST
+> 最后更新: 2026-07-06 23:55 CST
 
-## 🟢 进行中
+## ✅ 本次会话已完成
 
-- [x] **推送规则完善** ✅ 关注名单阈值 0.35 / 非关注不推手机 / StrategicDetector 误报修复
-- [x] **Finnhub 新闻源** ✅ 21 个 watchlist 标的每 5 分钟轮询
-- [x] **深度分析 v2** ✅ 简洁快报 (400字) + 真实价格 + watchlist 上下文
-- [x] **ECS 稳定运行** ✅ 3GB 内存，Twitter 恢复，Docker 代理修复
-- [x] **AnySearch MCP** ✅ 已安装，按需深挖用
-- [x] **会话管理** ✅ SESSION.md + TROUBLESHOOTING.md + chat_id 自检
+- ✅ V1 收尾: 双手机推送 / 深度分析链接修复 / ECS 可靠性 / 版本固定
+- ✅ V2 规划: 协作模式 / 架构方向 / 开发策略确认
+- ✅ V1.0.0 tag + v1-stable 分支
 
-## 📋 下一步
+## 🟢 V2 Phase 1 进行中
 
-1. 观察推送质量，验证新规则生效
-2. 跑一次 Edge Pipeline 完整流程
-3. 设置周六策略审查 cron
+- [x] Task 1: `__manifest__.json` 创建 (9 个文件, 87 模块)
+- [x] Task 2: pre_commit_check.py 更新 (提交格式 + manifest 门禁)
+- [ ] Task 3: session_startup.py manifest 扫描
+- [ ] Task 4: pre-push hook (v1-stable 保护)
+- [ ] Task 5: module_registry.json 废弃标记
+- [ ] Task 6: 端到端验证
 
-## 🔑 部署检查清单 (每次部署必做)
+## 📋 下一步 (下次会话)
 
-- [ ] `scp .env` 到 ECS（Key 变更时）
-- [ ] `scp` 修改的代码文件
-- [ ] Docker rebuild (`docker compose up -d --build`)
-- [ ] 验证：`docker logs news-monitor | grep 'chat_id\|Monitor running'`
-- [ ] 新 Key 同步：`.env` → `.env.example` → `settings.json`
+1. 继续 V2 Phase 1 Task 3-6
+2. 完成 Phase 1 → 转入 Phase 2 管道架构重构
 
 ## 📊 系统健康
 
 | 组件 | 状态 | 备注 |
 |------|------|------|
-| ECS (47.76.50.77) | ✅ 运行中 | 3.4GB, Docker 39% |
-| Telegram Bot | ✅ 正常 | chat_id 自检 + DB 持久化 |
-| Pushover | ✅ 正常 | 深度分析链接可用 |
-| ZeroHedge | ✅ 1min | heartbeat 采集 |
-| Twitter | ✅ 5min | 6 账号正常运行 |
-| Finnhub | ✅ 5min | 21 标的个股新闻 |
-| RSS + 中文源 | ✅ 15min | CNBC/WSJ/MarketWatch/SA + 华尔街见闻 |
-| DeepSeek API | ✅ 正常 | 主 LLM |
-| AnySearch | ✅ 已装 | 按需使用，不接自动管道 |
+| ECS (47.76.50.77) | ✅ 运行中 | UptimeRobot 监控中 |
+| v1-stable | 🔒 锁定 | 生产版本 |
+| main | 🚀 V2 开发 | Phase 1 50% |
+| Swap | ✅ 2GB | 已配置 |
+| Logrotate | ✅ 已部署 | 7天/50MB |
+
+## 🩹 本次踩坑
+
+- 深度分析链接: Vercel 缺 /api/* 代理 → vercel.json 添加 rewrite
+- Task 2 子代理: 漏 commit + 误删文件 → 手动恢复
