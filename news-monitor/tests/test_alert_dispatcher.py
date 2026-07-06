@@ -42,9 +42,9 @@ def test_classify_critical_by_score(dispatcher):
 
 
 def test_classify_important_by_score(dispatcher):
-    level, reason = dispatcher.classify(0.60)
+    level, reason = dispatcher.classify(0.50)
     assert level == AlertLevel.IMPORTANT
-    assert "0.60" in reason
+    assert "0.50" in reason
 
 
 def test_classify_normal_by_score(dispatcher):
@@ -70,8 +70,8 @@ def test_classify_critical_by_nvda_investment(dispatcher):
 def test_classify_nvda_endorsement_below_threshold(dispatcher):
     """Low-confidence nvda_endorsement → NOT critical (falls to score)."""
     matches = [StrategicMatch("nvda_endorsement", "Jensen Huang says nice thing", 0.65)]
-    level, reason = dispatcher.classify(0.49, matches)
-    assert level == AlertLevel.NORMAL  # score 0.49 < 0.50, nvda conf 0.65 < 0.70
+    level, reason = dispatcher.classify(0.38, matches)
+    assert level == AlertLevel.NORMAL  # score 0.38 < 0.45, nvda conf 0.65 < 0.70
 
 
 def test_classify_gov_trumps_score(dispatcher):
@@ -82,12 +82,12 @@ def test_classify_gov_trumps_score(dispatcher):
 
 
 def test_classify_empty_matches(dispatcher):
-    level, reason = dispatcher.classify(0.49, [])
+    level, reason = dispatcher.classify(0.38, [])
     assert level == AlertLevel.NORMAL
 
 
 def test_classify_none_matches(dispatcher):
-    level, reason = dispatcher.classify(0.60, None)
+    level, reason = dispatcher.classify(0.50, None)
     assert level == AlertLevel.IMPORTANT
 
 
@@ -126,7 +126,7 @@ async def test_dispatch_important_no_pushover(dispatcher, sample_item):
         push_calls.append(disable_notification)
 
     result = await dispatcher.dispatch(
-        sample_item, priority_score=0.60,
+        sample_item, priority_score=0.50,
         telegram_push_fn=mock_push,
     )
     assert result.level == AlertLevel.IMPORTANT
@@ -310,5 +310,5 @@ def test_end_to_end_classification_with_real_detector(strategic):
     # Normal text → NORMAL
     text2 = "Apple reports quarterly earnings, stock up 3%"
     matches2 = strategic.detect(text2)
-    level2, reason2 = dispatcher.classify(0.49, matches2)
+    level2, reason2 = dispatcher.classify(0.38, matches2)
     assert level2 == AlertLevel.NORMAL

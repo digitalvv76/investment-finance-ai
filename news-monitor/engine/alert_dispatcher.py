@@ -51,8 +51,8 @@ class DispatchResult:
 # Thresholds
 # ---------------------------------------------------------------------------
 
-CRITICAL_PRIORITY = 0.65      # PriorityScorer scores >= this → CRITICAL
-IMPORTANT_PRIORITY = 0.50     # "" >= this → IMPORTANT
+CRITICAL_PRIORITY = 0.55      # PriorityScorer scores >= this → CRITICAL
+IMPORTANT_PRIORITY = 0.45     # "" >= this → IMPORTANT
 STRATEGIC_CRITICAL_CONF = 0.70  # Strategic match confidence >= this → CRITICAL
 GOV_INTERVENTION_CRITICAL = True  # Any gov_intervention match → auto CRITICAL
 

@@ -30,8 +30,8 @@ class TestImpactPushClassification:
         assert "87" in reason  # composite ≈ 87
 
     def test_moderate_impact_triggers_important(self):
-        """impact=60, conf=70, rel=1.0 → composite=63 → IMPORTANT"""
-        assessment = StubImpactAssessment(impact_score=60, confidence=70)
+        """impact=50, conf=55, rel=1.0 → composite=51.5 → IMPORTANT"""
+        assessment = StubImpactAssessment(impact_score=50, confidence=55)
         level, reason = self.dispatcher.classify(
             0.4, [], impact_assessment=assessment, rel_mult=1.0,
         )
