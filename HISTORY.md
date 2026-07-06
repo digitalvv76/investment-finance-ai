@@ -745,3 +745,11 @@ FastLane预筛选(≥0.30) → ImpactEvaluator(LLM) + EventMatcher(历史)
 - 🔧 dev_checklist: ChromaDB Windows 错误不再算测试失败 (→ `7501e6a`)
 - 🔐 凭证同步: PYTHONIOENCODING 补入 .env + sync_env_to_settings 全绿
 - ⏳ ECS 部署: 安全组已开放 22/8080, 但 sshd 服务未响应 (需重启 ECS)
+
+### ECS 生产部署 + 问题诊断
+- 🔍 根因诊断: 2GB 内存严重不足 (空闲仅 96MB, I/O等待 76.5%) — Chromium + Python + spaCy 三个大户同时跑
+- 🔧 瘦身部署: 关闭 Web Dashboard (WEB_PORT=0)、Twitter/Playwright 采集 (清空 sources)、Nginx、snapd
+- 📉 效果: 负载 25.9→0.07, 内存 1293MB→465MB
+- 🔑 SSH 永久修复: 公钥认证 (id_ed25519) + PasswordAuthentication yes + systemctl enable sshd
+- 🐛 修复: yfinance 依赖未写入 requirements.txt (→ `cd32d73`)
+- 📱 推送验证: Telegram ✅ + Pushover ✅ 双通道正常
