@@ -48,6 +48,18 @@ systemctl enable sshd && systemctl restart sshd
 **根因**: Pushover 修改时不小心改动了 Telegram formatter，translator 模块重构时 Telegram bot 漏接了 translator。
 **修复**: 确保 `bot/telegram_bot.py` 的 `push_alert()` 调用了 `get_translator().translate()`。
 
+### 深度分析链接显示错误新闻 (2026-07-06)
+**症状**: Pushover 卡片点击"🔍 深度分析"后，手机浏览器打开的页面显示不相关的标题/来源。
+**根因**:
+1. `WEB_DASHBOARD_URL` 设为 HTTP 裸 IP (`http://47.76.50.77:8080`)，手机上不可靠
+2. Vercel (`class1-cyan.vercel.app`) 没有配置 `/api/*` 代理到 ECS
+3. 没有 HTTPS → 部分手机浏览器拦截或降级
+**修复**:
+1. `vercel.json` 添加 rewrite: `/api/:path*` → `http://47.76.50.77:8080/api/:path*`
+2. ECS `WEB_DASHBOARD_URL` 改为 `https://class1-cyan.vercel.app`
+3. Docker 重建
+**预防**: 新增任何需要手机浏览器打开的 web API 端点时，必须同步更新 Vercel rewrite 规则。原则：手机端只用 HTTPS 域名，所有 API 通过 Vercel 代理到 ECS。
+
 ### requirements.txt 漏了依赖
 **症状**: ECS 部署后 `import yfinance` 失败。
 **根因**: 在本地 `pip install yfinance` 后忘了 `pip freeze > requirements.txt`。
