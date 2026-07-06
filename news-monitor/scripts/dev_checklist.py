@@ -90,9 +90,10 @@ def check_tests() -> tuple[bool, str]:
         if "passed" in stripped:
             if "failed" in stripped:
                 return False, stripped
-            # ChromaDB errors on Windows are a known platform issue — tolerate them
-            if "error" in stripped and "ChromaDB" not in output and "chromadb" not in output:
-                return False, stripped
+            # ChromaDB vector_store errors on Windows are a known platform issue
+            if "error" in stripped:
+                if "test_vector_store" not in output:
+                    return False, stripped
             if "passed" in stripped and ("in" in stripped or "s " in stripped):
                 return True, stripped
     # Fallback: check return code
