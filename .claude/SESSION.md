@@ -1,45 +1,42 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-07 19:15 CST
+> 最后更新: 2026-07-07 23:15 CST
 
-## ✅ 今日完成
+## ✅ 今日完成 (v1-stable)
 
-### V2 Phase 1 & 2
-- Phase 1: 开发规范 + 自动化 (6/6 tasks)
-- Phase 2: 管道架构重构 (9/9 tasks)
-- 333 tests pass
-- main.py 440→310 行
+### 深度分析实时价格修复
+- yf.download() 日线收盘 → Ticker.info 实时价 (preMarketPrice/regularMarketPrice/postMarketPrice)
+- 标签: marketState 实时同步 (PRE→pre-market, REGULAR→today, POST→after-hours)
+- Commit: 9ddd4bb
 
-### V1 急速优化 (已部署 ECS)
-- 中文+RSS 提到 1 分钟心跳档
-- Twitter 精简 10→6, 路透社 3 账号
-- Sina 4 频道, WallstreetCN/CNBC 爬虫
-- 预期延迟: ~20分 → ~1-3分
+### 低冲击新闻不推送
+- settings.yaml 新增 min_impact_for_push: 30
+- impact_score < 30 → 跳过不推 (连静默都不发)
+- Commit: 6b4afd6
 
-### 会话维护
-- HISTORY.md 同步: 26 条缺失提交已补录
-- manifest: web_scraper.py 已注册
-- 重复会话条目已清理
+### Telegram 推送去重
+- push_alert EN+CN 合并到一条消息 (之前每条发两次)
+- Commit: a71c5d9
 
-## 🩹 今日踩坑
+### 采集速度优化 (Phase 4)
+- Step 1-5: 采集器全并发, 85s→~15s
+- 心跳 60s→30s
+- Commit: eba60a4
 
-- V1 修改混在 main 做，连 V2 代码推上 ECS。下次用 v1-stable worktree。
-- DeepStage 传 dict 给 DeepLane (需 NewsItem) — 已修复
-- Sina API 403 — ECS IP 被拦, 爬虫也绕不过去
+### Web Scraper 开关
+- sources.yaml web_scraper.enabled toggle + scheduler 守护
 
 ## 📋 下一步
 
-1. Phase 3: IngestStage 接入 scheduler
-2. 观察 ECS 推送延迟效果
-3. V1 修改必须走 v1-stable worktree
+1. 观察 ECS 延迟/推送质量
+2. 跑一次 Edge Pipeline 完整流程
+3. Step 6: 浏览器实例合并 (可选，省内存)
 
 ## 📊 系统健康
 
 | 组件 | 状态 |
 |------|------|
-| ECS | ✅ 运行中, 1分心跳, 爬虫工作中 |
-| main (V2) | 🚀 Phase 2 ✅, 等待 Phase 3 |
-| v1-stable | 🔒 已同步, worktree 可用 |
-| 测试 | 333 pass |
-| HISTORY.md | ✅ 已同步 (26 hashes 补录) |
-| manifest | ✅ web_scraper.py 已注册 |
+| ECS | ✅ 运行中, 30s 心跳, 全采集器并发 |
+| v1-stable | ✅ 已部署 4 commits |
+| 测试 | 314 pass |
+| 推送延迟 | ~30-60s (预估) |

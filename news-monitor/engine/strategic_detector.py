@@ -26,7 +26,7 @@ GOVERNMENT_ENTITIES = [
     "Department of Defense", "Defense Department", "Defense Dept", "DoD", "DOE", "DOC", "DHS",
     "Pentagon", "五角大楼",
     # Agencies
-    "SEC", "CFTC", "FTC", "FCC", "FDA", "EPA", "NASA", "DARPA",
+    "SEC", "CFTC", "FTC", "FCC", "FDA", "EPA", "NASA", "DARPA", "CFIUS",
     "美国证券交易委员会", "美国商品期货交易委员会", "联邦贸易委员会",
     "美国食品药品监督管理局", "美国环保署",
     # Government programs
@@ -40,6 +40,9 @@ GOVERNMENT_ENTITIES = [
     "州政府", "state government",
     # Generic government signals (must be specific enough to avoid false positives)
     "federal government", "United States",
+    "government backstop", "government backing", "government bailout",
+    "government support", "government rescue",
+    "state-backed", "state backed", "government-backed", "government backed",
 ]
 
 # NVIDIA related entities
@@ -145,6 +148,7 @@ SUBSIDY_ACTIONS_EN = [
     "finalizes", "finalize", "announces", "announce", "plans", "pledges", "commits",
     "supports", "support", "backs", "backing",
     "package", "packages",
+    "provides", "provide", "provided",  # "federal government provides subsidies"
 ]
 
 POLICY_ACTIONS_CN = [
@@ -160,6 +164,7 @@ POLICY_ACTIONS_EN = [
     "tariff exemption", "export control ease", "deregulate",
     "sanctions", "sanction", "imposes sanctions", "impose sanctions",
     "ban", "banning", "restrict",
+    "approves", "approve", "approved",  # regulatory approval
 ]
 
 ALL_ACTIONS = (
@@ -413,14 +418,16 @@ class StrategicDetector:
                                             "convertible preferred", "golden share"]):
             score += 0.25
         if any(a in action_lower for a in ["资助", "扶持", "补贴", "拨款", "授予", "subsidize", "subsidizes",
-                                            "subsidy", "grant", "grants", "fund", "funding", "award", "awards",
+                                            "subsidies", "subsidy", "grant", "grants", "fund", "funding",
+                                            "award", "awards", "provides", "provide",
+                                            "package", "packages",  # rescue/bailout/stimulus package
                                             "converts", "converts into equity", "swap for equity",
                                             "finalizes", "announces", "plans", "pledges", "backs",
                                             "allocates", "allocate", "distributes",
                                             "strategic", "strategic stakes"]):
             score += 0.20
         if any(a in action_lower for a in ["签署", "批准", "行政命令", "executive order", "sign into law",
-                                            "signs into law", "passes legislation"]):
+                                            "signs into law", "passes legislation", "approves", "approve", "approved"]):
             score += 0.15
         if any(a in action_lower for a in ["制裁", "sanction", "实体清单", "entity list", "ban", "banning"]):
             score += 0.15
@@ -439,12 +446,12 @@ class StrategicDetector:
             score += 0.20  # Competitive threat / market entry is a strong strategic signal
 
         # Strong entities
-        if any(e in entity_lower for e in ["chips act", "芯片法案", "inflation reduction", "dod", "darpa", "国防部", "商务部"]):
+        if any(e in entity_lower for e in ["chips act", "芯片法案", "inflation reduction", "department of energy", "energy department", "dod", "doe", "darpa", "国防部", "商务部", "能源部"]):
             score += 0.15
         if any(e in entity_lower for e in ["pentagon", "五角大楼", "white house", "白宫", "congress", "国会"]):
             score += 0.15
         if any(e in entity_lower for e in ["washington", "us government", "federal government", "united states"]):
-            score += 0.10
+            score += 0.15  # was 0.10 — boosted: generic gov entities are strong signals
         if any(e in entity_lower for e in ["黄仁勋", "jensen huang", "nvidia ceo", "huang"]):
             score += 0.20  # Jensen Huang / NVIDIA CEO is the strongest signal
         if any(e in entity_lower for e in ["nvidia", "英伟达", "nvda"]):
@@ -456,6 +463,7 @@ class StrategicDetector:
             (["商务部", "department of commerce"], ["实体清单", "entity list", "制裁", "sanction"]),
             (["财政部", "treasury"], ["制裁", "sanction", "税收优惠"]),
             (["国防部", "defense department", "dod", "department of defense"], ["授予", "award", "contract", "合同", "golden share", "黄金股"]),
+            (["能源部", "energy department", "department of energy", "doe"], ["grant", "grants", "fund", "funding", "award", "awards", "invest", "拨款", "资助", "补贴"]),
             (["chips act", "芯片法案"], ["拨款", "补贴", "grant", "fund", "注资", "invest"]),
             (["inflation reduction act", "ira"], ["invest", "fund", "grant", "subsidize"]),
         ]

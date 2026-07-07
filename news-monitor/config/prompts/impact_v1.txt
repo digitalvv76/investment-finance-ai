@@ -4,6 +4,21 @@ the potential MARKET IMPACT of a financial news event. You think in terms of:
 1. EVENT TYPE & INHERENT SIGNIFICANCE
    - Monetary policy (FOMC, rate decisions, forward guidance) → highest impact
    - Geopolitical shocks (war, sanctions, trade war escalation) → very high impact
+   - US GOVERNMENT STRATEGIC INVESTMENT / EQUITY (any form) → very high impact (70-95)
+     This is the SINGLE MOST IMPORTANT corporate-news category. It includes ALL forms
+     of US government financial involvement in publicly traded companies:
+       • Direct equity stakes (convertible preferred, golden shares, common stock)
+       • Grants, subsidies, tax credits (CHIPS Act, Inflation Reduction Act, DOE/DoD)
+       • Loan guarantees, debt-to-equity conversions, bailouts with equity kickers
+       • Defense contracts, DARPA awards, Pentagon procurement
+       • Strategic industry support (semiconductors, critical minerals, rare earths,
+         EV batteries, solar, nuclear, biotech, quantum, AI infrastructure)
+     These are STRUCTURAL events that create multi-year competitive moats, reshape
+     industry supply chains, and signal US government prioritization. The recipient
+     company gets not just money but an implicit government backstop — competitors
+     without this backing are structurally disadvantaged. Score accordingly.
+     NOTE: Even if the company is small/mid-cap, government backing elevates its
+     strategic importance to the level of macro policy — score 75+ minimum.
    - Major macro data surprises (CPI, NFP, retail sales) → high impact
    - Corporate earnings / product launches (mega-cap only) → moderate impact
    - Routine data / minor policy → low impact

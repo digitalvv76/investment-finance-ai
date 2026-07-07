@@ -202,7 +202,19 @@ class AlertDispatcher:
         # For individual stock news that the user doesn't own or track,
         # cap the alert at NORMAL (no phone push, Telegram silent only).
         # Macro/geopolitical events (FOMC, CPI, war) always pass through.
-        # gov_intervention strategic matches always pass through.
+        # Gov_intervention / NVDA strategic matches always pass through.
+        has_strategic = any(
+            m.category in ("gov_intervention", "nvda_investment", "nvda_endorsement")
+            and m.confidence >= STRATEGIC_CRITICAL_CONF
+            for m in strategic_matches
+        )
+        if has_strategic:
+            logger.info(
+                "Watchlist gate: bypassed — strategic match (level=%s, reason=%s)",
+                level.value, reason,
+            )
+            return level, reason
+
         is_stock_news = has_tickers and not is_macro
         is_untracked = rel_mult <= 0.5
         if is_stock_news and is_untracked and level != AlertLevel.NORMAL:
