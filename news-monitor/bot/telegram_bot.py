@@ -58,8 +58,8 @@ class NewsBot:
                 if len(seen) > 1:
                     others = sorted(seen - {chat_id})
                     logger.info(
-                        "Multiple chat_ids found: %s. To add secondary Telegram, "
-                        "set TELEGRAM_CHAT_ID_2=%s in .env",
+                        "Multiple chat_ids found: %s. To add additional Telegram, "
+                        "set TELEGRAM_CHAT_ID_2 or TELEGRAM_CHAT_ID_3 in .env",
                         seen, others[0],
                     )
             else:
@@ -200,7 +200,7 @@ class NewsBot:
                 logger.error(f"Deep analysis push failed → chat {chat_id}: {e}")
 
     def _get_chat_ids(self) -> list[int]:
-        """Get all authorized chat IDs (primary from DB + secondary from env)."""
+        """Get all authorized chat IDs (primary from DB + secondary/tertiary from env)."""
         ids: list[int] = []
         # Primary: auto-detected + stored in DB
         val = self.db.get_preference("telegram_chat_id")
@@ -215,6 +215,15 @@ class NewsBot:
                     ids.append(id2)
             except ValueError:
                 logger.warning("Invalid TELEGRAM_CHAT_ID_2: %s", env2)
+        # Tertiary: third Telegram account
+        env3 = os.environ.get("TELEGRAM_CHAT_ID_3", "")
+        if env3:
+            try:
+                id3 = int(env3)
+                if id3 not in ids:
+                    ids.append(id3)
+            except ValueError:
+                logger.warning("Invalid TELEGRAM_CHAT_ID_3: %s", env3)
         return ids
 
     def set_chat_id(self, chat_id: int):
