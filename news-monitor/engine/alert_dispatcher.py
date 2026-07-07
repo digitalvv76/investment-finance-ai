@@ -419,21 +419,22 @@ class AlertDispatcher:
         async def _push(item: dict, disable_notification: bool = True) -> None:
             from bot.formatters import format_fast_alert, build_feedback_keyboard
 
-            chat_id = bot._get_chat_id()
-            if not chat_id:
+            chat_ids = bot._get_chat_ids()
+            if not chat_ids:
                 return
 
             text = format_fast_alert(item)
             keyboard = build_feedback_keyboard(item.get("id", 0))
 
-            try:
-                await bot._app.bot.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    reply_markup=keyboard,
-                    disable_notification=disable_notification,
-                )
-            except Exception as e:
-                logger.error("Telegram dispatch failed: %s", e)
+            for cid in chat_ids:
+                try:
+                    await bot._app.bot.send_message(
+                        chat_id=cid,
+                        text=text,
+                        reply_markup=keyboard,
+                        disable_notification=disable_notification,
+                    )
+                except Exception as e:
+                    logger.error("Telegram dispatch failed → chat %s: %s", cid, e)
 
         return _push
