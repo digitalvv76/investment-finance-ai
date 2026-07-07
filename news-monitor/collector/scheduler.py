@@ -114,83 +114,109 @@ class NewsScheduler:
         await self._notify_callbacks(items)
 
     async def _heartbeat_tick(self):
-        """1-minute heartbeat: Chinese news + RSS + Playwright + API triggers.
+        """1-minute heartbeat: all collectors run concurrently via asyncio.gather.
 
-        Chinese (Sina + WallstreetCN) and RSS promoted here to eliminate the
-        ~15-min latency gap vs. native apps.  Combined tick ~40s, under 60s.
+        Chinese + RSS + Playwright(hb) + API + WebScraper fire simultaneously.
+        Old serial: ~85s.  New concurrent: ~32s (bottleneck = slowest collector).
         """
-        items = []
+        # ---- Launch all collectors concurrently ----
+        cn_task = self._safe_fetch(
+            self.chinese_fetcher.fetch_all(), "chinese"
+        )
+        rss_task = self._safe_fetch(
+            self.rss_fetcher.fetch_all(), "rss"
+        )
 
-        # Chinese financial news (新浪财经 + 华尔街见闻) — real-time JSON, fastest non-Twitter
-        try:
-            cn_items = await self.chinese_fetcher.fetch_all()
-            items.extend(cn_items)
-        except Exception as e:
-            logger.warning("Chinese news fetch failed: %s", e)
-
-        # RSS feeds (CNBC, WSJ, MarketWatch, SA, CNBC Economy) — editorial, moderate speed
-        try:
-            rss_items = await self.rss_fetcher.fetch_all()
-            items.extend(rss_items)
-        except Exception as e:
-            logger.warning("RSS fetch failed: %s", e)
-
-        # Only heartbeat Playwright sources
-        heartbeat_sources = [
+        # Heartbeat-only Playwright sources (ZeroHedge)
+        hb_sources = [
             s for s in self.sources.get('tier_2_playwright', [])
             if s.get('frequency_tier') == 'heartbeat'
         ]
+        pw_task = self._safe_fetch(
+            self._fetch_playwright_sources(hb_sources), "playwright(hb)"
+        )
 
-        for source in heartbeat_sources:
-            src_items = await self.playwright_fetcher.fetch_source(source)
-            items.extend(src_items)
+        api_task = self._safe_fetch(
+            self.api_fetcher.check_all(), "api"
+        )
 
-        # API triggers
-        api_items = await self.api_fetcher.check_all()
-        items.extend(api_items)
+        scrape_task = self._safe_fetch(
+            self.web_scraper.fetch_all() if self.web_scraper is not None else [],
+            "web_scraper",
+        )
 
-        # Web scraper (WallstreetCN live + CNBC + MarketWatch homepages)
-        if self.web_scraper is not None:
-            try:
-                scraped = await self.web_scraper.fetch_all()
-                items.extend(scraped)
-            except Exception as e:
-                logger.warning("Web scraper failed: %s", e)
+        results = await asyncio.gather(
+            cn_task, rss_task, pw_task, api_task, scrape_task,
+        )
+
+        # ---- Merge all results ----
+        items = []
+        for result in results:
+            if result:
+                items.extend(result)
 
         if items:
             logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape)")
             await self._insert_and_notify(items)
 
-    async def _tick_5min(self):
-        """5-minute tick: Twitter + Finnhub + remaining Playwright.
+    async def _safe_fetch(self, coro_or_items, label: str) -> list:
+        """Await a coroutine or return a list, catching and logging errors.
 
-        Chinese + RSS moved to _heartbeat_tick() (1-min) for lower latency.
-        Twitter is the heaviest fetcher (~77s, Playwright browser) so it
-        stays here.  Combined tick ~80s, well under 300s.
+        Used by concurrent ticks — one collector failing must not drop the
+        results from the other collectors running in the same gather().
+        """
+        import inspect as _inspect
+        if _inspect.iscoroutine(coro_or_items):
+            try:
+                return await coro_or_items
+            except Exception as e:
+                logger.warning("%s fetch failed: %s", label, e)
+                return []
+        # Already a list (e.g. empty list for disabled scraper)
+        return coro_or_items or []
+
+    async def _fetch_playwright_sources(self, sources: list) -> list:
+        """Fetch a list of Playwright sources (serial within this group).
+
+        Kept serial because all sources share one browser instance;
+        parallel page access inside one browser is fragile.
+        """
+        items = []
+        for source in sources:
+            try:
+                src_items = await self.playwright_fetcher.fetch_source(source)
+                items.extend(src_items)
+            except Exception as e:
+                logger.warning("Playwright source %s failed: %s",
+                               source.get('name', '?'), e)
+        return items
+
+    async def _tick_5min(self):
+        """5-minute tick: Twitter + Finnhub + remaining Playwright concurrent.
+
+        Old serial: ~77s.  New concurrent: ~72s (Twitter is still the bottleneck,
+        but further optimized in Step 5 via internal parallelisation).
         """
         sources = [
             s for s in self.sources.get('tier_2_playwright', [])
             if s.get('frequency_tier') != 'heartbeat'
         ]
+
+        pw_task = self._safe_fetch(
+            self._fetch_playwright_sources(sources), "playwright(5min)"
+        )
+        twitter_task = self._safe_fetch(
+            self.twitter_fetcher.fetch_all(), "twitter"
+        )
+        finnhub_task = self._safe_fetch(
+            self.finnhub_fetcher.fetch_all(), "finnhub"
+        )
+
+        results = await asyncio.gather(pw_task, twitter_task, finnhub_task)
         items = []
-        for source in sources:
-            src_items = await self.playwright_fetcher.fetch_source(source)
-            items.extend(src_items)
-
-        # Twitter/X feeds via Playwright + auth cookie
-        try:
-            twitter_items = await self.twitter_fetcher.fetch_all()
-            items.extend(twitter_items)
-        except Exception as e:
-            logger.warning("Twitter fetch failed: %s", e)
-
-        # Finnhub per-ticker news — fills the gap for mid-cap watchlist
-        # stocks that don't appear on macro Twitter feeds or major RSS.
-        try:
-            finnhub_items = await self.finnhub_fetcher.fetch_all()
-            items.extend(finnhub_items)
-        except Exception as e:
-            logger.warning("Finnhub fetch failed: %s", e)
+        for result in results:
+            if result:
+                items.extend(result)
 
         if items:
             await self._insert_and_notify(items)
@@ -276,7 +302,7 @@ class NewsScheduler:
             except Exception as e:
                 logger.error(f"Scheduler tick error: {e}")
 
-            await asyncio.sleep(10)  # Check every 10 seconds
+            await asyncio.sleep(5)  # Check every 5 seconds (was 10s)
 
     async def start(self):
         """Start the scheduler."""

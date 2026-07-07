@@ -1,6 +1,6 @@
 # Global settings for news monitor
 frequencies:
-  heartbeat: 60          # 1-minute tier, seconds
+  heartbeat: 30          # 30-second tier (was 60s), seconds
   fast: 300              # 5-minute tier, seconds
   normal: 900            # 15-minute tier, seconds
   slow: 1800             # 30-minute tier, seconds

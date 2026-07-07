@@ -79,6 +79,7 @@ FILES=(
     "news-monitor/collector/scheduler.py"
     "news-monitor/collector/twitter_fetcher.py"
     "news-monitor/collector/chinese_fetcher.py"
+    "news-monitor/collector/rss_fetcher.py"
     "news-monitor/collector/finnhub_fetcher.py"
     "news-monitor/collector/web_scraper.py"
     "news-monitor/config/sources.yaml"

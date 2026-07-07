@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-07 · 会话 — 深度分析实时价格修复 + 爬虫开关
+
+### 深度分析数据时效修复
+- **根因**: `deep_lane.py` 的 `_fetch_market_enrichment()` 只用 `yf.download()` 日线收盘价，盘前/盘中看到的都是昨日数据
+- **修复**: 三阶段数据获取
+  1. 日线 (90天) → 20/50 MA + 成交量基线
+  2. `Ticker.info` 逐股票并行 → 实时价 (preMarketPrice / regularMarketPrice / postMarketPrice)
+  3. 日内 5 分钟线 → 指数 (^GSPC/^VIX) 和加密货币
+- **标签修正**: 用 `marketState` 确定阶段 (PRE→pre-market, REGULAR→today, POST→after-hours)
+- **效果**: NVDA 从错误的 "$195.55 (+0.37% today)" 变为正确的 "$192.27 (-1.31% pre-market)"
+
+### Web Scraper 开关
+- `sources.yaml` 新增 `web_scraper.enabled` toggle
+- `scheduler.py` 4 处守护 (init/startup/fetch/shutdown)，disabled 时零资源占用
+
+### 低冲击新闻不推送
+- `settings.yaml` 新增 `min_impact_for_push: 30`
+- `main.py` dispatch: LLM 评估 impact < 30 → 跳过不推（连静默都不发）
+- 老路径（无 impact_assessment）不受影响，正常推送
+
+### 部署
+- Commits: `9ddd4bb` + `6b4afd6` on v1-stable
+- ECS 部署成功: 3+2 files → Docker rebuild → healthy
+- 测试: 315 pass (1 预存失败)
+
 ## 2026-07-03 · 会话 — P0 数据源扩展：Twitter + 中国金融新闻
 
 ### P0 任务结果总览

@@ -60,7 +60,7 @@ twitter:
   # auth_token: ""          # Set here OR as TWITTER_AUTH_TOKEN in .env
   # proxy: "http://127.0.0.1:7897"  # override if HTTPS_PROXY not set
   max_items_per_account: 5
-  request_delay_seconds: 3.0
+  request_delay_seconds: 1.0  # 2 groups concurrent, light breathing room
   accounts:
     - "@Reuters"            # Reuters Top News — global breaking headlines
     - "@ReutersBusiness"    # Reuters Business — financial news wire
@@ -84,7 +84,7 @@ web_scraper:
 
 chinese_sources:
   max_items_per_source: 20
-  request_delay_seconds: 1.5  # 4 Sina channels need breathing room to avoid 403
+  request_delay_seconds: 0.3  # concurrent fetch, light breathing room per channel
   sina_channels:
     - {name: "7x24综合快讯", lid: 2509, category: "macro"}
     - {name: "国际新闻", lid: 2511, category: "geopolitics"}
