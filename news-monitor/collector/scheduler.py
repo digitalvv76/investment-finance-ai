@@ -110,10 +110,28 @@ class NewsScheduler:
         await self._notify_callbacks(items)
 
     async def _heartbeat_tick(self):
-        """1-minute heartbeat: check Tier 2 breaking sources + API triggers."""
+        """1-minute heartbeat: Chinese news + RSS + Playwright + API triggers.
+
+        Chinese (Sina + WallstreetCN) and RSS promoted here to eliminate the
+        ~15-min latency gap vs. native apps.  Combined tick ~40s, under 60s.
+        """
         items = []
 
-        # Only heartbeat sources
+        # Chinese financial news (新浪财经 + 华尔街见闻) — real-time JSON, fastest non-Twitter
+        try:
+            cn_items = await self.chinese_fetcher.fetch_all()
+            items.extend(cn_items)
+        except Exception as e:
+            logger.warning("Chinese news fetch failed: %s", e)
+
+        # RSS feeds (CNBC, WSJ, MarketWatch, SA, CNBC Economy) — editorial, moderate speed
+        try:
+            rss_items = await self.rss_fetcher.fetch_all()
+            items.extend(rss_items)
+        except Exception as e:
+            logger.warning("RSS fetch failed: %s", e)
+
+        # Only heartbeat Playwright sources
         heartbeat_sources = [
             s for s in self.sources.get('tier_2_playwright', [])
             if s.get('frequency_tier') == 'heartbeat'
@@ -128,17 +146,15 @@ class NewsScheduler:
         items.extend(api_items)
 
         if items:
-            logger.info(f"Heartbeat: {len(items)} items")
+            logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api)")
             await self._insert_and_notify(items)
-        else:
-            logger.debug("Heartbeat: no new items")
 
     async def _tick_5min(self):
-        """5-minute tick: Twitter + RSS + Chinese + Finnhub + remaining Playwright.
+        """5-minute tick: Twitter + Finnhub + remaining Playwright.
 
-        Chinese sources (Sina + WallstreetCN) and RSS were promoted from 15-min
-        to close the 20-minute latency gap vs. native apps.  All fetchers are
-        IO-bound; the combined tick completes in ~130s, well under 300s.
+        Chinese + RSS moved to _heartbeat_tick() (1-min) for lower latency.
+        Twitter is the heaviest fetcher (~77s, Playwright browser) so it
+        stays here.  Combined tick ~80s, well under 300s.
         """
         sources = [
             s for s in self.sources.get('tier_2_playwright', [])
@@ -155,20 +171,6 @@ class NewsScheduler:
             items.extend(twitter_items)
         except Exception as e:
             logger.warning("Twitter fetch failed: %s", e)
-
-        # RSS feeds (CNBC, WSJ, MarketWatch, SA, CNBC Economy)
-        try:
-            rss_items = await self.rss_fetcher.fetch_all()
-            items.extend(rss_items)
-        except Exception as e:
-            logger.warning("RSS fetch failed: %s", e)
-
-        # Chinese financial news (新浪财经 + 华尔街见闻) — fastest non-Twitter source
-        try:
-            cn_items = await self.chinese_fetcher.fetch_all()
-            items.extend(cn_items)
-        except Exception as e:
-            logger.warning("Chinese news fetch failed: %s", e)
 
         # Finnhub per-ticker news — fills the gap for mid-cap watchlist
         # stocks that don't appear on macro Twitter feeds or major RSS.

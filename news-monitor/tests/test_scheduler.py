@@ -171,23 +171,18 @@ def test_get_frequency_weekend(scheduler_setup):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_tick_5min_fetches_rss_and_chinese(scheduler_setup):
-    """RSS and Chinese now run on the 5-min tick (promoted from 15-min on 2026-07-07)."""
+async def test_heartbeat_fetches_rss_and_chinese(scheduler_setup):
+    """RSS and Chinese run on 1-min heartbeat tick (promoted from 15-min, then 5-min)."""
     s = scheduler_setup["scheduler"]
 
     from storage.models import NewsItem
     rss_items = [NewsItem(title="RSS News", url="https://n.com/1", source="CNBC")]
     cn_items = [NewsItem(title="中文新闻", url="https://n.com/2", source="新浪财经")]
-    twitter_items = [NewsItem(title="Tweet", url="https://n.com/3", source="Twitter")]
     s.rss_fetcher.fetch_all.return_value = rss_items
-    s.twitter_fetcher = MagicMock()
-    s.twitter_fetcher.fetch_all = AsyncMock(return_value=twitter_items)
     s.chinese_fetcher = MagicMock()
     s.chinese_fetcher.fetch_all = AsyncMock(return_value=cn_items)
-    s.finnhub_fetcher = MagicMock()
-    s.finnhub_fetcher.fetch_all = AsyncMock(return_value=[])
 
-    await s._tick_5min()
+    await s._heartbeat_tick()
 
     s.rss_fetcher.fetch_all.assert_called_once()
     s.chinese_fetcher.fetch_all.assert_called_once()
@@ -195,8 +190,26 @@ async def test_tick_5min_fetches_rss_and_chinese(scheduler_setup):
 
 
 @pytest.mark.asyncio
+async def test_tick_5min_fetches_twitter_and_finnhub(scheduler_setup):
+    """5-min tick still runs Twitter + Finnhub (RSS/Chinese moved to heartbeat)."""
+    s = scheduler_setup["scheduler"]
+
+    from storage.models import NewsItem
+    twitter_items = [NewsItem(title="Tweet", url="https://n.com/3", source="Twitter")]
+    s.twitter_fetcher = MagicMock()
+    s.twitter_fetcher.fetch_all = AsyncMock(return_value=twitter_items)
+    s.finnhub_fetcher = MagicMock()
+    s.finnhub_fetcher.fetch_all = AsyncMock(return_value=[])
+
+    await s._tick_5min()
+
+    s.twitter_fetcher.fetch_all.assert_called_once()
+    scheduler_setup["db"].insert_news.assert_called()
+
+
+@pytest.mark.asyncio
 async def test_tick_15min_is_noop(scheduler_setup):
-    """_tick_15min is now a no-op — all content moved to _tick_5min."""
+    """_tick_15min is now a no-op — all content moved to heartbeat + 5-min."""
     s = scheduler_setup["scheduler"]
     await s._tick_15min()
     scheduler_setup["db"].insert_news.assert_not_called()
