@@ -106,6 +106,8 @@ def install():
         "PUSHOVER_APP_TOKEN",
         "PUSHOVER_USER_KEY",
         "PUSHOVER_USER_KEY_2",
+        "TELEGRAM_CHAT_ID_2",  # Second Telegram account
+        "TELEGRAM_CHAT_ID_3",  # Third Telegram account
         "WEB_PORT",          # Enable web dashboard (8080)
     ]
 

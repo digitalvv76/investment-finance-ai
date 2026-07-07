@@ -41,6 +41,8 @@ api_keys:
   pushover_app: "${PUSHOVER_APP_TOKEN}"
   pushover_user: "${PUSHOVER_USER_KEY}"
   pushover_user_2: "${PUSHOVER_USER_KEY_2}"
+  telegram_chat_id_2: "${TELEGRAM_CHAT_ID_2}"
+  telegram_chat_id_3: "${TELEGRAM_CHAT_ID_3}"
 
 # Alert dispatch configuration
 alerts:

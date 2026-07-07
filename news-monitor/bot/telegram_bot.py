@@ -34,9 +34,9 @@ class NewsBot:
         the bot can push messages even if the user hasn't explicitly sent
         /start — any prior conversation with the bot will be discovered.
         """
-        existing = self._get_chat_id()
+        existing = self._get_chat_ids()
         if existing:
-            logger.info("Telegram chat_id: %d (from database)", existing)
+            logger.info("Telegram chat_ids: %s (from database + env)", existing)
             return
 
         logger.info("No chat_id saved — auto-detecting from Telegram API ...")
@@ -93,13 +93,15 @@ class NewsBot:
         The English message includes analyst note, ticker CN names, and
         sector ETFs.  The Chinese message is a translation of the title
         followed by the same analyst note and ETF line.
+
+        Pushes to ALL registered chat_ids (primary + TELEGRAM_CHAT_ID_2/3).
         """
         if not self._app:
             logger.warning("Bot not initialized, can't push")
             return
 
-        chat_id = self._get_chat_id()
-        if not chat_id:
+        chat_ids = self._get_chat_ids()
+        if not chat_ids:
             return
 
         title = item.get('title', '')
@@ -115,17 +117,18 @@ class NewsBot:
                                     confidence=confidence)
         keyboard = build_feedback_keyboard(item['id'])
 
-        try:
-            await self._app.bot.send_message(
-                chat_id=chat_id,
-                text=en_text,
-                reply_markup=keyboard,
-                disable_web_page_preview=False,
-            )
-            logger.info(f"Alert pushed (EN): {title[:50]}...")
-        except Exception as e:
-            logger.error(f"Push failed (EN): {e}")
-            return  # Don't send CN if EN failed
+        for chat_id in chat_ids:
+            try:
+                await self._app.bot.send_message(
+                    chat_id=chat_id,
+                    text=en_text,
+                    reply_markup=keyboard,
+                    disable_web_page_preview=False,
+                )
+                logger.info(f"Alert pushed (EN) → chat {chat_id}: {title[:50]}...")
+            except Exception as e:
+                logger.error(f"Push failed (EN) → chat {chat_id}: {e}")
+                continue  # Don't block other chat_ids
 
         # --- Chinese translation ---
         cn_title = await self._translator.translate(title)
@@ -153,38 +156,62 @@ class NewsBot:
             if url:
                 cn_parts.append(f"\U0001f517 {url}")
 
-            try:
-                await self._app.bot.send_message(
-                    chat_id=chat_id,
-                    text="\n".join(cn_parts),
-                    disable_web_page_preview=False,
-                )
-            except Exception as e:
-                logger.error(f"Push failed (CN): {e}")
+            for chat_id in chat_ids:
+                try:
+                    await self._app.bot.send_message(
+                        chat_id=chat_id,
+                        text="\n".join(cn_parts),
+                        disable_web_page_preview=False,
+                    )
+                except Exception as e:
+                    logger.error(f"Push failed (CN) → chat {chat_id}: {e}")
 
     async def push_deep_analysis(self, item: dict):
-        """Push deep analysis as a follow-up message."""
+        """Push deep analysis as a follow-up message to all chat_ids."""
         if not self._app:
             return
 
-        chat_id = self._get_chat_id()
-        if not chat_id:
+        chat_ids = self._get_chat_ids()
+        if not chat_ids:
             return
 
         text = format_deep_analysis(item)
-        try:
-            await self._app.bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                disable_web_page_preview=True,
-            )
-        except Exception as e:
-            logger.error(f"Deep analysis push failed: {e}")
+        for chat_id in chat_ids:
+            try:
+                await self._app.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    disable_web_page_preview=True,
+                )
+            except Exception as e:
+                logger.error(f"Deep analysis push failed → chat {chat_id}: {e}")
 
-    def _get_chat_id(self) -> Optional[int]:
-        """Get the authorized chat ID from preferences."""
+    def _get_chat_ids(self) -> list[int]:
+        """Get all authorized chat IDs (primary from DB + secondary/tertiary from env)."""
+        ids: list[int] = []
+        # Primary: auto-detected + stored in DB
         val = self.db.get_preference("telegram_chat_id")
-        return int(val) if val else None
+        if val:
+            ids.append(int(val))
+        # Secondary: explicitly set in .env
+        env2 = os.environ.get("TELEGRAM_CHAT_ID_2", "")
+        if env2:
+            try:
+                id2 = int(env2)
+                if id2 not in ids:
+                    ids.append(id2)
+            except ValueError:
+                logger.warning("Invalid TELEGRAM_CHAT_ID_2: %s", env2)
+        # Tertiary: third Telegram account
+        env3 = os.environ.get("TELEGRAM_CHAT_ID_3", "")
+        if env3:
+            try:
+                id3 = int(env3)
+                if id3 not in ids:
+                    ids.append(id3)
+            except ValueError:
+                logger.warning("Invalid TELEGRAM_CHAT_ID_3: %s", env3)
+        return ids
 
     def set_chat_id(self, chat_id: int):
         self.db.set_preference("telegram_chat_id", str(chat_id))
