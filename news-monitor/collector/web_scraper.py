@@ -227,7 +227,7 @@ class WebScraper:
                     const href = a.href || '';
                     const title = (a.textContent || '').trim();
                     // MarketWatch article URLs contain /story/ or year/month patterns
-                    if (title.length > 20 && !seen.has(href) && href.match(/marketwatch\\.com\\/story\\/|marketwatch\\.com\\/[a-z-]+\\/\\d{4}\\//)) {
+                    if (title.length > 20 && !seen.has(href) && href.includes('marketwatch.com') && !href.includes('/quote/')) {
                         seen.add(href);
                         items.push({title: title.substring(0, 200), url: href});
                     }
