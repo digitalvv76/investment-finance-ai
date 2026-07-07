@@ -45,6 +45,12 @@ def scheduler_setup():
     scheduler.api_fetcher.check_all = AsyncMock(return_value=[])
     scheduler.api_fetcher.close = AsyncMock()
 
+    scheduler.twitter_fetcher = MagicMock()
+    scheduler.twitter_fetcher.fetch_all = AsyncMock(return_value=[])
+    scheduler.twitter_fetcher.close = AsyncMock()
+    scheduler.twitter_fetcher.shutdown = AsyncMock()
+    scheduler.twitter_fetcher.startup = AsyncMock()
+
     scheduler.calendar = MagicMock(spec=ExchangeCalendar)
     scheduler.calendar.is_weekend_mode.return_value = False
 
@@ -193,29 +199,38 @@ async def test_heartbeat_fetches_rss_and_chinese(scheduler_setup):
 
 
 @pytest.mark.asyncio
-async def test_tick_5min_fetches_twitter_and_finnhub(scheduler_setup):
-    """5-min tick still runs Twitter + Finnhub (RSS/Chinese moved to heartbeat)."""
+async def test_tick_5min_fetches_finnhub_only(scheduler_setup):
+    """5-min tick runs Finnhub + Playwright. Twitter moved to 15-min to reduce load."""
+    s = scheduler_setup["scheduler"]
+
+    s.twitter_fetcher = MagicMock()
+    s.twitter_fetcher.fetch_all = AsyncMock(return_value=[])
+    s.finnhub_fetcher = MagicMock()
+    s.finnhub_fetcher.fetch_all = AsyncMock(return_value=[])
+
+    await s._tick_5min()
+
+    # Twitter should NOT be called in 5-min tick anymore
+    s.twitter_fetcher.fetch_all.assert_not_called()
+    s.finnhub_fetcher.fetch_all.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_tick_15min_fetches_twitter(scheduler_setup):
+    """15-min tick now runs Twitter (moved from 5-min to reduce CPU/memory load)."""
     s = scheduler_setup["scheduler"]
 
     from storage.models import NewsItem
     twitter_items = [NewsItem(title="Tweet", url="https://n.com/3", source="Twitter")]
     s.twitter_fetcher = MagicMock()
     s.twitter_fetcher.fetch_all = AsyncMock(return_value=twitter_items)
-    s.finnhub_fetcher = MagicMock()
-    s.finnhub_fetcher.fetch_all = AsyncMock(return_value=[])
+    s.twitter_fetcher.close = AsyncMock()
 
-    await s._tick_5min()
+    await s._tick_15min()
 
     s.twitter_fetcher.fetch_all.assert_called_once()
+    s.twitter_fetcher.close.assert_called_once()  # browser closed after fetch
     scheduler_setup["db"].insert_news.assert_called()
-
-
-@pytest.mark.asyncio
-async def test_tick_15min_is_noop(scheduler_setup):
-    """_tick_15min is now a no-op — all content moved to heartbeat + 5-min."""
-    s = scheduler_setup["scheduler"]
-    await s._tick_15min()
-    scheduler_setup["db"].insert_news.assert_not_called()
 
 
 @pytest.mark.asyncio

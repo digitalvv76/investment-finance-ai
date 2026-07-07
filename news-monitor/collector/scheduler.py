@@ -192,10 +192,9 @@ class NewsScheduler:
         return items
 
     async def _tick_5min(self):
-        """5-minute tick: Twitter + Finnhub + remaining Playwright concurrent.
+        """5-minute tick: Finnhub + remaining Playwright concurrent.
 
-        Old serial: ~77s.  New concurrent: ~72s (Twitter is still the bottleneck,
-        but further optimized in Step 5 via internal parallelisation).
+        Twitter moved to 15-min tick to reduce Chromium CPU/memory pressure.
         """
         sources = [
             s for s in self.sources.get('tier_2_playwright', [])
@@ -205,14 +204,11 @@ class NewsScheduler:
         pw_task = self._safe_fetch(
             self._fetch_playwright_sources(sources), "playwright(5min)"
         )
-        twitter_task = self._safe_fetch(
-            self.twitter_fetcher.fetch_all(), "twitter"
-        )
         finnhub_task = self._safe_fetch(
             self.finnhub_fetcher.fetch_all(), "finnhub"
         )
 
-        results = await asyncio.gather(pw_task, twitter_task, finnhub_task)
+        results = await asyncio.gather(pw_task, finnhub_task)
         items = []
         for result in results:
             if result:
@@ -222,11 +218,29 @@ class NewsScheduler:
             await self._insert_and_notify(items)
 
     async def _tick_15min(self):
-        """15-minute tier — now a no-op.
+        """15-minute tick: Twitter (Chromium-heavy, moved from 5-min to reduce load).
 
-        All content sources moved to _tick_5min() on 2026-07-07.
-        This slot is reserved for future low-frequency sources.
+        Browser is launched on-demand and closed after fetch to free ~500MB memory
+        between ticks.  Trade-off: ~3s startup per tick vs. lower baseline memory.
         """
+        twitter_task = self._safe_fetch(
+            self.twitter_fetcher.fetch_all(), "twitter"
+        )
+
+        results = await asyncio.gather(twitter_task)
+        items = []
+        for result in results:
+            if result:
+                items.extend(result)
+
+        if items:
+            await self._insert_and_notify(items)
+
+        # Close Twitter browser after fetch to free memory
+        try:
+            await self.twitter_fetcher.close()
+        except Exception as e:
+            logger.warning("Twitter browser close failed: %s", e)
 
     async def _tick_30min(self):
         """30-minute tick: low-priority background tasks.
