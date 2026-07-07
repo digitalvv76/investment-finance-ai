@@ -50,7 +50,9 @@ class NewsScheduler:
         self.chinese_fetcher = ChineseNewsFetcher(
             self.sources.get('chinese_sources', {})
         )
-        self.web_scraper = WebScraper()
+        # Web scraper is optional — toggle via sources.yaml: web_scraper.enabled
+        scraper_cfg = self.sources.get('web_scraper', {})
+        self.web_scraper = WebScraper() if scraper_cfg.get('enabled', False) else None
         self.finnhub_fetcher = FinnhubNewsFetcher(
             watchlist=self._load_watchlist()
         )
@@ -148,11 +150,12 @@ class NewsScheduler:
         items.extend(api_items)
 
         # Web scraper (WallstreetCN live + CNBC + MarketWatch homepages)
-        try:
-            scraped = await self.web_scraper.fetch_all()
-            items.extend(scraped)
-        except Exception as e:
-            logger.warning("Web scraper failed: %s", e)
+        if self.web_scraper is not None:
+            try:
+                scraped = await self.web_scraper.fetch_all()
+                items.extend(scraped)
+            except Exception as e:
+                logger.warning("Web scraper failed: %s", e)
 
         if items:
             logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape)")
@@ -279,7 +282,8 @@ class NewsScheduler:
         """Start the scheduler."""
         logger.info("Scheduler starting...")
         self._running = True
-        await self.web_scraper.startup()
+        if self.web_scraper is not None:
+            await self.web_scraper.startup()
         self._tasks.append(asyncio.create_task(self._run_loop()))
 
     async def stop(self):
@@ -293,5 +297,6 @@ class NewsScheduler:
         await self.api_fetcher.close()
         await self.twitter_fetcher.shutdown()
         await self.chinese_fetcher.close()
-        await self.web_scraper.shutdown()
+        if self.web_scraper is not None:
+            await self.web_scraper.shutdown()
         await self.finnhub_fetcher.close()

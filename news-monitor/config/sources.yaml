@@ -74,6 +74,14 @@ twitter:
 # -------------------------------------------------------------------
 # 新浪财经 7x24 live feed: lid=2509 (综合), lid=2510 (全球财经)
 # 华尔街见闻 7x24 live feed: channel=global (全球), us-stock, forex, crypto, commodities
+# -------------------------------------------------------------------
+# Web scraper — Playwright-based homepage scraping for 4 sites
+# -------------------------------------------------------------------
+# Scrapes Sina live page, WallstreetCN, CNBC, MarketWatch homepages.
+# Set enabled: false to disable if memory pressure or duplication issues arise.
+web_scraper:
+  enabled: true
+
 chinese_sources:
   max_items_per_source: 20
   request_delay_seconds: 1.5  # 4 Sina channels need breathing room to avoid 403
