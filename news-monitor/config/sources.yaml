@@ -62,6 +62,9 @@ twitter:
   max_items_per_account: 5
   request_delay_seconds: 3.0
   accounts:
+    - "@Reuters"            # Reuters Top News — global breaking headlines
+    - "@ReutersBusiness"    # Reuters Business — financial news wire
+    - "@ReutersWorld"       # Reuters World — geopolitics, conflict, trade
     - "@elerianm"          # Mohamed El-Erian, Allianz chief economic advisor
     - "@lisaabramowicz1"   # Lisa Abramowicz, Bloomberg TV co-host
     - "@bespokeinvest"     # Bespoke Investment Group, macro research
@@ -77,7 +80,7 @@ twitter:
 # 华尔街见闻 7x24 live feed: channel=global (全球), us-stock, forex, crypto, commodities
 chinese_sources:
   max_items_per_source: 20
-  request_delay_seconds: 2.0
+  request_delay_seconds: 0.5  # was 2.0 — Sina + WallstreetCN are lightweight JSON, no rate limits
   sina_channels:
     - {name: "7x24综合快讯", lid: 2509, category: "macro"}
   wallstreetcn_channels:
