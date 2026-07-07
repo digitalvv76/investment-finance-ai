@@ -150,6 +150,84 @@ def load_registry() -> dict:
         return {}
 
 
+def scan_manifests() -> list[str]:
+    """Scan for manifest inconsistencies. Returns warning messages.
+
+    Checks:
+      - .py files on disk that are missing from __manifest__.json
+      - manifest entries that reference files that don't exist
+    """
+    warnings: list[str] = []
+    news_root = NEWS_MONITOR
+
+    for manifest_path in sorted(news_root.glob("*/__manifest__.json")):
+        dir_name = manifest_path.parent.name
+        if dir_name in ("tests", "__pycache__"):
+            continue
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            warnings.append(f"{manifest_path.relative_to(news_root)}: 无法解析 — {e}")
+            continue
+
+        registered = set(data.get("modules", {}).keys())
+
+        # Find actual .py files in this directory (excluding __init__.py)
+        actual: set[str] = set()
+        for py_file in manifest_path.parent.glob("*.py"):
+            if py_file.name.startswith("__"):
+                continue
+            rel = f"{dir_name}/{py_file.name}"
+            actual.add(rel)
+
+        # Also check subdirectories
+        for subdir in manifest_path.parent.iterdir():
+            if subdir.is_dir() and not subdir.name.startswith("__"):
+                for py_file in subdir.glob("*.py"):
+                    if py_file.name.startswith("__"):
+                        continue
+                    rel = f"{dir_name}/{subdir.name}/{py_file.name}"
+                    actual.add(rel)
+
+        # Files on disk but not in manifest
+        missing = actual - registered
+        for m in sorted(missing):
+            warnings.append(f"{m}: 文件存在但未在 __manifest__.json 注册")
+
+        # Files in manifest but not on disk
+        stale = registered - actual
+        for s in sorted(stale):
+            warnings.append(f"{s}: 已在 manifest 注册但文件不存在")
+
+    return warnings
+
+
+def check_registry_deprecation() -> list[str]:
+    """Check if legacy registry is still being updated independently of manifests."""
+    warnings: list[str] = []
+    reg_path = NEWS_MONITOR / "config" / "module_registry.json"
+    if not reg_path.exists():
+        return warnings
+
+    reg_mtime = os.path.getmtime(str(reg_path))
+    manifest_times = []
+    for mf in NEWS_MONITOR.glob("*/__manifest__.json"):
+        try:
+            manifest_times.append(os.path.getmtime(str(mf)))
+        except Exception:
+            pass
+
+    newest_manifest = max(manifest_times) if manifest_times else 0
+    if reg_mtime > newest_manifest:
+        warnings.append(
+            "module_registry.json 有更新但 __manifest__.json 未同步 — "
+            "迁移完成后 registry 应废弃"
+        )
+
+    return warnings
+
+
 def check_stale_scripts(registry: dict, recent_modules: list[str]) -> list[str]:
     """For recently changed modules, check if related_scripts are older."""
     import os as _os
@@ -238,6 +316,24 @@ def main() -> int:
             for s in stale:
                 print(f"      - {s}")
 
+    # --- 4.5. Manifest consistency scan ---
+    manifest_warnings = scan_manifests()
+    if manifest_warnings:
+        print()
+        print(f"  ⚠️  __manifest__.json 不一致 ({len(manifest_warnings)}):")
+        for w in manifest_warnings[:8]:
+            print(f"      - {w}")
+        if len(manifest_warnings) > 8:
+            print(f"      ... 及其他 {len(manifest_warnings) - 8} 条")
+
+    # --- 4.6. Registry deprecation check ---
+    registry_warnings = check_registry_deprecation()
+    if registry_warnings:
+        print()
+        print(f"  ⚠️  注册表弃用警告:")
+        for w in registry_warnings:
+            print(f"      - {w}")
+
     # --- 5. SESSION.md — current work state ---
     session_path = PROJECT_ROOT / ".claude" / "SESSION.md"
     if session_path.exists():
@@ -292,8 +388,12 @@ def main() -> int:
     # --- 7. Summary ---
     print()
     print("=" * 55)
-    issues = len(missing) + (1 if dirty else 0) + len(
-        check_stale_scripts(registry, get_recently_changed_modules(5))
+    issues = (
+        len(missing)
+        + (1 if dirty else 0)
+        + len(check_stale_scripts(registry, get_recently_changed_modules(5)))
+        + len(manifest_warnings)
+        + len(registry_warnings)
     )
     if issues == 0:
         print("  ✅ 一切正常，可以开始工作")
