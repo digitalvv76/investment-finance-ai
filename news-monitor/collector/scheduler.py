@@ -92,25 +92,6 @@ class NewsScheduler:
             except Exception as e:
                 logger.error(f"Callback error: {e}")
 
-    async def _insert_and_notify(self, items: List[NewsItem]):
-        """Dedup, insert, and notify callbacks for a batch of items."""
-        if not items:
-            return
-
-        # Dedup filtering (Tier 1-3)
-        if self.dedup:
-            items = self.dedup.filter_duplicates(items)
-            if not items:
-                return
-
-        for item in items:
-            self.db.insert_news(item)
-            # Index into vector store AFTER insert (needs item.id)
-            if self.dedup:
-                self.dedup.index_item(item)
-
-        await self._notify_callbacks(items)
-
     async def _heartbeat_tick(self):
         """1-minute heartbeat: Chinese news + RSS + Playwright + API triggers.
 
@@ -156,7 +137,7 @@ class NewsScheduler:
 
         if items:
             logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape)")
-            await self._insert_and_notify(items)
+            await self._notify_callbacks(items)
 
     async def _tick_5min(self):
         """5-minute tick: Twitter + Finnhub + remaining Playwright.
@@ -190,7 +171,7 @@ class NewsScheduler:
             logger.warning("Finnhub fetch failed: %s", e)
 
         if items:
-            await self._insert_and_notify(items)
+            await self._notify_callbacks(items)
 
     async def _tick_15min(self):
         """15-minute tier — now a no-op.

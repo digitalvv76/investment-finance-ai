@@ -172,8 +172,9 @@ class NewsMonitor:
         else:
             self.web_dashboard = None
 
-        # ── Build Phase 2 Pipeline ──
+        # ── Build Phase 3 Pipeline ──
         from pipeline import Pipeline
+        from pipeline.ingest import IngestStage
         from pipeline.screen import ScreenStage
         from pipeline.evaluate import EvaluateStage
         from pipeline.dispatch import DispatchStage
@@ -188,6 +189,7 @@ class NewsMonitor:
             channels.append(WebSSEChannel(self._sse_manager))
 
         self._pipeline = Pipeline([
+            IngestStage(db=self.db, dedup=self.dedup, vector_store=self.vector_store),
             ScreenStage(fast_lane=self.fast_lane),
             EvaluateStage(
                 impact_evaluator=self.impact_evaluator,
@@ -196,24 +198,24 @@ class NewsMonitor:
             DispatchStage(channels=channels),
             DeepStage(deep_lane=self.deep_lane),
         ])
-        logger.info("Pipeline: ScreenStage → EvaluateStage → DispatchStage → DeepStage")
+        logger.info("Pipeline: IngestStage → ScreenStage → EvaluateStage → DispatchStage → DeepStage")
 
     # -----------------------------------------------------------------
     # Callback - wired to scheduler.on_news_batch
     # -----------------------------------------------------------------
 
     async def on_news_batch(self, items):
-        """Phase 2 pipeline: convert NewsItem → PipelineItem → run pipeline.
+        """Phase 3 pipeline: raw NewsItem → PipelineItem → full pipeline.
 
-        The scheduler already ran dedup + DB insert before calling us.
-        Pipeline starts at SCREEN stage (ingest deferred to Phase 3).
+        Scheduler just collects + notifies. Pipeline handles everything:
+        Ingest (dedup+DB+vector) → Screen → Evaluate → Dispatch → Deep.
         """
         from pipeline.item import PipelineItem
 
         pipe_items = []
         for news in items:
             pi = PipelineItem(
-                id=news.id or 0,
+                id=0,  # Not yet in DB — IngestStage assigns id
                 title=news.title,
                 source=news.source,
                 url=news.url,
@@ -222,23 +224,22 @@ class NewsMonitor:
                 tickers_found=getattr(news, 'tickers_found', '') or '',
                 macro_tags=getattr(news, 'macro_tags', '') or '',
                 _raw={
-                    'id': news.id, 'title': news.title, 'source': news.source,
+                    'title': news.title, 'source': news.source,
                     'url': news.url,
                     'content_snippet': getattr(news, 'content_snippet', ''),
-                    'snippet': getattr(news, 'content_snippet', ''),
                     'tickers_found': getattr(news, 'tickers_found', ''),
                     'macro_tags': getattr(news, 'macro_tags', ''),
                     'is_breaking': getattr(news, 'is_breaking', False),
-                    'priority_score': getattr(news, 'priority_score', 0.0),
                 },
             )
             pipe_items.append(pi)
 
         if pipe_items:
             try:
-                await self._pipeline.run(pipe_items)
+                pipe_items = await self._pipeline.run(pipe_items)
             except Exception:
                 logger.exception("Pipeline: top-level failure")
+                pipe_items = []
 
         # ---- Background: persist enriched fields + web broadcast ----
         for item in pipe_items:

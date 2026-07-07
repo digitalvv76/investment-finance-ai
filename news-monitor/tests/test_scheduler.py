@@ -57,56 +57,49 @@ def scheduler_setup():
 
 
 # ---------------------------------------------------------------------------
-# _insert_and_notify
+# _notify_callbacks (Phase 3: raw items, no dedup/DB/vector in scheduler)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_insert_and_notify_basic(scheduler_setup):
-    s = scheduler_setup["scheduler"]
-    db = scheduler_setup["db"]
-    dedup = scheduler_setup["dedup"]
-
-    from storage.models import NewsItem
-    item = NewsItem(title="Test", url="https://t.com/1", source="T")
-    await s._insert_and_notify([item])
-
-    db.insert_news.assert_called_once()
-    # Should index item after insert
-    dedup.index_item.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_insert_and_notify_dedup_filters_all(scheduler_setup):
-    s = scheduler_setup["scheduler"]
-    dedup = scheduler_setup["dedup"]
-    dedup.filter_duplicates.side_effect = lambda items: []  # Filter everything
-
-    from storage.models import NewsItem
-    item = NewsItem(title="Test", url="https://t.com/1", source="T")
-    await s._insert_and_notify([item])
-
-    # Nothing should be inserted
-    scheduler_setup["db"].insert_news.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_insert_and_notify_empty_list(scheduler_setup):
-    s = scheduler_setup["scheduler"]
-    await s._insert_and_notify([])
-    scheduler_setup["db"].insert_news.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_insert_and_notify_calls_callbacks(scheduler_setup):
+async def test_notify_callbacks_basic(scheduler_setup):
+    """Callbacks receive raw items — IngestStage handles dedup/DB later."""
     s = scheduler_setup["scheduler"]
     callback = AsyncMock()
     s.on_news_batch(callback)
 
     from storage.models import NewsItem
     item = NewsItem(title="Test", url="https://t.com/1", source="T")
-    await s._insert_and_notify([item])
+    await s._notify_callbacks([item])
 
     callback.assert_called_once_with([item])
+    # Scheduler no longer handles dedup/DB
+    scheduler_setup["db"].insert_news.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_notify_callbacks_empty_list(scheduler_setup):
+    s = scheduler_setup["scheduler"]
+    await s._notify_callbacks([])
+    scheduler_setup["db"].insert_news.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_notify_callbacks_multiple(scheduler_setup):
+    s = scheduler_setup["scheduler"]
+    cb1 = AsyncMock()
+    cb2 = AsyncMock()
+    s.on_news_batch(cb1)
+    s.on_news_batch(cb2)
+
+    from storage.models import NewsItem
+    items = [
+        NewsItem(title="A", url="https://a.com", source="X"),
+        NewsItem(title="B", url="https://b.com", source="Y"),
+    ]
+    await s._notify_callbacks(items)
+
+    cb1.assert_called_once_with(items)
+    cb2.assert_called_once_with(items)
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +167,8 @@ def test_get_frequency_weekend(scheduler_setup):
 async def test_heartbeat_fetches_rss_and_chinese(scheduler_setup):
     """RSS and Chinese run on 1-min heartbeat tick (promoted from 15-min, then 5-min)."""
     s = scheduler_setup["scheduler"]
+    callback = AsyncMock()
+    s.on_news_batch(callback)
 
     from storage.models import NewsItem
     rss_items = [NewsItem(title="RSS News", url="https://n.com/1", source="CNBC")]
@@ -189,13 +184,19 @@ async def test_heartbeat_fetches_rss_and_chinese(scheduler_setup):
     s.rss_fetcher.fetch_all.assert_called_once()
     s.chinese_fetcher.fetch_all.assert_called_once()
     s.web_scraper.fetch_all.assert_called_once()
-    scheduler_setup["db"].insert_news.assert_called()
+    # Phase 3: scheduler just notifies, no DB insert
+    callback.assert_called_once()
+    # Callback received all items (RSS + Chinese)
+    called_with = callback.call_args[0][0]
+    assert len(called_with) == 2
 
 
 @pytest.mark.asyncio
 async def test_tick_5min_fetches_twitter_and_finnhub(scheduler_setup):
     """5-min tick still runs Twitter + Finnhub (RSS/Chinese moved to heartbeat)."""
     s = scheduler_setup["scheduler"]
+    callback = AsyncMock()
+    s.on_news_batch(callback)
 
     from storage.models import NewsItem
     twitter_items = [NewsItem(title="Tweet", url="https://n.com/3", source="Twitter")]
@@ -207,7 +208,8 @@ async def test_tick_5min_fetches_twitter_and_finnhub(scheduler_setup):
     await s._tick_5min()
 
     s.twitter_fetcher.fetch_all.assert_called_once()
-    scheduler_setup["db"].insert_news.assert_called()
+    # Phase 3: scheduler just notifies, no DB insert
+    callback.assert_called_once_with(twitter_items)
 
 
 @pytest.mark.asyncio
@@ -228,6 +230,8 @@ async def test_tick_30min_runs_cleanup(scheduler_setup):
 @pytest.mark.asyncio
 async def test_heartbeat_tick(scheduler_setup):
     s = scheduler_setup["scheduler"]
+    callback = AsyncMock()
+    s.on_news_batch(callback)
 
     from storage.models import NewsItem
     pw_items = [NewsItem(title="ZH Headline", url="https://zh.com/1", source="ZeroHedge")]
@@ -237,7 +241,10 @@ async def test_heartbeat_tick(scheduler_setup):
     await s._heartbeat_tick()
 
     s.playwright_fetcher.fetch_source.assert_called()
-    scheduler_setup["db"].insert_news.assert_called()
+    # Phase 3: scheduler just notifies, no DB insert
+    callback.assert_called_once()
+    called_with = callback.call_args[0][0]
+    assert len(called_with) >= 1
 
 
 # ---------------------------------------------------------------------------
