@@ -12,6 +12,7 @@ from collector.api_fetcher import APIFetcher
 from collector.twitter_fetcher import TwitterFetcher
 from collector.chinese_fetcher import ChineseNewsFetcher
 from collector.finnhub_fetcher import FinnhubNewsFetcher
+from collector.web_scraper import WebScraper
 from config.loader import ConfigLoader
 from storage.database import Database
 from storage.models import NewsItem
@@ -49,6 +50,7 @@ class NewsScheduler:
         self.chinese_fetcher = ChineseNewsFetcher(
             self.sources.get('chinese_sources', {})
         )
+        self.web_scraper = WebScraper()
         self.finnhub_fetcher = FinnhubNewsFetcher(
             watchlist=self._load_watchlist()
         )
@@ -145,8 +147,15 @@ class NewsScheduler:
         api_items = await self.api_fetcher.check_all()
         items.extend(api_items)
 
+        # Web scraper (WallstreetCN live + CNBC + MarketWatch homepages)
+        try:
+            scraped = await self.web_scraper.fetch_all()
+            items.extend(scraped)
+        except Exception as e:
+            logger.warning("Web scraper failed: %s", e)
+
         if items:
-            logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api)")
+            logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape)")
             await self._insert_and_notify(items)
 
     async def _tick_5min(self):
@@ -270,6 +279,7 @@ class NewsScheduler:
         """Start the scheduler."""
         logger.info("Scheduler starting...")
         self._running = True
+        await self.web_scraper.startup()
         self._tasks.append(asyncio.create_task(self._run_loop()))
 
     async def stop(self):
@@ -283,4 +293,5 @@ class NewsScheduler:
         await self.api_fetcher.close()
         await self.twitter_fetcher.shutdown()
         await self.chinese_fetcher.close()
+        await self.web_scraper.shutdown()
         await self.finnhub_fetcher.close()

@@ -65,13 +65,9 @@ twitter:
     - "@Reuters"            # Reuters Top News — global breaking headlines
     - "@ReutersBusiness"    # Reuters Business — financial news wire
     - "@ReutersWorld"       # Reuters World — geopolitics, conflict, trade
-    - "@elerianm"          # Mohamed El-Erian, Allianz chief economic advisor
-    - "@lisaabramowicz1"   # Lisa Abramowicz, Bloomberg TV co-host
-    - "@bespokeinvest"     # Bespoke Investment Group, macro research
     - "@Newsquawk"         # Real-time breaking news parsing service
-    - "@zerohedge"         # ZeroHedge, contrarian finance blog
-    - "@Fxhedgers"         # FX/rates commentary
     - "@SemiAnalysis"      # SemiAnalysis — semiconductor/AI supply chain deep research
+    - "@bespokeinvest"     # Bespoke Investment Group, macro research
 
 # -------------------------------------------------------------------
 # Chinese financial news — JSON API endpoints (no RSS required)
