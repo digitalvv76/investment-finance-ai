@@ -70,6 +70,7 @@ impact_push:
   impact_weight: 0.7         # impact_score weight in composite
   confidence_weight: 0.3     # confidence weight in composite
   max_concurrent_llm: 3      # max simultaneous LLM calls for impact eval
+  min_impact_for_push: 30   # impact_score below this → skip push entirely (silent too)
 
 # Web dashboard configuration
 web:

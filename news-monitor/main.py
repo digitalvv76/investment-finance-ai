@@ -313,12 +313,21 @@ class NewsMonitor:
                     result.level.value, result.channels_used, result.reason,
                 )
             elif self.bot:
-                await self.bot.push_alert(
-                    updated, analyst_note=analyst_note,
-                    event_category=event_category,
-                    impact_score=impact_score,
-                    confidence=confidence,
-                )
+                # Skip push for LLM-evaluated low-impact news.
+                # Legacy items (no impact_assessment) still push as before.
+                min_push = _impact_cfg.get("min_impact_for_push", 30)
+                if impact_assessment and impact_score < min_push:
+                    logger.info(
+                        "Skipping low-impact push #%s (score=%d < %d) — %s",
+                        item.id, impact_score, min_push, (item.title or "")[:60],
+                    )
+                else:
+                    await self.bot.push_alert(
+                        updated, analyst_note=analyst_note,
+                        event_category=event_category,
+                        impact_score=impact_score,
+                        confidence=confidence,
+                    )
 
             # ---- Web dashboard broadcast (SSE real-time push) ---------
             if self.web_dashboard:
