@@ -44,6 +44,11 @@
       "tests": ["tests/test_exchange_calendar.py"],
       "related_scripts": [],
       "also_tests": []
+    },
+    "collector/web_scraper.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
     }
   }
 }

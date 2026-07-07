@@ -674,17 +674,6 @@ FastLane预筛选(≥0.30) → ImpactEvaluator(LLM) + EventMatcher(历史)
     - 被 geo filter 拦截的战略事件记录 debug 日志，不推送
 
 ---
-## 2026-07-05T09:15+08:00 · 会话开始
-  - **修复**:
-    - `formatters.py`: 新增 `format_pushover_alert()` — 中文标题+正文（来源翻译、中文标签、macro tags 映射）
-    - `alert_dispatcher.py`: `_pushover()` 改用中文 formatter，URL 标题改为「阅读原文」，triple-push 前缀改为「🔴🔴🔴 紧急警报」
-    - 测试更新: 推送 payload 断言适配新中文格式
-  - 313 tests passed, 0 regressions
-
----
-## 2026-07-05T09:15+08:00 · 会话开始
-
----
 
 ## 2026-07-05T21:54+08:00 · 会话开始
 
@@ -858,10 +847,14 @@ Nvidia cuts guidance...
 - ✅ 开发策略: B 架构重构为主 / 分批迭代 / Phase 1 开发规范先行
 - ✅ V2 Phase 1 设计文档 + 实施计划
 
-### V2 Phase 1 执行 (进行中)
-- ✅ Task 1: 9 个 `__manifest__.json` 文件创建（87 模块条目）
-- ✅ Task 2: pre_commit_check.py 更新（提交格式检查 + manifest 门禁）
-- ⏳ Task 3-6: 未完成（session_startup 扫描 / pre-push 保护 / registry 废弃 / 端到端验证）
+### V2 Phase 1 执行 (commits `0aefcfb` → `9d45614`)
+- ✅ Task 1 (`bea74a7`): 9 个 `__manifest__.json` 文件创建（87 模块条目）
+- ✅ Task 2 (`344837c`): pre_commit_check.py 更新（提交格式检查 + manifest 门禁）
+- ✅ Task 3 (`d361b25`): session_startup manifest 一致性扫描
+- ✅ Task 4 (`600814c`): pre-push hook — v1-stable 分支保护
+- ✅ Task 5 (`f707b2d`): module_registry.json 废弃标记
+- ✅ Task 6 (`9d45614`): 端到端验证 — 314 tests pass, 零回归
+- 🩹 修复 (`42e8913`): manifest entries 修正 (deep_lane, impact_collector, test_signal)
 
 ### 踩坑新增
 - 深度分析链接显示错误新闻 → Vercel 缺 `/api/*` 代理 → vercel.json 添加 rewrite
@@ -951,16 +944,15 @@ Task 6: 端到端验证                       ✅
 - ✅ 已部署到 ECS (`41ff6c7` on v1-stable, `f4744ea` on main)
 - ✅ v1-stable worktree 创建 (`.claude/worktrees/v1-stable`)
 
-### V2 Phase 2 管道重构
-- ✅ Task 1: `pipeline/item.py` + `pipeline/__init__.py` — PipelineItem + PipelineStage Protocol + Pipeline 类
-- ✅ Task 2: `pipeline/ingest.py` — IngestStage (dedup + DB + vector, 待 Phase 3 接入 scheduler)
-- ✅ Task 3: `pipeline/screen.py` — ScreenStage (包装 FastLane, 0.3 阈值)
-- ✅ Task 4: `pipeline/evaluate.py` — EvaluateStage (LLM 3-retry + legacy fallback)
-- ✅ Task 5: `pipeline/channel.py` — Channel Protocol + Pushover/Telegram/WebSSE 三通道
-- ✅ Task 6: `pipeline/dispatch.py` — DispatchStage (channel 遍历, 故障隔离)
-- ✅ Task 7: `pipeline/deep.py` — DeepStage (fire-and-forget 异步深度分析)
-- ✅ Task 8: 接入 main.py (440→310 行) + 移除 `wrap_telegram_push` 反向依赖
-- ✅ Task 9: Manifest + E2E — 333 tests pass, 零回归
+### V2 Phase 2 管道重构 (commits `dbf31a7` → `7cc267d`)
+- ✅ Task 1 (`dbf31a7`): `pipeline/item.py` + `pipeline/__init__.py` — PipelineItem + PipelineStage Protocol + Pipeline 类
+- ✅ Task 2 (`1714293`): `pipeline/ingest.py` — IngestStage (dedup + DB + vector, 待 Phase 3 接入 scheduler)
+- ✅ Task 3 (`93e1ea9`): `pipeline/screen.py` — ScreenStage (包装 FastLane, 0.3 阈值)
+- ✅ Task 4 (`2739e86`): `pipeline/evaluate.py` — EvaluateStage (LLM 3-retry + legacy fallback)
+- ✅ Task 5-7 (`e870cde`): `pipeline/channel.py` + `dispatch.py` + `deep.py` — Channel Protocol + DispatchStage + DeepStage
+- ✅ Task 8 (`a6219b5`): 接入 main.py (440→310 行) + 移除 `wrap_telegram_push` 反向依赖
+- ✅ Task 9 (`dd9a974`): Manifest + E2E — 333 tests pass, 零回归
+- ✅ (`7cc267d`): docs — V2 Phase 2 complete
 
 ### 架构成果
 ```
@@ -986,9 +978,27 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 
 ## 2026-07-07 · V1 急速优化 (穿插) ⚠️ 下次应在 v1-stable worktree 做
 
-- ✅ Twitter 精简: 10→6 账号 (保留 3 Reuters + @Newsquawk + @SemiAnalysis + @bespokeinvest)
-- ✅ Sina 频道扩展: 1→4 (综合+国际+地缘+科技), API 403 → 改 Playwright 爬网页
-- ✅ Web 爬虫: WallstreetCN ✅ (15条/心跳) + CNBC ✅ (15条) + MarketWatch ❌ (IP拦截)
-- ✅ Sina: API 加 Referer 头 + 延迟 0.5→1.5s, 仍 403 → Playwright 抓 finance.sina.com.cn/7x24 ❌ (IP拦截)
+- ✅ Twitter 精简: 10→6 账号 (`b7dd910`) — 保留 3 Reuters + @Newsquawk + @SemiAnalysis + @bespokeinvest
+- ✅ 中文+RSS→心跳档 (`f4744ea`): 15分→5分→1分
+- ✅ Sina 频道扩展 (`3a8460f`): 1→4 (综合+国际+地缘+科技), API 403 → 改 Playwright 爬网页
+- ✅ Web 爬虫 (`38c5a30`): WallstreetCN ✅ (15条/心跳) + CNBC ✅ (15条) + MarketWatch ❌ (IP拦截)
+- ✅ CNBC/MarketWatch 选择器修复 (`1f7118a`): 更宽泛选择器, 移除 wait_for_selector
+- ✅ MarketWatch + Sina 403 修复 (`5a5fe65`): Referer 头 + 1.5s 延迟
+- ✅ Sina Playwright 爬虫 (`73bc707`): 新增 Playwright 方案 + MarketWatch 调试日志
+- ✅ Sina 改用实时网页 (`97a2fba`): JSON API → live webpage 抓取
+- ✅ DeepStage 修复 (`9c94eab`): 传 NewsItem 而非 dict 给 DeepLane.process
+- ✅ 会话同步 (`bafcc7c`): V2 Phase 1+2 complete, V1 speed improvements
 - ✅ 全部已部署 ECS
 - 🩹 教训: V1 修改混在 main 做, 连 V2 Phase 2 代码一起推到 ECS。下次严格用 v1-stable worktree。
+
+---
+
+## 2026-07-07T15:31+08:00 · 会话开始
+
+---
+
+## 2026-07-07T19:07+08:00 · 会话开始
+
+---
+
+## 2026-07-07T19:10+08:00 · 会话开始
