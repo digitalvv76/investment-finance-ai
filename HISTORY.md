@@ -886,6 +886,24 @@ Nvidia cuts guidance...
 - `docs/img/` — 4 张截图移入
 - 删除: 4 临时文件
 
+### 提交记录 (本次会话)
+| Commit | 说明 |
+|--------|------|
+| `a6323f4` | fix: Vercel proxy /api/* to ECS — deep analysis link now works via HTTPS |
+| `0b09d1b` | docs: add TROUBLESHOOTING entry — deep analysis link wrong news |
+| `d79d16c` | chore: cleanup root — remove temp files, move screenshots to docs/img/ |
+| `72dc7cd` | feat: add deploy.sh — one-command ECS deployment with health check |
+| `0aefcfb` | docs: V2 Phase 1 design — dev standards + automation |
+| `7689e0e` | docs: V2 Phase 1 implementation plan — 6 tasks, 0 production changes |
+| `bea74a7` | feat: add __manifest__.json for all module groups |
+| `42e8913` | fix: correct manifest entries — deep_lane, impact_collector, test_signal |
+| `344837c` | feat: add commit format check + manifest gate to pre-commit |
+| `aeb5e5d` | docs: sync session — V2 Phase 1 progress, V1 wrap-up |
+
 ---
 
 ## 2026-07-06T22:06+08:00 · 会话开始 — 补充 @SemiAnalysis 源 + HISTORY.md 补录
+
+---
+
+## 2026-07-07T08:40+08:00 · 会话开始
