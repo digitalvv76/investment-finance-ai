@@ -159,198 +159,106 @@ class NewsMonitor:
 
         # ---- web dashboard (optional) --------------------------------
         web_port = int(os.environ.get("WEB_PORT", "0"))
+        self._sse_manager = None
         if web_port > 0:
             from web.server import WebDashboard
             self.web_dashboard = WebDashboard(
                 db=self.db, curator=self.curator, trainer=self.trainer,
                 learner=self.learner, deep_lane=self.deep_lane, port=web_port,
             )
-            # Make evaluator available for /api/impact/health endpoint
             self.web_dashboard.impact_evaluator = self.impact_evaluator
+            self._sse_manager = getattr(self.web_dashboard, 'sse_manager', None)
             logger.info("Web dashboard enabled on port %d", web_port)
         else:
             self.web_dashboard = None
+
+        # ── Build Phase 2 Pipeline ──
+        from pipeline import Pipeline
+        from pipeline.screen import ScreenStage
+        from pipeline.evaluate import EvaluateStage
+        from pipeline.dispatch import DispatchStage
+        from pipeline.deep import DeepStage
+        from pipeline.channel import PushoverChannel, TelegramChannel, WebSSEChannel
+
+        channels = []
+        channels.append(PushoverChannel(self.alert_dispatcher))
+        if self.bot:
+            channels.append(TelegramChannel(self.bot))
+        if self._sse_manager:
+            channels.append(WebSSEChannel(self._sse_manager))
+
+        self._pipeline = Pipeline([
+            ScreenStage(fast_lane=self.fast_lane),
+            EvaluateStage(
+                impact_evaluator=self.impact_evaluator,
+                dispatcher=self.alert_dispatcher,
+            ),
+            DispatchStage(channels=channels),
+            DeepStage(deep_lane=self.deep_lane),
+        ])
+        logger.info("Pipeline: ScreenStage → EvaluateStage → DispatchStage → DeepStage")
 
     # -----------------------------------------------------------------
     # Callback - wired to scheduler.on_news_batch
     # -----------------------------------------------------------------
 
     async def on_news_batch(self, items):
-        """Called by the scheduler whenever a batch of new items arrives.
+        """Phase 2 pipeline: convert NewsItem → PipelineItem → run pipeline.
 
-        NEW PIPELINE (impact-first):
-        1. FastLane pre-screening (cheap, fast).
-        2. ImpactEvaluator LLM runs BEFORE push decision (not after).
-        3. Composite impact score decides push level.
-        4. Fallback to legacy PriorityScorer if ImpactEvaluator fails/times out.
-        5. Deep lane triggered asynchronously for high-impact items.
+        The scheduler already ran dedup + DB insert before calling us.
+        Pipeline starts at SCREEN stage (ingest deferred to Phase 3).
         """
-        pushed = self.fast_lane.process(items)
+        from pipeline.item import PipelineItem
 
-        # Limit concurrent LLM calls so we don't hammer the API.
-        _settings = self.config.load_settings()
-        _impact_cfg = _settings.get("impact_push", {})
-        _llm_sem = asyncio.Semaphore(
-            _impact_cfg.get("max_concurrent_llm", 3)
-        )
-
-        for item in pushed:
-            # Persist the enriched fields from fast-lane processing.
-            self.db.update_news_status(
-                item.id,
-                item.status,
-                tickers_found=item.tickers_found,
-                macro_tags=item.macro_tags,
-                is_breaking=int(item.is_breaking),
-                priority_score=item.priority_score,
+        pipe_items = []
+        for news in items:
+            pi = PipelineItem(
+                id=news.id or 0,
+                title=news.title,
+                source=news.source,
+                url=news.url,
+                snippet=getattr(news, 'content_snippet', '') or '',
+                published_at=str(getattr(news, 'published_at', '')),
+                tickers_found=getattr(news, 'tickers_found', '') or '',
+                macro_tags=getattr(news, 'macro_tags', '') or '',
+                _raw={
+                    'id': news.id, 'title': news.title, 'source': news.source,
+                    'url': news.url,
+                    'content_snippet': getattr(news, 'content_snippet', ''),
+                    'snippet': getattr(news, 'content_snippet', ''),
+                    'tickers_found': getattr(news, 'tickers_found', ''),
+                    'macro_tags': getattr(news, 'macro_tags', ''),
+                    'is_breaking': getattr(news, 'is_breaking', False),
+                    'priority_score': getattr(news, 'priority_score', 0.0),
+                },
             )
+            pipe_items.append(pi)
 
-            # Build item dict for downstream consumers
-            updated = self.db.get_news_by_id(item.id)
-            if not updated:
-                continue
+        if pipe_items:
+            try:
+                await self._pipeline.run(pipe_items)
+            except Exception:
+                logger.exception("Pipeline: top-level failure")
 
-            # ---- Strategic detection (cheap: regex only) ----
-            text = f"{item.title or ''} {item.content_snippet or ''}"
-            strategic_matches = []
-            if item.priority_score >= 0.7 or 'STRATEGIC_' in (item.macro_tags or ''):
-                strategic_matches = self._strategic.detect(text)
-
-            # ---- NEW: ImpactEvaluator BEFORE push decision ----
-            impact_assessment = None
-            prescreen = _impact_cfg.get("prescreen_threshold", 0.30)
-            if item.priority_score >= prescreen and self.impact_evaluator:
-                async with _llm_sem:
-                    try:
-                        calibration_hint = self.impact_learner.generate_calibration_hint(self.db)
-                        historical = self.event_matcher.get_examples(
-                            text, event_category="", top_k=3,
-                        )
-                        impact_assessment = await self.impact_evaluator.evaluate(
-                            item,
-                            market_context="",
-                            calibration_hint=calibration_hint,
-                            historical_examples=historical,
-                        )
-                        if impact_assessment:
-                            impact_assessment.news_id = item.id
-                            self.db.insert_assessment(impact_assessment)
-                    except asyncio.TimeoutError:
-                        logger.warning("ImpactEval timeout for news#%s, using legacy classification", item.id)
-                    except Exception as e:
-                        logger.error("ImpactEval failed for news#%s: %s, falling back to legacy", item.id, e)
-
-            # ---- 4-dimension signal score ----
-            sig = signal_score(
-                news_tickers=item.tickers_found or "",
-                news_text=text,
-                macro_tags=item.macro_tags or "",
-                strategic_matches=strategic_matches,
-                is_breaking=bool(item.is_breaking),
-                published_at=getattr(item, 'published_at', None),
-            )
-            rel_mult = sig["composite"]
-            logger.debug(
-                "Signal: composite=%.3f (timeliness=%.2f novelty=%.2f "
-                "relevance=%.2f dir=%s) — %s",
-                sig["composite"], sig["timeliness"], sig["novelty"],
-                sig["relevance"], sig["relevance_direction"],
-                (item.title or "")[:60],
-            )
-
-            # ---- Classify alert level (impact-first, legacy fallback) ----
-            has_tickers = bool(item.tickers_found and item.tickers_found.strip())
-            is_macro = bool(item.macro_tags and item.macro_tags.strip())
-            level, reason = self.alert_dispatcher.classify(
-                item.priority_score, strategic_matches,
-                impact_assessment=impact_assessment,
-                rel_mult=rel_mult,
-                has_tickers=has_tickers,
-                is_macro=is_macro,
-            )
-
-            # ---- LLM Actionability Review (borderline cases only) ----
-            if (self.actionability_reviewer.should_review(rel_mult)
-                    and level != AlertLevel.NORMAL):
-                review_result = await self.actionability_reviewer.review(
-                    item, sig, impact_assessment=impact_assessment,
-                )
-                if review_result == "NOT_ACTIONABLE":
-                    logger.info(
-                        "LLM review: downgrading %s -> NORMAL for #%s — %s",
-                        level.value, item.id, (item.title or "")[:60],
-                    )
-                    level = AlertLevel.NORMAL
-                    reason = f"llm_review_not_actionable (was: {reason})"
-
-            # ---- Inject analyst note + impact scores for push formatters ----
-            analyst_note = ""
-            event_category = ""
-            impact_score = 0
-            confidence = 0
-            if impact_assessment:
-                analyst_note = getattr(impact_assessment, 'analyst_note', '') or ''
-                event_category = getattr(impact_assessment, 'event_category', '') or ''
-                impact_score = int(getattr(impact_assessment, 'impact_score', 0) or 0)
-                confidence = int(getattr(impact_assessment, 'confidence', 0) or 0)
-                updated['analyst_note'] = analyst_note
-                updated['_analyst_note'] = analyst_note  # for alert_dispatcher
-                updated['_event_category'] = event_category
-                updated['_impact_score'] = impact_score
-                updated['_confidence'] = confidence
-
-            # ---- Alert dispatching ----
-            if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT):
-                tg_push = self.alert_dispatcher.wrap_telegram_push(self.bot)
-                result = await self.alert_dispatcher.dispatch(
-                    item=updated,
+        # ---- Background: persist enriched fields + web broadcast ----
+        for item in pipe_items:
+            try:
+                # Persist SCREEN fields back to DB
+                self.db.update_news_status(
+                    item.id,
+                    'fast_pushed',
+                    tickers_found=item.tickers_found,
+                    macro_tags=item.macro_tags,
+                    is_breaking=int(item.is_breaking),
                     priority_score=item.priority_score,
-                    strategic_matches=strategic_matches,
-                    telegram_push_fn=tg_push,
                 )
-                logger.info(
-                    "Alert dispatched: level=%s channels=%s reason=%s",
-                    result.level.value, result.channels_used, result.reason,
-                )
-            elif self.bot:
-                await self.bot.push_alert(
-                    updated, analyst_note=analyst_note,
-                    event_category=event_category,
-                    impact_score=impact_score,
-                    confidence=confidence,
-                )
-
-            # ---- Web dashboard broadcast (SSE real-time push) ---------
-            if self.web_dashboard:
-                await self.web_dashboard.broadcast_alert(updated)
-
-            # Trigger deep lane for high-impact items (async, don't block)
-            if (impact_assessment and impact_assessment.impact_score >= 60) or item.priority_score >= 0.7:
-                asyncio.create_task(self._run_deep_lane(item))
-
-    async def _run_deep_lane(self, item):
-        """Run deep lane analysis as a background task."""
-        try:
-            updated = self.db.get_news_by_id(item.id)
-            if updated:
-                from storage.models import NewsItem as NI
-                ni = NI(
-                    id=updated['id'],
-                    title=updated['title'],
-                    url=updated['url'],
-                    source=updated['source'],
-                    content_snippet=updated.get('content_snippet', ''),
-                    tickers_found=updated.get('tickers_found', ''),
-                    macro_tags=updated.get('macro_tags', ''),
-                    is_breaking=bool(updated.get('is_breaking', False)),
-                    priority_score=updated.get('priority_score', 0.0),
-                    status=updated.get('status', 'pending'),
-                )
-                result = await self.deep_lane.process(ni)
-                if self.bot and result.llm_analysis:
-                    await self.bot.push_deep_analysis(updated)
-        except Exception as e:
-            logger.error(f"Deep lane background task failed: {e}")
+                # Web SSE broadcast
+                if self.web_dashboard and item.decision.alert_level != AlertLevel.NORMAL:
+                    updated = self.db.get_news_by_id(item.id)
+                    if updated:
+                        await self.web_dashboard.broadcast_alert(updated)
+            except Exception:
+                logger.exception("Pipeline: post-processing failed for id=%d", item.id)
 
     async def _collect_impact_outcomes(self, window: str):
         """Periodic task: collect market data for pending assessments."""

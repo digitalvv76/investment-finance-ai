@@ -404,39 +404,3 @@ class AlertDispatcher:
     # ------------------------------------------------------------------
     # Register with an existing bot (convenience wrapper)
     # ------------------------------------------------------------------
-
-    def wrap_telegram_push(self, bot) -> callable:
-        """Return an async callable suitable for dispatching through the bot.
-
-        Usage::
-
-            dispatcher = AlertDispatcher()
-            tg_push = dispatcher.wrap_telegram_push(bot)
-
-            # Then pass tg_push as ``telegram_push_fn`` to dispatch().
-
-        Pushes to ALL registered chat_ids (primary + TELEGRAM_CHAT_ID_2).
-        """
-
-        async def _push(item: dict, disable_notification: bool = True) -> None:
-            from bot.formatters import format_fast_alert, build_feedback_keyboard
-
-            chat_ids = bot._get_chat_ids()
-            if not chat_ids:
-                return
-
-            text = format_fast_alert(item)
-            keyboard = build_feedback_keyboard(item.get("id", 0))
-
-            for chat_id in chat_ids:
-                try:
-                    await bot._app.bot.send_message(
-                        chat_id=chat_id,
-                        text=text,
-                        reply_markup=keyboard,
-                        disable_notification=disable_notification,
-                    )
-                except Exception as e:
-                    logger.error("Telegram dispatch failed → chat %d: %s", chat_id, e)
-
-        return _push
