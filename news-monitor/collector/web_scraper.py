@@ -167,21 +167,21 @@ class WebScraper:
             await page.goto("https://www.cnbc.com/",
                            wait_until="domcontentloaded",
                            timeout=SCRAPE_TIMEOUT)
-            await page.wait_for_selector("a[href*='/202']", timeout=8_000)
-            await asyncio.sleep(0.5)
+            # Let JS render; CNBC is SSR-heavy and loads fast
+            await asyncio.sleep(2)
 
             headlines = await page.evaluate("""() => {
                 const items = [];
-                const links = document.querySelectorAll(
-                    'a[href*="/2026/"], a[href*="/2025/"], .Card-title a, .FeaturedCard-title a'
-                );
                 const seen = new Set();
+                // Broad: any link on the page that looks like an article
+                const links = document.querySelectorAll('a[href]');
                 for (const a of links) {
-                    const title = a.textContent?.trim() || '';
-                    const url = a.href || '';
-                    if (title.length > 15 && !seen.has(url) && url.includes('cnbc.com')) {
-                        seen.add(url);
-                        items.push({title: title.substring(0, 200), url});
+                    const href = a.href || '';
+                    const title = (a.textContent || '').trim();
+                    // CNBC article URLs contain year slug
+                    if (title.length > 20 && !seen.has(href) && href.match(/cnbc\\.com\\/\\d{4}\\/\\d{2}\\/|cnbc\\.com\\/[a-z-]+\\//)) {
+                        seen.add(href);
+                        items.push({title: title.substring(0, 200), url: href});
                     }
                 }
                 return items.slice(0, 15);
@@ -217,21 +217,19 @@ class WebScraper:
             await page.goto("https://www.marketwatch.com/",
                            wait_until="domcontentloaded",
                            timeout=SCRAPE_TIMEOUT)
-            await page.wait_for_selector("a[href*='/story/']", timeout=8_000)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(2)
 
             headlines = await page.evaluate("""() => {
                 const items = [];
-                const links = document.querySelectorAll(
-                    'a[href*="/story/"], .article__headline a, h3 a'
-                );
                 const seen = new Set();
+                const links = document.querySelectorAll('a[href]');
                 for (const a of links) {
-                    const title = a.textContent?.trim() || '';
-                    const url = a.href || '';
-                    if (title.length > 15 && !seen.has(url)) {
-                        seen.add(url);
-                        items.push({title: title.substring(0, 200), url});
+                    const href = a.href || '';
+                    const title = (a.textContent || '').trim();
+                    // MarketWatch article URLs contain /story/ or year/month patterns
+                    if (title.length > 20 && !seen.has(href) && href.match(/marketwatch\\.com\\/story\\/|marketwatch\\.com\\/[a-z-]+\\/\\d{4}\\//)) {
+                        seen.add(href);
+                        items.push({title: title.substring(0, 200), url: href});
                     }
                 }
                 return items.slice(0, 15);
