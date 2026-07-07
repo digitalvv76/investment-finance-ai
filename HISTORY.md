@@ -1002,3 +1002,35 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 ---
 
 ## 2026-07-07T19:10+08:00 · 会话开始
+
+---
+
+## 2026-07-07T19:41+08:00 · 会话
+
+### V1 维护 (v1-stable worktree)
+- ✅ TELEGRAM_CHAT_ID_2 支持 — 多设备 Telegram 推送 (`b0b764f` main, `693bb50` v1-stable)
+- ✅ 中文源翻译去重 — `_is_chinese()` 检测，中文标题跳过 DeepSeek 翻译 (`7b35307` v1-stable, `c06aeec` main)
+- ✅ wrap_telegram_push 多 chat 修复 — `_get_chat_id` → `_get_chat_ids` (`7b35307`)
+- ✅ 推送阈值上调 — SCREEN 0.30→0.40, CRITICAL 0.55→0.65, IMPORTANT 0.45→0.55 (`7fb8c3f`)
+- ✅ deploy.sh 补全 pipeline/ + web_scraper 文件列表 (`9debf07`)
+- ✅ TELEGRAM_CHAT_ID_3 误加修正 → TELEGRAM_CHAT_ID_2 (2台手机)
+- ✅ v1-stable 会话文档同步 (`ed5cebb`)
+
+### V2 Phase 3: IngestStage 接入 Scheduler (`6c03a9b`)
+- ✅ scheduler.py: 移除 `_insert_and_notify()`，tick 直接调 `_notify_callbacks()`
+- ✅ main.py: Pipeline 新增 IngestStage，`on_news_batch` 传原始数据 (id=0)
+- ✅ 修复 post-processing 遍历 pipeline 输出而非原始输入
+- ✅ 332 tests pass, 零回归
+- 📋 新数据流: Scheduler → Pipeline(Ingest→Screen→Evaluate→Dispatch→Deep)
+
+### Phase 4 规划
+- 📋 采集速度优化计划已出: Chinese/RSS/Twitter 并行化, 心跳 60→30s
+- 📋 计划同步到 v1-stable worktree，等下一轮执行
+
+### 踩坑
+- TELEGRAM_CHAT_ID_3 实际只需 CHAT_ID_2 (只有2台手机)
+- ECS .env 更新后需 Docker rebuild 才能加载
+- v1-stable worktree 会话文档滞后 → 手动同步
+
+---
+
