@@ -41,6 +41,11 @@
       "related_scripts": [],
       "also_tests": []
     },
+    "scripts/pre_push_check.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
     "scripts/score_all_events.py": {
       "tests": [],
       "related_scripts": [],
