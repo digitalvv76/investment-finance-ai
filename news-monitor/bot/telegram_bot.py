@@ -33,10 +33,13 @@ class NewsBot:
         Called once on startup when no chat_id is saved yet.  This ensures
         the bot can push messages even if the user hasn't explicitly sent
         /start — any prior conversation with the bot will be discovered.
+
+        If multiple chat_ids are found in recent updates, the most recent one
+        becomes the primary and older ones are logged for manual review.
         """
-        existing = self._get_chat_id()
+        existing = self._get_chat_ids()
         if existing:
-            logger.info("Telegram chat_id: %d (from database)", existing)
+            logger.info("Telegram chat_ids: %s (from database + env)", existing)
             return
 
         logger.info("No chat_id saved — auto-detecting from Telegram API ...")
@@ -48,10 +51,17 @@ class NewsBot:
                 if chat and chat.id not in seen:
                     seen.add(chat.id)
             if seen:
-                # Use the most recently active chat
+                # Use the most recently active chat as primary
                 chat_id = max(seen)  # higher IDs = more recent
                 self.set_chat_id(chat_id)
                 logger.info("Auto-detected chat_id: %d (saved to database)", chat_id)
+                if len(seen) > 1:
+                    others = sorted(seen - {chat_id})
+                    logger.info(
+                        "Multiple chat_ids found: %s. To add secondary Telegram, "
+                        "set TELEGRAM_CHAT_ID_2=%s in .env",
+                        seen, others[0],
+                    )
             else:
                 logger.warning(
                     "No chat_id found — Telegram pushes will fail until "
@@ -87,19 +97,22 @@ class NewsBot:
 
     async def push_alert(self, item: dict, analyst_note: str = "",
                           event_category: str = "",
-                          impact_score: int = 0, confidence: int = 0):
+                          impact_score: int = 0, confidence: int = 0,
+                          disable_notification: bool = False):
         """Push a fast lane alert — English original + Chinese translation.
 
         The English message includes analyst note, ticker CN names, and
         sector ETFs.  The Chinese message is a translation of the title
         followed by the same analyst note and ETF line.
+
+        Pushes to ALL registered chat_ids (primary + TELEGRAM_CHAT_ID_2).
         """
         if not self._app:
             logger.warning("Bot not initialized, can't push")
             return
 
-        chat_id = self._get_chat_id()
-        if not chat_id:
+        chat_ids = self._get_chat_ids()
+        if not chat_ids:
             return
 
         title = item.get('title', '')
@@ -115,17 +128,19 @@ class NewsBot:
                                     confidence=confidence)
         keyboard = build_feedback_keyboard(item['id'])
 
-        try:
-            await self._app.bot.send_message(
-                chat_id=chat_id,
-                text=en_text,
-                reply_markup=keyboard,
-                disable_web_page_preview=False,
-            )
-            logger.info(f"Alert pushed (EN): {title[:50]}...")
-        except Exception as e:
-            logger.error(f"Push failed (EN): {e}")
-            return  # Don't send CN if EN failed
+        for chat_id in chat_ids:
+            try:
+                await self._app.bot.send_message(
+                    chat_id=chat_id,
+                    text=en_text,
+                    reply_markup=keyboard,
+                    disable_web_page_preview=False,
+                    disable_notification=disable_notification,
+                )
+                logger.info(f"Alert pushed (EN) → chat {chat_id}: {title[:50]}...")
+            except Exception as e:
+                logger.error(f"Push failed (EN) → chat {chat_id}: {e}")
+                continue  # Don't block other chat_ids
 
         # --- Chinese translation ---
         cn_title = await self._translator.translate(title)
@@ -153,38 +168,55 @@ class NewsBot:
             if url:
                 cn_parts.append(f"\U0001f517 {url}")
 
-            try:
-                await self._app.bot.send_message(
-                    chat_id=chat_id,
-                    text="\n".join(cn_parts),
-                    disable_web_page_preview=False,
-                )
-            except Exception as e:
-                logger.error(f"Push failed (CN): {e}")
+            for chat_id in chat_ids:
+                try:
+                    await self._app.bot.send_message(
+                        chat_id=chat_id,
+                        text="\n".join(cn_parts),
+                        disable_web_page_preview=False,
+                        disable_notification=disable_notification,
+                    )
+                except Exception as e:
+                    logger.error(f"Push failed (CN) → chat {chat_id}: {e}")
 
     async def push_deep_analysis(self, item: dict):
-        """Push deep analysis as a follow-up message."""
+        """Push deep analysis as a follow-up message to all registered chats."""
         if not self._app:
             return
 
-        chat_id = self._get_chat_id()
-        if not chat_id:
+        chat_ids = self._get_chat_ids()
+        if not chat_ids:
             return
 
         text = format_deep_analysis(item)
-        try:
-            await self._app.bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                disable_web_page_preview=True,
-            )
-        except Exception as e:
-            logger.error(f"Deep analysis push failed: {e}")
+        for chat_id in chat_ids:
+            try:
+                await self._app.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    disable_web_page_preview=True,
+                )
+            except Exception as e:
+                logger.error(f"Deep analysis push failed → chat {chat_id}: {e}")
 
-    def _get_chat_id(self) -> Optional[int]:
-        """Get the authorized chat ID from preferences."""
+    def _get_chat_ids(self) -> list[int]:
+        """Get all authorized chat IDs (primary from DB + secondary from env)."""
+        ids: list[int] = []
+        # Primary: auto-detected + stored in DB
         val = self.db.get_preference("telegram_chat_id")
-        return int(val) if val else None
+        if val:
+            ids.append(int(val))
+        # Secondary: explicitly set in .env (mirrors PUSHOVER_USER_KEY_2)
+        env2 = os.environ.get("TELEGRAM_CHAT_ID_2", "")
+        if env2:
+            try:
+                id2 = int(env2)
+                if id2 not in ids:
+                    ids.append(id2)
+            except ValueError:
+                logger.warning("Invalid TELEGRAM_CHAT_ID_2: %s", env2)
+        return ids
 
     def set_chat_id(self, chat_id: int):
+        """Set the primary chat ID (persisted to DB)."""
         self.db.set_preference("telegram_chat_id", str(chat_id))
