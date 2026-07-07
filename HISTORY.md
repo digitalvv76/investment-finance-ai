@@ -674,17 +674,6 @@ FastLane预筛选(≥0.30) → ImpactEvaluator(LLM) + EventMatcher(历史)
     - 被 geo filter 拦截的战略事件记录 debug 日志，不推送
 
 ---
-## 2026-07-05T09:15+08:00 · 会话开始
-  - **修复**:
-    - `formatters.py`: 新增 `format_pushover_alert()` — 中文标题+正文（来源翻译、中文标签、macro tags 映射）
-    - `alert_dispatcher.py`: `_pushover()` 改用中文 formatter，URL 标题改为「阅读原文」，triple-push 前缀改为「🔴🔴🔴 紧急警报」
-    - 测试更新: 推送 payload 断言适配新中文格式
-  - 313 tests passed, 0 regressions
-
----
-## 2026-07-05T09:15+08:00 · 会话开始
-
----
 
 ## 2026-07-05T21:54+08:00 · 会话开始
 
@@ -841,4 +830,179 @@ Nvidia cuts guidance...
 
 ---
 
+## 2026-07-06T22:06+08:00 · 会话 — V2 规划启动 + 可靠性加固 + V1 收尾
+
+### V1 收尾
+- ✅ `@SemiAnalysis` Twitter 源补充 + HISTORY.md 同步
+- ✅ 第二台手机 Pushover 推送 (`PUSHOVER_USER_KEY_2`)
+- ✅ 深度分析链接修复 (Vercel HTTPS 代理 `/api/*`)
+- ✅ ECS 可靠性方案: swap 已有 2GB / logrotate 部署 / deploy.sh 一键部署 / UptimeRobot 监控
+- ✅ 根目录清理: 4 临时文件删除 + 4 截图移至 docs/img/
+- ✅ V1 版本固定: `v1.0.0` tag + `v1-stable` 分支（生产锁定）
+- ✅ 关机保存规则写入记忆 + 用户定位更新（金融专家，委托技术）
+
+### V2 规划启动
+- ✅ 协作模式确认: 混合模式 C / 默认推荐直接执行 / 不可逆操作确认
+- ✅ 架构方向: 管道模式（采集→清洗→分析→推送 各层独立）
+- ✅ 开发策略: B 架构重构为主 / 分批迭代 / Phase 1 开发规范先行
+- ✅ V2 Phase 1 设计文档 + 实施计划
+
+### V2 Phase 1 执行 (commits `0aefcfb` → `9d45614`)
+- ✅ Task 1 (`bea74a7`): 9 个 `__manifest__.json` 文件创建（87 模块条目）
+- ✅ Task 2 (`344837c`): pre_commit_check.py 更新（提交格式检查 + manifest 门禁）
+- ✅ Task 3 (`d361b25`): session_startup manifest 一致性扫描
+- ✅ Task 4 (`600814c`): pre-push hook — v1-stable 分支保护
+- ✅ Task 5 (`f707b2d`): module_registry.json 废弃标记
+- ✅ Task 6 (`9d45614`): 端到端验证 — 314 tests pass, 零回归
+- 🩹 修复 (`42e8913`): manifest entries 修正 (deep_lane, impact_collector, test_signal)
+
+### 踩坑新增
+- 深度分析链接显示错误新闻 → Vercel 缺 `/api/*` 代理 → vercel.json 添加 rewrite
+- web API 端点必须走 Vercel HTTPS，不能直接用 ECS IP
+- Task 2 子代理漏 commit、误删 NVDA PDF → 已恢复
+
+### 修改文件
+- `vercel.json` — 新增 `/api/:path*` rewrite
+- `deploy.sh` — 新建，一键部署到 ECS
+- `news-monitor/engine/alert_dispatcher.py` — 多用户 Pushover 支持
+- `news-monitor/bot/formatters.py` — @SemiAnalysis 显示名
+- `news-monitor/config/sources.yaml` — @SemiAnalysis Twitter 源
+- `news-monitor/config/settings.yaml` — pushover_user_2 映射
+- `news-monitor/scripts/verify_env.py` — 双 user key 验证
+- `news-monitor/scripts/install_service.py` — PUSHOVER_USER_KEY_2
+- `news-monitor/*/__manifest__.json` — 9 个模块清单
+- `news-monitor/scripts/pre_commit_check.py` — 提交格式 + manifest 门禁
+- `.claude/TROUBLESHOOTING.md` — 新增深度分析链接条目
+- `.claude/memory/` — 新增 shutdown-checklist, vercel-proxy-architecture, 更新 user-profile
+- `docs/superpowers/specs/` — V2 Phase 1 设计文档
+- `docs/superpowers/plans/` — V2 Phase 1 实施计划
+- `docs/img/` — 4 张截图移入
+- 删除: 4 临时文件
+
+### 提交记录 (本次会话)
+| Commit | 说明 |
+|--------|------|
+| `a6323f4` | fix: Vercel proxy /api/* to ECS — deep analysis link now works via HTTPS |
+| `0b09d1b` | docs: add TROUBLESHOOTING entry — deep analysis link wrong news |
+| `d79d16c` | chore: cleanup root — remove temp files, move screenshots to docs/img/ |
+| `72dc7cd` | feat: add deploy.sh — one-command ECS deployment with health check |
+| `0aefcfb` | docs: V2 Phase 1 design — dev standards + automation |
+| `7689e0e` | docs: V2 Phase 1 implementation plan — 6 tasks, 0 production changes |
+| `bea74a7` | feat: add __manifest__.json for all module groups |
+| `42e8913` | fix: correct manifest entries — deep_lane, impact_collector, test_signal |
+| `344837c` | feat: add commit format check + manifest gate to pre-commit |
+| `aeb5e5d` | docs: sync session — V2 Phase 1 progress, V1 wrap-up |
+
+---
+
 ## 2026-07-06T22:06+08:00 · 会话开始 — 补充 @SemiAnalysis 源 + HISTORY.md 补录
+
+---
+
+## 2026-07-07T08:40+08:00 · 会话开始
+
+### 本次完成
+- ✅ **HISTORY.md 同步**: 补录 10 条缺失提交哈希 (`56b8986`)
+- ✅ **Telegram 双手机**: `TELEGRAM_CHAT_ID_2` 支持 (6 文件, 镜像 Pushover 模式) (`6937c20`)
+- ✅ **V2 Phase 1 Task 3**: `session_startup.py` manifest 一致性扫描 (`d361b25`)
+- ✅ **V2 Phase 1 Task 4**: pre-push hook — v1-stable 保护 (`600814c`)
+- ✅ **V2 Phase 1 Task 5**: `module_registry.json` 废弃标记 (`f707b2d`)
+- ✅ **V2 Phase 1 Task 6**: 端到端验证 — 314 tests pass, 零回归
+
+### V2 Phase 1 — 全部完成 🎉
+```
+Task 1: __manifest__.json 创建          ✅
+Task 2: pre_commit_check 更新            ✅
+Task 3: session_startup manifest 扫描    ✅
+Task 4: pre-push hook (v1-stable 保护)   ✅
+Task 5: module_registry.json 废弃标记    ✅
+Task 6: 端到端验证                       ✅
+```
+- 测试: 314 pass (1 pre-existing fail + 6 ChromaDB Windows known errors)
+- 下一步 → **V2 Phase 2: 管道架构重构**
+
+### 修改文件
+- `HISTORY.md` — 补录 10 条提交哈希
+- `news-monitor/bot/telegram_bot.py` — `_get_chat_id()` → `_get_chat_ids()`, 双 chat_id 推送
+- `news-monitor/engine/alert_dispatcher.py` — `wrap_telegram_push` 遍历所有 chat_id
+- `news-monitor/scripts/session_startup.py` — +102 行 manifest 扫描 + 注册表弃用检查
+- `news-monitor/scripts/pre_push_check.py` — 新建，v1-stable 推送保护
+- `news-monitor/config/module_registry.json` — 废弃标记
+- `news-monitor/config/settings.yaml` — `telegram_chat_id_2` 文档
+- `news-monitor/scripts/verify_env.py` — `TELEGRAM_CHAT_ID_2` 推荐检查
+- `news-monitor/scripts/install_service.py` — `TELEGRAM_CHAT_ID_2` 环境变量
+- `.claude/settings.json` — pre-push hook 注册 (本地)
+
+---
+
+## 2026-07-07 · V2 Phase 2 — 管道架构重构 ✅
+
+### V1 紧急修复 (穿插)
+- ✅ 中文源+RSS 从 15分→5分→1分 (心跳档)
+- ✅ 路透社 3 个 Twitter 账号 (`@Reuters` + `@ReutersBusiness` + `@ReutersWorld`)
+- ✅ 中文频道延迟 2s→0.5s
+- ✅ 已部署到 ECS (`41ff6c7` on v1-stable, `f4744ea` on main)
+- ✅ v1-stable worktree 创建 (`.claude/worktrees/v1-stable`)
+
+### V2 Phase 2 管道重构 (commits `dbf31a7` → `7cc267d`)
+- ✅ Task 1 (`dbf31a7`): `pipeline/item.py` + `pipeline/__init__.py` — PipelineItem + PipelineStage Protocol + Pipeline 类
+- ✅ Task 2 (`1714293`): `pipeline/ingest.py` — IngestStage (dedup + DB + vector, 待 Phase 3 接入 scheduler)
+- ✅ Task 3 (`93e1ea9`): `pipeline/screen.py` — ScreenStage (包装 FastLane, 0.3 阈值)
+- ✅ Task 4 (`2739e86`): `pipeline/evaluate.py` — EvaluateStage (LLM 3-retry + legacy fallback)
+- ✅ Task 5-7 (`e870cde`): `pipeline/channel.py` + `dispatch.py` + `deep.py` — Channel Protocol + DispatchStage + DeepStage
+- ✅ Task 8 (`a6219b5`): 接入 main.py (440→310 行) + 移除 `wrap_telegram_push` 反向依赖
+- ✅ Task 9 (`dd9a974`): Manifest + E2E — 333 tests pass, 零回归
+- ✅ (`7cc267d`): docs — V2 Phase 2 complete
+
+### 架构成果
+```
+main.py (440→310 行, -30%)
+engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
+新 pipeline/ 包: 8 文件, 18 tests
+管道: SCREEN → EVALUATE → DISPATCH → DEEP
+通道: PushoverChannel | TelegramChannel | WebSSEChannel (可插拔)
+```
+
+### 修改文件
+- `news-monitor/pipeline/` — 8 个新文件 (__init__, item, ingest, screen, evaluate, dispatch, deep, channel)
+- `news-monitor/main.py` — 重构: 管道回调 + DI 组装 (-130 行)
+- `news-monitor/engine/alert_dispatcher.py` — 移除 `wrap_telegram_push` (-36 行)
+- `news-monitor/collector/scheduler.py` — 中文+RSS→心跳档, _tick_15min 废弃
+- `news-monitor/config/sources.yaml` — 路透社 3 账号 + 中文延迟 0.5s
+- `news-monitor/tests/` — 5 个新测试文件, 18 tests
+- `news-monitor/pipeline/__manifest__.json` — 7 模块注册
+- `news-monitor/scripts/__manifest__.json` — pre_push_check 补录
+- `.claude/SESSION.md` — 更新状态
+
+---
+
+## 2026-07-07 · V1 急速优化 (穿插) ⚠️ 下次应在 v1-stable worktree 做
+
+- ✅ Twitter 精简: 10→6 账号 (`b7dd910`) — 保留 3 Reuters + @Newsquawk + @SemiAnalysis + @bespokeinvest
+- ✅ 中文+RSS→心跳档 (`f4744ea`): 15分→5分→1分
+- ✅ Sina 频道扩展 (`3a8460f`): 1→4 (综合+国际+地缘+科技), API 403 → 改 Playwright 爬网页
+- ✅ Web 爬虫 (`38c5a30`): WallstreetCN ✅ (15条/心跳) + CNBC ✅ (15条) + MarketWatch ❌ (IP拦截)
+- ✅ CNBC/MarketWatch 选择器修复 (`1f7118a`): 更宽泛选择器, 移除 wait_for_selector
+- ✅ MarketWatch + Sina 403 修复 (`5a5fe65`): Referer 头 + 1.5s 延迟
+- ✅ Sina Playwright 爬虫 (`73bc707`): 新增 Playwright 方案 + MarketWatch 调试日志
+- ✅ Sina 改用实时网页 (`97a2fba`): JSON API → live webpage 抓取
+- ✅ DeepStage 修复 (`9c94eab`): 传 NewsItem 而非 dict 给 DeepLane.process
+- ✅ 会话同步 (`bafcc7c`): V2 Phase 1+2 complete, V1 speed improvements
+- ✅ 全部已部署 ECS
+- 🩹 教训: V1 修改混在 main 做, 连 V2 Phase 2 代码一起推到 ECS。下次严格用 v1-stable worktree。
+
+---
+
+## 2026-07-07T15:31+08:00 · 会话开始
+
+---
+
+## 2026-07-07T19:07+08:00 · 会话开始
+
+---
+
+## 2026-07-07T19:10+08:00 · 会话开始
+
+---
+
+## 2026-07-07T19:41+08:00 · 会话开始
