@@ -110,11 +110,21 @@ class NewsBot:
         tickers = item.get('tickers_found', '')
         macro = item.get('macro_tags', '')
 
-        # --- English alert (includes analyst note + impact + ETFs) ---
+        # --- Build message body ---
+        # format_fast_alert already produces a Chinese-friendly format.
+        # If we have a CN translation, append it inline so there is only
+        # ONE message per alert — not two separate notifications.
         en_text = format_fast_alert(item, analyst_note=analyst_note,
                                     event_category=event_category,
                                     impact_score=impact_score,
                                     confidence=confidence)
+
+        cn_title = None
+        if not self._is_chinese(title):
+            cn_title = await self._translator.translate(title)
+        if cn_title:
+            en_text += f"\n\n\U0001f1e8\U0001f1f3 {cn_title}"
+
         keyboard = build_feedback_keyboard(item['id'])
 
         for chat_id in chat_ids:
@@ -125,50 +135,10 @@ class NewsBot:
                     reply_markup=keyboard,
                     disable_web_page_preview=False,
                 )
-                logger.info(f"Alert pushed (EN) → chat {chat_id}: {title[:50]}...")
+                logger.info(f"Alert pushed → chat {chat_id}: {title[:50]}...")
             except Exception as e:
-                logger.error(f"Push failed (EN) → chat {chat_id}: {e}")
+                logger.error(f"Push failed → chat {chat_id}: {e}")
                 continue  # Don't block other chat_ids
-
-        # --- Chinese translation (skip if already Chinese) ---
-        cn_title = None
-        if self._is_chinese(title):
-            logger.debug("Title already Chinese, skipping translation: %s", title[:50])
-        else:
-            cn_title = await self._translator.translate(title)
-        if cn_title:
-            cn_parts = [f"\U0001f1e8\U0001f1f3 {cn_title}"]
-
-            # Impact score + confidence
-            if impact_score > 0:
-                imp_line = f"\n💥 冲击: {impact_score}分"
-                if confidence > 0:
-                    imp_line += f" | 置信度: {confidence}%"
-                cn_parts.append(imp_line)
-
-            # Analyst note (same as EN version — already in Chinese)
-            note = analyst_note or item.get('analyst_note', '')
-            if note:
-                cn_parts.append(f"\n{note}")
-
-            # Related tickers + sector ETFs
-            from bot.formatters import _build_ticker_etf_line
-            etf_line = _build_ticker_etf_line(tickers, macro, event_category)
-            if etf_line:
-                cn_parts.append(f"\n{etf_line}")
-
-            if url:
-                cn_parts.append(f"\U0001f517 {url}")
-
-            for chat_id in chat_ids:
-                try:
-                    await self._app.bot.send_message(
-                        chat_id=chat_id,
-                        text="\n".join(cn_parts),
-                        disable_web_page_preview=False,
-                    )
-                except Exception as e:
-                    logger.error(f"Push failed (CN) → chat {chat_id}: {e}")
 
     async def push_deep_analysis(self, item: dict):
         """Push deep analysis as a follow-up message to all chat_ids."""
