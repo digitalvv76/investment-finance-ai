@@ -181,11 +181,14 @@ async def test_heartbeat_fetches_rss_and_chinese(scheduler_setup):
     s.rss_fetcher.fetch_all.return_value = rss_items
     s.chinese_fetcher = MagicMock()
     s.chinese_fetcher.fetch_all = AsyncMock(return_value=cn_items)
+    s.web_scraper = MagicMock()
+    s.web_scraper.fetch_all = AsyncMock(return_value=[])
 
     await s._heartbeat_tick()
 
     s.rss_fetcher.fetch_all.assert_called_once()
     s.chinese_fetcher.fetch_all.assert_called_once()
+    s.web_scraper.fetch_all.assert_called_once()
     scheduler_setup["db"].insert_news.assert_called()
 
 
