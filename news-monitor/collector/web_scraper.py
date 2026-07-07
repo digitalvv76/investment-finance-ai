@@ -72,6 +72,7 @@ class WebScraper:
             return []
 
         tasks = [
+            self._scrape_sina(),
             self._scrape_wallstreetcn(),
             self._scrape_cnbc(),
             self._scrape_marketwatch(),
@@ -86,6 +87,53 @@ class WebScraper:
                 all_items.extend(result)
 
         return all_items
+
+    # ------------------------------------------------------------------
+    # 新浪财经 — bypasses API 403 via browser fingerprint
+    # ------------------------------------------------------------------
+
+    async def _scrape_sina(self) -> List[NewsItem]:
+        """Scrape Sina finance live feed via Playwright to bypass API 403.
+
+        The aiohttp API calls from ECS get blocked (403).  Playwright's
+        browser fingerprint bypasses this — same API, different client.
+        """
+        items: List[NewsItem] = []
+        page = None
+        # Sina LIDs: 2509=综合, 2511=国际, 2514=地缘, 2518=科技
+        lids = [2509, 2511, 2514, 2518]
+        try:
+            page = await self._browser.new_page()
+            for lid in lids:
+                try:
+                    url = (f"https://feed.mix.sina.com.cn/api/roll/get"
+                           f"?pageid=153&lid={lid}&num=20&page=1")
+                    resp = await page.goto(url, wait_until="domcontentloaded",
+                                          timeout=10_000)
+                    if resp and resp.status == 200:
+                        body = await page.evaluate("document.body.innerText")
+                        import json
+                        data = json.loads(body)
+                        news_list = data.get("result", {}).get("data", [])
+                        for n in news_list[:15]:
+                            title = _HTML_RE.sub("", n.get("title", "")).strip()
+                            if title and len(title) > 10:
+                                items.append(NewsItem(
+                                    title=title,
+                                    url=n.get("url", ""),
+                                    source="新浪财经",
+                                    content_snippet=n.get("intro", title),
+                                ))
+                    await asyncio.sleep(0.3)  # gentle between LIDs
+                except Exception:
+                    pass
+            logger.info("WebScraper: Sina → %d items", len(items))
+        except Exception as e:
+            logger.warning("WebScraper: Sina scrape failed: %s", e)
+        finally:
+            if page:
+                await page.close()
+        return items
 
     # ------------------------------------------------------------------
     # 华尔街见闻 live
@@ -243,7 +291,12 @@ class WebScraper:
                     content_snippet=h["title"],
                 ))
 
-            logger.info("WebScraper: MarketWatch → %d items", len(items))
+            if not items:
+                # Debug: dump raw link count
+                raw = await page.evaluate("document.querySelectorAll('a[href]').length")
+                logger.warning("WebScraper: MarketWatch → 0 items (page had %d links)", raw)
+            else:
+                logger.info("WebScraper: MarketWatch → %d items", len(items))
         except Exception as e:
             logger.warning("WebScraper: MarketWatch scrape failed: %s", e)
         finally:
