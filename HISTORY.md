@@ -939,3 +939,45 @@ Task 6: 端到端验证                       ✅
 - `news-monitor/scripts/verify_env.py` — `TELEGRAM_CHAT_ID_2` 推荐检查
 - `news-monitor/scripts/install_service.py` — `TELEGRAM_CHAT_ID_2` 环境变量
 - `.claude/settings.json` — pre-push hook 注册 (本地)
+
+---
+
+## 2026-07-07 · V2 Phase 2 — 管道架构重构 ✅
+
+### V1 紧急修复 (穿插)
+- ✅ 中文源+RSS 从 15分→5分→1分 (心跳档)
+- ✅ 路透社 3 个 Twitter 账号 (`@Reuters` + `@ReutersBusiness` + `@ReutersWorld`)
+- ✅ 中文频道延迟 2s→0.5s
+- ✅ 已部署到 ECS (`41ff6c7` on v1-stable, `f4744ea` on main)
+- ✅ v1-stable worktree 创建 (`.claude/worktrees/v1-stable`)
+
+### V2 Phase 2 管道重构
+- ✅ Task 1: `pipeline/item.py` + `pipeline/__init__.py` — PipelineItem + PipelineStage Protocol + Pipeline 类
+- ✅ Task 2: `pipeline/ingest.py` — IngestStage (dedup + DB + vector, 待 Phase 3 接入 scheduler)
+- ✅ Task 3: `pipeline/screen.py` — ScreenStage (包装 FastLane, 0.3 阈值)
+- ✅ Task 4: `pipeline/evaluate.py` — EvaluateStage (LLM 3-retry + legacy fallback)
+- ✅ Task 5: `pipeline/channel.py` — Channel Protocol + Pushover/Telegram/WebSSE 三通道
+- ✅ Task 6: `pipeline/dispatch.py` — DispatchStage (channel 遍历, 故障隔离)
+- ✅ Task 7: `pipeline/deep.py` — DeepStage (fire-and-forget 异步深度分析)
+- ✅ Task 8: 接入 main.py (440→310 行) + 移除 `wrap_telegram_push` 反向依赖
+- ✅ Task 9: Manifest + E2E — 333 tests pass, 零回归
+
+### 架构成果
+```
+main.py (440→310 行, -30%)
+engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
+新 pipeline/ 包: 8 文件, 18 tests
+管道: SCREEN → EVALUATE → DISPATCH → DEEP
+通道: PushoverChannel | TelegramChannel | WebSSEChannel (可插拔)
+```
+
+### 修改文件
+- `news-monitor/pipeline/` — 8 个新文件 (__init__, item, ingest, screen, evaluate, dispatch, deep, channel)
+- `news-monitor/main.py` — 重构: 管道回调 + DI 组装 (-130 行)
+- `news-monitor/engine/alert_dispatcher.py` — 移除 `wrap_telegram_push` (-36 行)
+- `news-monitor/collector/scheduler.py` — 中文+RSS→心跳档, _tick_15min 废弃
+- `news-monitor/config/sources.yaml` — 路透社 3 账号 + 中文延迟 0.5s
+- `news-monitor/tests/` — 5 个新测试文件, 18 tests
+- `news-monitor/pipeline/__manifest__.json` — 7 模块注册
+- `news-monitor/scripts/__manifest__.json` — pre_push_check 补录
+- `.claude/SESSION.md` — 更新状态

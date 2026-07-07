@@ -1,31 +1,36 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-07 09:30 CST
+> 最后更新: 2026-07-07 11:30 CST
 
-## ✅ V2 Phase 1 — 全部完成
+## ✅ V2 Phase 2 — 管道架构重构 完成
 
-- [x] Task 1: `__manifest__.json` 创建 (9 个文件, 87 模块)
-- [x] Task 2: pre_commit_check.py 更新 (提交格式 + manifest 门禁)
-- [x] Task 3: session_startup.py manifest 扫描
-- [x] Task 4: pre-push hook (v1-stable 保护)
-- [x] Task 5: module_registry.json 废弃标记
-- [x] Task 6: 端到端验证 — 314 tests pass
+- [x] Task 1-9 全部完成
+- [x] 333 tests pass, 零回归
+- [x] main.py 440→310 行
+- [x] engine/alert_dispatcher → bot/ 反向依赖已切断
+- [x] Channel Protocol 可插拔通道 (Pushover/Telegram/WebSSE)
 
-## 🟢 本次会话额外完成
+## ✅ V1 延迟修复 (穿插)
 
-- ✅ HISTORY.md 同步 (补录 10 条提交哈希)
-- ✅ Telegram 双手机推送 (`TELEGRAM_CHAT_ID_2`)
+- [x] 中文源+RSS 提到 1 分钟心跳档
+- [x] 路透社 3 账号 Twitter
+- [x] ECS 已部署生效
+
+## 🟢 进行中
+
+- 无 — Phase 2 完成
 
 ## 📋 下一步
 
-1. **V2 Phase 2**: 管道架构重构 (采集→清洗→分析→推送 各层独立)
-2. Telegram 第二个 chat_id 待用户获取后配置 `.env`
+1. Phase 3: IngestStage 接入 scheduler (scheduler 只负责采集, 不负责 dedup+insert)
+2. 观察 V1 推送延迟改善效果
 
 ## 📊 系统健康
 
 | 组件 | 状态 | 备注 |
 |------|------|------|
-| ECS (47.76.50.77) | ✅ 运行中 | UptimeRobot 监控中 |
-| v1-stable | 🔒 锁定 | pre-push hook 保护 |
-| main | 🚀 V2 开发 | Phase 1 ✅, 准备 Phase 2 |
-| 测试 | 314 pass | 1 pre-existing fail + 6 ChromaDB known |
+| ECS (47.76.50.77) | ✅ 运行中 | 延迟修复已上线, 中文+RSS 1分钟档 |
+| v1-stable | 🔒 锁定 | worktree `.claude/worktrees/v1-stable` |
+| main | 🚀 V2 开发 | Phase 1 ✅, Phase 2 ✅ |
+| 测试 | 333 pass | 1 pre-existing fail + 6 ChromaDB known |
+| 管道层 | 8 文件, 18 tests | pipeline/ 包 |
