@@ -142,8 +142,12 @@ class NewsBot:
                 logger.error(f"Push failed (EN) → chat {chat_id}: {e}")
                 continue  # Don't block other chat_ids
 
-        # --- Chinese translation ---
-        cn_title = await self._translator.translate(title)
+        # --- Chinese translation (skip if already Chinese) ---
+        cn_title = None
+        if self._is_chinese(title):
+            logger.debug("Title already Chinese, skipping translation: %s", title[:50])
+        else:
+            cn_title = await self._translator.translate(title)
         if cn_title:
             cn_parts = [f"\U0001f1e8\U0001f1f3 {cn_title}"]
 
@@ -229,3 +233,11 @@ class NewsBot:
     def set_chat_id(self, chat_id: int):
         """Set the primary chat ID (persisted to DB)."""
         self.db.set_preference("telegram_chat_id", str(chat_id))
+
+    @staticmethod
+    def _is_chinese(text: str) -> bool:
+        """Return True if text is predominantly Chinese (CJK characters)."""
+        if not text:
+            return False
+        cjk = sum(1 for c in text if '一' <= c <= '鿿' or '㐀' <= c <= '䶿')
+        return cjk >= len(text) * 0.3  # 30%+ CJK → treat as Chinese
