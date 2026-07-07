@@ -93,43 +93,54 @@ class WebScraper:
     # ------------------------------------------------------------------
 
     async def _scrape_sina(self) -> List[NewsItem]:
-        """Scrape Sina finance live feed via Playwright to bypass API 403.
+        """Scrape Sina finance live page (not API) via Playwright.
 
-        The aiohttp API calls from ECS get blocked (403).  Playwright's
-        browser fingerprint bypasses this — same API, different client.
+        The JSON API returns 403 from ECS. The live webpage at
+        finance.sina.com.cn/7x24 uses the same data but is served
+        as HTML — browser fingerprint bypasses the API block.
         """
         items: List[NewsItem] = []
         page = None
-        # Sina LIDs: 2509=综合, 2511=国际, 2514=地缘, 2518=科技
-        lids = [2509, 2511, 2514, 2518]
         try:
             page = await self._browser.new_page()
-            for lid in lids:
-                try:
-                    url = (f"https://feed.mix.sina.com.cn/api/roll/get"
-                           f"?pageid=153&lid={lid}&num=20&page=1")
-                    resp = await page.goto(url, wait_until="domcontentloaded",
-                                          timeout=10_000)
-                    if resp and resp.status == 200:
-                        body = await page.evaluate("document.body.innerText")
-                        import json
-                        data = json.loads(body)
-                        news_list = data.get("result", {}).get("data", [])
-                        for n in news_list[:15]:
-                            title = _HTML_RE.sub("", n.get("title", "")).strip()
-                            if title and len(title) > 10:
-                                items.append(NewsItem(
-                                    title=title,
-                                    url=n.get("url", ""),
-                                    source="新浪财经",
-                                    content_snippet=n.get("intro", title),
-                                ))
-                    await asyncio.sleep(0.3)  # gentle between LIDs
-                except Exception:
-                    pass
+            await page.set_extra_http_headers({"User-Agent": UA})
+            await page.goto("https://finance.sina.com.cn/7x24/",
+                           wait_until="domcontentloaded",
+                           timeout=SCRAPE_TIMEOUT)
+            await asyncio.sleep(2)  # JS hydration
+
+            headlines = await page.evaluate("""() => {
+                const items = [];
+                const links = document.querySelectorAll('a[href]');
+                const seen = new Set();
+                for (const a of links) {
+                    const title = (a.textContent || '').trim();
+                    const href = a.href || '';
+                    // Sina news links look like: /roll/..., /detail-..., or contain sina.com.cn
+                    if (title.length > 15 && !seen.has(href) &&
+                        (href.includes('sina.com.cn') || href.includes('/roll/') ||
+                         href.includes('/detail-'))) {
+                        seen.add(href);
+                        items.push({title: title.substring(0, 200), url: href});
+                    }
+                }
+                return items.slice(0, 20);
+            }""")
+
+            for h in headlines:
+                title = _HTML_RE.sub("", h.get("title", "")).strip()
+                if not title or len(title) < 12:
+                    continue
+                items.append(NewsItem(
+                    title=title,
+                    url=h.get("url", ""),
+                    source="新浪财经",
+                    content_snippet=title,
+                ))
+
             logger.info("WebScraper: Sina → %d items", len(items))
         except Exception as e:
-            logger.warning("WebScraper: Sina scrape failed: %s", e)
+            logger.warning("WebScraper: Sina live page scrape failed: %s", e)
         finally:
             if page:
                 await page.close()
