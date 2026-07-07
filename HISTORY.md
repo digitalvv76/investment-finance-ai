@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-07-08 · 会话 — 政府资助推送升级 + 去重重写
+
+### 美国政府资助/入股 → CRITICAL 推送 (Peabody/DOE 触发)
+- **需求**: Peabody 获 DOE 稀土拨款 → 应该 ~90 分 + Pushover 推送
+- **扩大范围**: 任何美国政府资助/入股上市公司 → 最高推送级别
+- `alert_dispatcher.py`: gov_intervention 战略匹配置信度 ≥70% → 豁免观察名单门禁（此前 impact 路径会被降级为 NORMAL）
+- `strategic_detector.py`: 新增 CFIUS / government backstop / rescue / state-backed 实体；新增 approves / provides / package 动作；DOE 实体权重对齐 DoD；修复 subsidies 子串匹配 bug
+- `relevance.py`: 新增高危类别 gov_intervention(0.95), gov_equity(0.95), gov_funding(0.90)；30+ 政府资助行业信号词
+- `keywords.yaml`: us_market_signals 新增 30+ 政府资助关键词
+- `impact_v1.txt`: LLM 提示词新增 "US GOVERNMENT STRATEGIC INVESTMENT / EQUITY" 最高影响类别(70-95)
+- **验证**: 20/20 政府资助场景全部检测，gov_intervention 置信度 0.65-1.00
+
+### 去重系统重写 — 4 根因修复
+- **问题**: "BREAKING: Iran attacks ships in Hormuz" 被重复推送多次
+- **根因 1**: 语义去重阈值 0.92 太严格（不同来源同类报道 ≈0.85 被放过）
+- **根因 2**: "BREAKING:" 前缀破坏内容哈希（加前缀 = 完全不同指纹）
+- **根因 3**: 缓存满了 `clear()` 全部清空（瞬间丢失所有去重记忆）
+- **根因 4**: 批次内 5 个采集器并发结果不互相对比
+- `dedup.py`: 重写 — 4 层去重、前缀剥离、FIFO(deque)淘汰、批次内 Jaccard+语义比对
+- `vector_store.py`: 新增 `pair_similarity()` 实时文本余弦相似度
+
+### 部署
+- Commits: `1421bc3` + `499c39a` on v1-stable
+- ECS 部署成功: 7 files → Docker rebuild → healthy (27s)
+- 测试: 68 passed
+
 ## 2026-07-07 · 会话 — 深度分析实时价格修复 + 爬虫开关
 
 ### 深度分析数据时效修复
