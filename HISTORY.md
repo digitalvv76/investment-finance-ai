@@ -981,3 +981,14 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - `news-monitor/pipeline/__manifest__.json` — 7 模块注册
 - `news-monitor/scripts/__manifest__.json` — pre_push_check 补录
 - `.claude/SESSION.md` — 更新状态
+
+---
+
+## 2026-07-07 · V1 急速优化 (穿插) ⚠️ 下次应在 v1-stable worktree 做
+
+- ✅ Twitter 精简: 10→6 账号 (保留 3 Reuters + @Newsquawk + @SemiAnalysis + @bespokeinvest)
+- ✅ Sina 频道扩展: 1→4 (综合+国际+地缘+科技), API 403 → 改 Playwright 爬网页
+- ✅ Web 爬虫: WallstreetCN ✅ (15条/心跳) + CNBC ✅ (15条) + MarketWatch ❌ (IP拦截)
+- ✅ Sina: API 加 Referer 头 + 延迟 0.5→1.5s, 仍 403 → Playwright 抓 finance.sina.com.cn/7x24 ❌ (IP拦截)
+- ✅ 全部已部署 ECS
+- 🩹 教训: V1 修改混在 main 做, 连 V2 Phase 2 代码一起推到 ECS。下次严格用 v1-stable worktree。
