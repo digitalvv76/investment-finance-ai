@@ -134,7 +134,12 @@ class NewsScheduler:
             logger.debug("Heartbeat: no new items")
 
     async def _tick_5min(self):
-        """5-minute tick: remaining Playwright sources + Twitter + Finnhub."""
+        """5-minute tick: Twitter + RSS + Chinese + Finnhub + remaining Playwright.
+
+        Chinese sources (Sina + WallstreetCN) and RSS were promoted from 15-min
+        to close the 20-minute latency gap vs. native apps.  All fetchers are
+        IO-bound; the combined tick completes in ~130s, well under 300s.
+        """
         sources = [
             s for s in self.sources.get('tier_2_playwright', [])
             if s.get('frequency_tier') != 'heartbeat'
@@ -151,6 +156,20 @@ class NewsScheduler:
         except Exception as e:
             logger.warning("Twitter fetch failed: %s", e)
 
+        # RSS feeds (CNBC, WSJ, MarketWatch, SA, CNBC Economy)
+        try:
+            rss_items = await self.rss_fetcher.fetch_all()
+            items.extend(rss_items)
+        except Exception as e:
+            logger.warning("RSS fetch failed: %s", e)
+
+        # Chinese financial news (新浪财经 + 华尔街见闻) — fastest non-Twitter source
+        try:
+            cn_items = await self.chinese_fetcher.fetch_all()
+            items.extend(cn_items)
+        except Exception as e:
+            logger.warning("Chinese news fetch failed: %s", e)
+
         # Finnhub per-ticker news — fills the gap for mid-cap watchlist
         # stocks that don't appear on macro Twitter feeds or major RSS.
         try:
@@ -163,18 +182,11 @@ class NewsScheduler:
             await self._insert_and_notify(items)
 
     async def _tick_15min(self):
-        """15-minute tick: all RSS sources + Chinese financial news."""
-        items = await self.rss_fetcher.fetch_all()
+        """15-minute tier — now a no-op.
 
-        # Chinese financial news (新浪财经 + 华尔街见闻)
-        try:
-            cn_items = await self.chinese_fetcher.fetch_all()
-            items.extend(cn_items)
-        except Exception as e:
-            logger.warning("Chinese news fetch failed: %s", e)
-
-        if items:
-            await self._insert_and_notify(items)
+        All content sources moved to _tick_5min() on 2026-07-07.
+        This slot is reserved for future low-frequency sources.
+        """
 
     async def _tick_30min(self):
         """30-minute tick: low-priority background tasks.
