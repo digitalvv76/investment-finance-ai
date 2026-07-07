@@ -267,6 +267,7 @@ class NewsMonitor:
                 rel_mult=rel_mult,
                 has_tickers=has_tickers,
                 is_macro=is_macro,
+                timeliness=sig.get("timeliness"),
             )
 
             # ---- LLM Actionability Review (borderline cases only) ----
@@ -307,6 +308,7 @@ class NewsMonitor:
                     priority_score=item.priority_score,
                     strategic_matches=strategic_matches,
                     telegram_push_fn=tg_push,
+                    timeliness=sig.get("timeliness"),
                 )
                 logger.info(
                     "Alert dispatched: level=%s channels=%s reason=%s",

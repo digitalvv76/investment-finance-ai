@@ -55,6 +55,7 @@ CRITICAL_PRIORITY = 0.55      # PriorityScorer scores >= this → CRITICAL
 IMPORTANT_PRIORITY = 0.45     # "" >= this → IMPORTANT
 STRATEGIC_CRITICAL_CONF = 0.70  # Strategic match confidence >= this → CRITICAL
 GOV_INTERVENTION_CRITICAL = True  # Any gov_intervention match → auto CRITICAL
+TIMELINESS_PHONE_MIN = 0.25   # Timeliness below this → skip phone push (analyst reports etc.)
 
 # ---------------------------------------------------------------------------
 # Pushover config
@@ -121,6 +122,7 @@ class AlertDispatcher:
         rel_mult: float = 1.0,   # relevance multiplier from portfolio/watchlist
         has_tickers: bool = False,  # does the news mention individual stocks?
         is_macro: bool = False,     # is this a macro/geopolitical/systemic event?
+        timeliness: float | None = None,  # 0–1, from signal_score; low = stale/analyst report
     ) -> tuple[AlertLevel, str]:
         """Determine alert level from priority score + strategic signals + impact prediction.
 
@@ -134,6 +136,10 @@ class AlertDispatcher:
         NOT macro/geopolitical (is_macro=False), the alert level is capped at
         NORMAL unless rel_mult shows portfolio/watchlist relevance (rel_mult > 0.5).
         This prevents phone pushes for stocks the user doesn't own or track.
+
+        **Timeliness gate**: analyst reports and stale news (timeliness < 0.25)
+        are capped at NORMAL — no phone buzz.  They still go to Telegram.
+        Breaking events and macro news bypass this gate.
 
         Returns (AlertLevel, reason_string).
         """
@@ -224,6 +230,19 @@ class AlertDispatcher:
             )
             return AlertLevel.NORMAL, f"not_in_watchlist (was: {reason})"
 
+        # --- TIMELINESS GATE ---
+        # Phone push requires timeliness.  Analyst reports, research notes,
+        # and other non-breaking content lack the urgency to justify
+        # interrupting the user on their phone — they can wait for
+        # Telegram review.  Breaking news and macro events bypass.
+        if timeliness is not None and timeliness < TIMELINESS_PHONE_MIN:
+            if not is_breaking and not is_macro:
+                logger.info(
+                    "Timeliness gate: blocking phone for %s (timeliness=%.2f < %.2f)",
+                    level.value, timeliness, TIMELINESS_PHONE_MIN,
+                )
+                return level, f"phone_blocked:low_timeliness={timeliness:.2f} (was: {reason})"
+
         return level, reason
 
     # ------------------------------------------------------------------
@@ -236,6 +255,7 @@ class AlertDispatcher:
         priority_score: float,
         strategic_matches: list | None = None,
         telegram_push_fn=None,
+        timeliness: float | None = None,
     ) -> DispatchResult:
         """Classify and dispatch through appropriate channels.
 
@@ -246,37 +266,57 @@ class AlertDispatcher:
             telegram_push_fn: async callable(item, disable_notification: bool)
                               Called by *this* method for NORMAL/IMPORTANT Telegram sends.
                               If None, Telegram channel is skipped (testing).
+            timeliness: 0–1 from signal_score.  Low timeliness blocks phone push
+                        (analyst reports etc.) but Telegram is still delivered.
 
         Returns:
             DispatchResult summarising what was done.
         """
-        level, reason = self.classify(priority_score, strategic_matches)
+        level, reason = self.classify(
+            priority_score, strategic_matches,
+            timeliness=timeliness,
+        )
         title = item.get("title", "")[:80]
         channels: list[str] = []
+        phone_blocked = reason.startswith("phone_blocked:")
 
         if level == AlertLevel.CRITICAL:
             logger.warning("CRITICAL alert: %s | reason=%s", title, reason)
 
-            # Pushover emergency (heartbeat until acknowledged)
-            if self.pushover_available:
-                await self._pushover_emergency(item)
-                channels.append("pushover_emergency")
+            if phone_blocked:
+                # Timeliness gate: still send Telegram alert, but skip phone emergency
+                logger.info("Phone push blocked (timeliness) — Telegram only for: %s", title)
+                if telegram_push_fn:
+                    await telegram_push_fn(item, disable_notification=False)
+                    channels.append("telegram_alert")
+            else:
+                # Pushover emergency (heartbeat until acknowledged)
+                if self.pushover_available:
+                    await self._pushover_emergency(item)
+                    channels.append("pushover_emergency")
 
-            # Telegram triple-push (force vibration on Android)
-            if telegram_push_fn:
-                await self._telegram_triple(item, telegram_push_fn)
-                channels.append("telegram_triple")
+                # Telegram triple-push (force vibration on Android)
+                if telegram_push_fn:
+                    await self._telegram_triple(item, telegram_push_fn)
+                    channels.append("telegram_triple")
 
         elif level == AlertLevel.IMPORTANT:
             logger.info("IMPORTANT alert: %s | reason=%s", title, reason)
 
-            if self.pushover_available:
-                await self._pushover_high(item)
-                channels.append("pushover_high")
+            if phone_blocked:
+                # Timeliness gate: Telegram alert, skip phone
+                logger.info("Phone push blocked (timeliness) — Telegram only for: %s", title)
+                if telegram_push_fn:
+                    await telegram_push_fn(item, disable_notification=False)
+                    channels.append("telegram_alert")
+            else:
+                if self.pushover_available:
+                    await self._pushover_high(item)
+                    channels.append("pushover_high")
 
-            if telegram_push_fn:
-                await telegram_push_fn(item, disable_notification=False)
-                channels.append("telegram_alert")
+                if telegram_push_fn:
+                    await telegram_push_fn(item, disable_notification=False)
+                    channels.append("telegram_alert")
 
         else:  # NORMAL
             if telegram_push_fn:
