@@ -907,3 +907,35 @@ Nvidia cuts guidance...
 ---
 
 ## 2026-07-07T08:40+08:00 · 会话开始
+
+### 本次完成
+- ✅ **HISTORY.md 同步**: 补录 10 条缺失提交哈希 (`56b8986`)
+- ✅ **Telegram 双手机**: `TELEGRAM_CHAT_ID_2` 支持 (6 文件, 镜像 Pushover 模式) (`6937c20`)
+- ✅ **V2 Phase 1 Task 3**: `session_startup.py` manifest 一致性扫描 (`d361b25`)
+- ✅ **V2 Phase 1 Task 4**: pre-push hook — v1-stable 保护 (`600814c`)
+- ✅ **V2 Phase 1 Task 5**: `module_registry.json` 废弃标记 (`f707b2d`)
+- ✅ **V2 Phase 1 Task 6**: 端到端验证 — 314 tests pass, 零回归
+
+### V2 Phase 1 — 全部完成 🎉
+```
+Task 1: __manifest__.json 创建          ✅
+Task 2: pre_commit_check 更新            ✅
+Task 3: session_startup manifest 扫描    ✅
+Task 4: pre-push hook (v1-stable 保护)   ✅
+Task 5: module_registry.json 废弃标记    ✅
+Task 6: 端到端验证                       ✅
+```
+- 测试: 314 pass (1 pre-existing fail + 6 ChromaDB Windows known errors)
+- 下一步 → **V2 Phase 2: 管道架构重构**
+
+### 修改文件
+- `HISTORY.md` — 补录 10 条提交哈希
+- `news-monitor/bot/telegram_bot.py` — `_get_chat_id()` → `_get_chat_ids()`, 双 chat_id 推送
+- `news-monitor/engine/alert_dispatcher.py` — `wrap_telegram_push` 遍历所有 chat_id
+- `news-monitor/scripts/session_startup.py` — +102 行 manifest 扫描 + 注册表弃用检查
+- `news-monitor/scripts/pre_push_check.py` — 新建，v1-stable 推送保护
+- `news-monitor/config/module_registry.json` — 废弃标记
+- `news-monitor/config/settings.yaml` — `telegram_chat_id_2` 文档
+- `news-monitor/scripts/verify_env.py` — `TELEGRAM_CHAT_ID_2` 推荐检查
+- `news-monitor/scripts/install_service.py` — `TELEGRAM_CHAT_ID_2` 环境变量
+- `.claude/settings.json` — pre-push hook 注册 (本地)
