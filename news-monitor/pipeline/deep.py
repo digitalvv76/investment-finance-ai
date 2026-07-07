@@ -42,19 +42,27 @@ class DeepStage:
 
     async def _analyze_one(self, item: PipelineItem) -> None:
         """Run deep analysis on one item. Retry once on failure."""
-        raw = {
-            "id": item.id, "title": item.title, "source": item.source,
-            "url": item.url, "snippet": item.snippet,
-            "tickers_found": item.tickers_found,
-            "macro_tags": item.macro_tags,
-        }
+        from storage.models import NewsItem
+        from datetime import datetime
+
+        news = NewsItem(
+            id=item.id,
+            title=item.title,
+            source=item.source,
+            url=item.url,
+            content_snippet=item.snippet,
+            tickers_found=item.tickers_found,
+            macro_tags=item.macro_tags,
+            priority_score=item.priority_score,
+            published_at=datetime.now(),
+        )
         try:
-            await self._dl.process(raw)
+            await self._dl.process(news)
             logger.info("DEEP: analysis complete for id=%d", item.id)
         except Exception:
             try:
                 await asyncio.sleep(2)
-                await self._dl.process(raw)
+                await self._dl.process(news)
                 logger.info("DEEP: analysis complete for id=%d (after retry)", item.id)
             except Exception:
                 logger.exception("DEEP: analysis failed for id=%d", item.id)
