@@ -1,4 +1,6 @@
 {
+  "_deprecated": "This file is deprecated as of 2026-07-06. Use __manifest__.json files in each module directory instead. See docs/superpowers/specs/2026-07-06-v2-phase1-dev-standards-design.md",
+  "_migration_status": "Keeping for backward compatibility during Phase 1 transition. Do NOT add new entries here — add them to the relevant __manifest__.json.",
   "_description": "Module-to-test-to-script dependency map. Used by session_startup.py, pre_commit_check.py, and dev_checklist.py. Update when adding new modules or tests.",
   "_convention": "Most engine/<name>.py modules map to tests/test_<name>.py. Only non-convention mappings are listed.",
   "modules": {
