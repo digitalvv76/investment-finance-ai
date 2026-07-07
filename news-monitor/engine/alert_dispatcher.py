@@ -51,8 +51,8 @@ class DispatchResult:
 # Thresholds
 # ---------------------------------------------------------------------------
 
-CRITICAL_PRIORITY = 0.55      # PriorityScorer scores >= this → CRITICAL
-IMPORTANT_PRIORITY = 0.45     # "" >= this → IMPORTANT
+CRITICAL_PRIORITY = 0.65      # PriorityScorer scores >= this → CRITICAL
+IMPORTANT_PRIORITY = 0.55     # "" >= this → IMPORTANT
 STRATEGIC_CRITICAL_CONF = 0.70  # Strategic match confidence >= this → CRITICAL
 GOV_INTERVENTION_CRITICAL = True  # Any gov_intervention match → auto CRITICAL
 
@@ -185,7 +185,7 @@ class AlertDispatcher:
             # For watchlist stocks (rel_mult > 0.5), lower the IMPORTANT threshold from
             # 0.45 to 0.35 — the user explicitly wants to know about these companies.
             is_watchlist = rel_mult > 0.5
-            imp_threshold = 0.35 if is_watchlist else IMPORTANT_PRIORITY
+            imp_threshold = 0.40 if is_watchlist else IMPORTANT_PRIORITY
             crit_threshold = CRITICAL_PRIORITY  # same for both paths
 
             if priority_score >= crit_threshold:

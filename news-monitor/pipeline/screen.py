@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SCREEN_THRESHOLD = 0.3  # Minimum priority_score to continue
+SCREEN_THRESHOLD = 0.40  # Minimum priority_score to continue
 
 
 class ScreenStage:

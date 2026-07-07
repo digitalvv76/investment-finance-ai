@@ -208,7 +208,7 @@ def main():
     logger.info("Labelled dataset: %d items (%d push, %d skip)", len(labels), pos, neg)
 
     # Current thresholds for comparison
-    current = {"critical": 0.65, "important": 0.50}
+    current = {"critical": 0.65, "important": 0.55}
     current_metrics = evaluate(labels, current)
     logger.info(
         "Current thresholds (crit=%.2f, imp=%.2f): precision=%.3f, recall=%.3f, F1=%.3f",
@@ -342,7 +342,7 @@ def _apply_thresholds(thresholds: dict):
 
     replacements = {
         r"CRITICAL_PRIORITY = 0.65": f"CRITICAL_PRIORITY = {thresholds['critical']:.2f}",
-        r"IMPORTANT_PRIORITY = 0.50": f"IMPORTANT_PRIORITY = {thresholds['important']:.2f}",
+        r"IMPORTANT_PRIORITY = 0.55": f"IMPORTANT_PRIORITY = {thresholds['important']:.2f}",
         r"STRATEGIC_CRITICAL_CONF = 0.70": f"STRATEGIC_CRITICAL_CONF = {thresholds.get('strategic_critical_conf', 0.70):.2f}",
     }
 
