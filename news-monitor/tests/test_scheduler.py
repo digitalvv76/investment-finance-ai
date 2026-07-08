@@ -178,7 +178,7 @@ def test_get_frequency_weekend(scheduler_setup):
 
 @pytest.mark.asyncio
 async def test_heartbeat_fetches_rss_and_chinese(scheduler_setup):
-    """RSS and Chinese run on 1-min heartbeat tick (promoted from 15-min, then 5-min)."""
+    """RSS + Chinese + API + Playwright run on heartbeat tick. Web scraper moved to 60s _scraper_tick."""
     s = scheduler_setup["scheduler"]
 
     from storage.models import NewsItem
@@ -187,13 +187,26 @@ async def test_heartbeat_fetches_rss_and_chinese(scheduler_setup):
     s.rss_fetcher.fetch_all.return_value = rss_items
     s.chinese_fetcher = MagicMock()
     s.chinese_fetcher.fetch_all = AsyncMock(return_value=cn_items)
-    s.web_scraper = MagicMock()
-    s.web_scraper.fetch_all = AsyncMock(return_value=[])
 
     await s._heartbeat_tick()
 
     s.rss_fetcher.fetch_all.assert_called_once()
     s.chinese_fetcher.fetch_all.assert_called_once()
+    scheduler_setup["db"].insert_news.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_scraper_tick(scheduler_setup):
+    """Web scraper runs in its own 60s tick, independent of heartbeat."""
+    s = scheduler_setup["scheduler"]
+
+    from storage.models import NewsItem
+    scrape_items = [NewsItem(title="CNBC Homepage", url="https://cnbc.com/1", source="CNBC")]
+    s.web_scraper = MagicMock()
+    s.web_scraper.fetch_all = AsyncMock(return_value=scrape_items)
+
+    await s._scraper_tick()
+
     s.web_scraper.fetch_all.assert_called_once()
     scheduler_setup["db"].insert_news.assert_called()
 

@@ -114,10 +114,9 @@ class NewsScheduler:
         await self._notify_callbacks(items)
 
     async def _heartbeat_tick(self):
-        """1-minute heartbeat: all collectors run concurrently via asyncio.gather.
+        """Heartbeat (120s): cn + rss + playwright(hb) + api concurrently.
 
-        Chinese + RSS + Playwright(hb) + API + WebScraper fire simultaneously.
-        Old serial: ~85s.  New concurrent: ~32s (bottleneck = slowest collector).
+        Web scraper moved to _scraper_tick (60s) for faster homepage polling.
         """
         # ---- Launch all collectors concurrently ----
         cn_task = self._safe_fetch(
@@ -140,13 +139,8 @@ class NewsScheduler:
             self.api_fetcher.check_all(), "api"
         )
 
-        scrape_task = self._safe_fetch(
-            self.web_scraper.fetch_all() if self.web_scraper is not None else [],
-            "web_scraper",
-        )
-
         results = await asyncio.gather(
-            cn_task, rss_task, pw_task, api_task, scrape_task,
+            cn_task, rss_task, pw_task, api_task,
         )
 
         # ---- Merge all results ----
@@ -156,7 +150,17 @@ class NewsScheduler:
                 items.extend(result)
 
         if items:
-            logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape)")
+            logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api)")
+            await self._insert_and_notify(items)
+
+    async def _scraper_tick(self):
+        """Web scraper tick: runs every 60s, independent of heartbeat."""
+        items = await self._safe_fetch(
+            self.web_scraper.fetch_all() if self.web_scraper is not None else [],
+            "web_scraper",
+        )
+        if items:
+            logger.info(f"Scraper: {len(items)} items")
             await self._insert_and_notify(items)
 
     async def _safe_fetch(self, coro_or_items, label: str) -> list:
@@ -294,10 +298,16 @@ class NewsScheduler:
         #     logger.warning(f"Twitter fetcher startup failed (non-fatal): {e}")
         logger.info("Twitter: disabled (resource conservation)")
 
+        last_scraper = 0
+
         while self._running:
             now = time.monotonic()
 
             try:
+                if now - last_scraper >= self._get_frequency(60):
+                    await self._scraper_tick()
+                    last_scraper = now
+
                 if now - last_1min >= self._get_frequency(120):
                     await self._heartbeat_tick()
                     last_1min = now
