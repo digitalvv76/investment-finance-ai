@@ -1,37 +1,35 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-08 01:00 CST
+> 最后更新: 2026-07-08 15:05 CST
 
-## ✅ 今日完成 (v1-stable)
+## ✅ 本次完成 (V1 修改窗口)
 
-### 美国政府资助/入股 → CRITICAL 推送
-- 任何 US gov grant/equity/stake → ~90 impact + Pushover emergency push
-- alert_dispatcher: gov_intervention 豁免观察名单门禁
-- strategic_detector: DOE/CFIUS/gov-backstop 实体 + 动作词补全
-- relevance: gov_intervention(0.95), 30+ 政府资助信号词
-- keywords: 30+ us_market_signals 关键词
-- impact_v1 prompt: 政府战略投资 = 最高影响类别(70-95)
+### 内容过滤重构
+- 中文分层：国际=满分，纯国内=×0.4，CCP宣传=×0.15
+- 新增极端事件绕过：熔断/宣战/指数暴跌>4%/油价暴涨
+- _has_us_market_signal 扩充至 50+ 关键词
 
-### 去重系统重写
-- 语义阈值 0.92→0.82
-- BREAKING/URGENT 前缀剥离后哈希
-- FIFO(deque) 淘汰替代 clear-all
-- 批次内语义两两比对 (pair_similarity)
+### 采集修复
+- MarketWatch web scraper 关闭 (401 anti-bot)
+- Sina web scraper 恢复 (URL 域名变更，0→20条)
 
-### 部署
-- Commits: 1421bc3 + 499c39a on v1-stable
-- ECS: 7 files → Docker rebuild → healthy
+### LLM urgency 替代公式分类
+- prompt 新增 7 个输出字段，4 个 urgency 级别
+- classify() 改为 urgency-first 路由，公式降级为 fallback
+- e2e 测试 4/4 通过：FLASH(美伊开战)/ALERT(NVDA财报)/INFO(A股)/INFO(研报)
 
 ## 📋 下一步
 
-1. 观察 ECS 推送质量 — 政府资助新闻是否按预期触发 Pushover
-2. 观察去重效果 — 同类新闻是否还会重复推送
-3. 跑一次 Edge Pipeline 完整流程
+1. 等美股开盘时段观察推送效果
+2. 验证 LLM urgency 在实际事件上的表现
+3. 积累校准数据 (ImpactOutcome → ImpactLearner)
 
 ## 📊 系统健康
 
 | 组件 | 状态 |
 |------|------|
-| ECS | ✅ 运行中, 30s 心跳 |
-| v1-stable | ✅ 已部署 |
-| 测试 | 68 passed |
+| ECS 4C8G | ✅ healthy |
+| news-monitor | ✅ healthy |
+| Sina scraper | ✅ 20 items |
+| MarketWatch RSS | ✅ 10 items |
+| LLM urgency | ✅ e2e tested |

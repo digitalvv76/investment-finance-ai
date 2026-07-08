@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-08T15:05+08:00 · V1 内容过滤 + LLM urgency 重构
+
+### 中文内容分层 (`c75efa2`)
+- 中文惩罚从 ×0.5 一刀切改为分层：国际=满分，纯国内=×0.4，CCP宣传=×0.15
+- _has_us_market_signal 加 20+ 关键词：美国/kospi/nikkei/恒生/熔断/开战
+- 新增 _has_global_market_stress() 绕过：熔断/宣战/指数暴跌>4%/油价暴涨
+
+### 采集修复
+- MarketWatch web scraper 关闭 (`b154dda`)：返回 401 anti-bot，RSS 已覆盖
+- Sina web scraper URL 修复 (`5c5e541`)：sina.com.cn → sina.cn，wap.cj.sina.cn 域名变更，恢复 20 条/次
+
+### LLM urgency 替代公式分类 (`250b540`)
+- ImpactEvaluator prompt 新增：urgency/sentiment/greed_index/flash_note/key_points/risk_flags
+- alert_dispatcher.classify() 改为 urgency-first，公式降为 fallback
+- formatters.py 新推送格式：urgency badge + greed index + key points + risk flags
+- e2e 测试通过 (test_urgency.py)：FLASH(美伊开战98)/ALERT(NVDA财报85)/INFO(A股收跌15)/INFO(研报20)
+
+### 测试结果
+- 旧公式：NVDA财报=CRITICAL，美伊开战=IMPORTANT（颠倒）
+- LLM urgency：美伊开战=FLASH，NVDA财报=ALERT（正确）
+
+---
+
 ## 2026-07-08 · 会话 — 政府资助推送升级 + 去重重写
 
 ### 美国政府资助/入股 → CRITICAL 推送 (Peabody/DOE 触发)
