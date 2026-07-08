@@ -1,31 +1,30 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-08 19:10 CST
+> 最后更新: 2026-07-08 22:18 CST
 
-## ✅ 本次完成 (V2 LLM Urgency 迁移)
+## ✅ 本次完成 (ECS 宕机根因修复)
 
-### V1 → V2 推送质量控制迁移
-- **Prompt**: EVENT vs OPINION 区分、US gov investment 识别、headline/content mismatch 检测
-- **LLM urgency 分级**: FLASH/ALERT/WATCH/INFO 替代公式打分
-- **数据模型**: ImpactAssessment +6 字段 (urgency/sentiment/greed_index/flash_note/key_points/risk_flags)
-- **EvaluateStage**: signal_score 四维评分 + timeliness gate + Actionability Review 集成
-- **DispatchStage**: PushoverChannel/TelegramChannel 使用新字段格式化
-- **formatters**: urgency badge、greed index、key points、risk flags
-- **测试**: 38 pass (15 pipeline + 23 alert dispatcher)
-- **V2 本地验证**: 全链路通过, 1 小时 + 2 分钟两次跑通
+### 诊断
+- WallstreetCN DOM 变更 (07:09 UTC) → wait_for_selector 146 次超时
+- Chrome 子进程泄漏: 295 容器进程 + 100 zombie
+- PlaywrightFetcher page 泄露 (异常路径不 close)
+- 容器无 PidsLimit
 
-### 改动文件 (12 files, 398 insertions)
-- Prompt: `impact_v1.txt`
-- Models: `storage/models.py`
-- Engine: `alert_dispatcher.py`, `impact_evaluator.py`, `formatters.py`
-- Pipeline: `pipeline/evaluate.py`, `pipeline/item.py`, `pipeline/channel.py`
-- Bot: `bot/telegram_bot.py`
-- Tests: `test_alert_dispatcher.py`
-- Main: `main.py`
+### 修复
+- WallstreetCN + Sina 新 DOM selector (`state: attached`)
+- 浏览器每 2h 自动重启
+- PlaywrightFetcher finally page.close()
+- PidsLimit=200
+
+### 结果
+- CPU: 14% idle → 95% idle
+- Zombie: 100 → 0
+- 采集失败: 0
+- Sina: 0 → 20 items, WallstreetCN: 超时 → 15 items
 
 ## 📋 下一步
 
-1. Impact Learner + Event Matcher 集成到 EvaluateStage (第二优先级)
+1. MarketWatch web scraper 也返回 0 items (RSS 覆盖，暂不影响)
 2. V2 影子测试: ECS 上运行 V2 (只采集处理不推送), 与 V1 对比
 3. 灰度切换: Web SSE → Telegram → Pushover
 
@@ -33,9 +32,8 @@
 
 | 组件 | 状态 |
 |------|------|
-| ECS 4C8G | ✅ 稳定 (v1-stable) |
-| news-monitor tests | ✅ 38 pass (pipeline + alert) |
+| ECS 2C4G | ✅ 稳定 (CPU 46%/95% idle) |
+| news-monitor | ✅ healthy |
 | Vercel | ✅ 200 |
-| V2 本地测试 | ✅ 全链路通过 (1h + 2min) |
-| V2 LLM urgency | ✅ 已同步 |
-| V2 Actionability Review | ✅ 已集成 |
+| WallstreetCN | ✅ 15 items |
+| Sina | ✅ 20 items |

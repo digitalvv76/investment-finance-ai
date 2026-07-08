@@ -1160,3 +1160,29 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 ---
 
 ## 2026-07-08T17:25+08:00 · 会话开始
+
+---
+
+## 2026-07-08T21:45+08:00 · ECS 告警 + 宕机根因修复
+
+### ECS 告警诊断
+- CPU 85.7%, 100 zombie, 295 容器进程
+- 根因: WallstreetCN DOM 变更 → wait_for_selector 146 次超时 → Chrome 子进程泄漏
+- PlaywrightFetcher page 泄露 (异常路径不 close)
+- 容器无 PidsLimit 导致 295 进程无阻拦
+
+### 修复部署
+- **web_scraper.py**: WallstreetCN + Sina 新 DOM selector (state: attached)
+- **web_scraper.py**: 浏览器每 2h 重启防泄漏
+- **playwright_fetcher.py**: finally page.close() 修复泄露
+- **docker-compose.yml**: pids: 200 硬限制
+- 结果: CPU 14%→95% idle, zombie 100→0, 采集 0 失败
+
+### 改动文件
+- `news-monitor/collector/web_scraper.py` — WallstreetCN+Sina 适配 + 2h 重启
+- `news-monitor/collector/playwright_fetcher.py` — page close 修复
+- `news-monitor/docker/docker-compose.yml` — pids_limit 200
+
+---
+
+## 2026-07-08T21:45+08:00 · 会话开始

@@ -67,9 +67,13 @@ class WebScraper:
     items on a given source, with a 1-hour cool-down before retrying CSS.
     """
 
+    # Browser restart every 2 hours to prevent Chrome process leak accumulation
+    _BROWSER_RESTART_SECONDS = 7200  # 2 hours
+
     def __init__(self) -> None:
         self._browser = None
         self._playwright = None
+        self._browser_started_at: float = 0.0  # monotonic timestamp
 
         # VLM fallback state — keyed by source name
         # Each entry: {"failures": int, "vlm_until": float (monotonic timestamp)}
@@ -87,11 +91,30 @@ class WebScraper:
                 args=["--no-sandbox", "--disable-dev-shm-usage",
                       "--disable-gpu", "--disable-setuid-sandbox"],
             )
+            self._browser_started_at = time.monotonic()
             logger.info("WebScraper: browser launched")
         except ImportError:
             logger.error("WebScraper: playwright not installed")
         except Exception as e:
             logger.error("WebScraper: browser launch failed: %s", e)
+
+    async def _restart_browser_if_stale(self) -> None:
+        """Restart Chromium every _BROWSER_RESTART_SECONDS to prevent process leak."""
+        if time.monotonic() - self._browser_started_at < self._BROWSER_RESTART_SECONDS:
+            return
+        logger.info("WebScraper: periodic browser restart (2h cycle)")
+        try:
+            if self._browser:
+                await self._browser.close()
+            self._browser = await self._playwright.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage",
+                      "--disable-gpu", "--disable-setuid-sandbox"],
+            )
+            self._browser_started_at = time.monotonic()
+            logger.info("WebScraper: browser restarted successfully")
+        except Exception as e:
+            logger.error("WebScraper: browser restart failed: %s", e)
 
     async def shutdown(self) -> None:
         if self._browser:
@@ -105,6 +128,8 @@ class WebScraper:
         if not self._browser:
             logger.warning("WebScraper: browser not available, skipping")
             return []
+
+        await self._restart_browser_if_stale()
 
         tasks = [
             self._scrape_sina(),
@@ -297,6 +322,9 @@ class WebScraper:
         The JSON API returns 403 from ECS. The live webpage at
         finance.sina.com.cn/7x24 uses the same data but is served
         as HTML — browser fingerprint bypasses the API block.
+
+        New DOM (2026-07): .seaio_list > div items, each contains
+        <div>time</div>, <a>title+link</a>, <div.btn-view>reads, <div.btn-cmnt>comments.
         """
         items: List[NewsItem] = []
         page = None
@@ -306,20 +334,27 @@ class WebScraper:
             await page.goto("https://finance.sina.com.cn/7x24/",
                            wait_until="domcontentloaded",
                            timeout=SCRAPE_TIMEOUT)
+            # Wait for .seaio_list container to appear
+            try:
+                await page.wait_for_selector(".seaio_list",
+                                             state="attached",
+                                             timeout=10_000)
+            except Exception:
+                pass
             await asyncio.sleep(2)  # JS hydration
 
             headlines = await page.evaluate("""() => {
                 const items = [];
-                const links = document.querySelectorAll('a[href]');
-                const seen = new Set();
-                for (const a of links) {
-                    const title = (a.textContent || '').trim();
-                    const href = a.href || '';
-                    // Sina news links look like: /roll/..., /detail-..., or contain sina.com.cn
-                    if (title.length > 15 && !seen.has(href) &&
-                        (href.includes('sina.com.cn') || href.includes('/roll/') ||
-                         href.includes('/detail-'))) {
-                        seen.add(href);
+                const container = document.querySelector('.seaio_list');
+                if (!container) return items;
+                // Each child div is a news item with a time div and an <a> link
+                const children = container.children;
+                for (const el of children) {
+                    const link = el.querySelector('a[href]');
+                    if (!link) continue;
+                    const title = (link.textContent || '').trim();
+                    const href = link.href || '';
+                    if (title.length > 10 && href) {
                         items.push({title: title.substring(0, 200), url: href});
                     }
                 }
@@ -359,8 +394,9 @@ class WebScraper:
     async def _scrape_wallstreetcn(self) -> List[NewsItem]:
         """Scrape wallstreetcn.com/live — real-time Chinese financial feed.
 
-        The live page loads items via JS; we extract them from the DOM
-        after waiting for the feed container to render.
+        The live page is a JS SPA; items appear in .live-item containers
+        with .live-item_title and .live-item_html children.
+        Waits for .livenews-main container then extracts all .live-item.
         """
         items: List[NewsItem] = []
         page = None
@@ -370,30 +406,36 @@ class WebScraper:
             await page.goto("https://wallstreetcn.com/live/global",
                            wait_until="domcontentloaded",
                            timeout=SCRAPE_TIMEOUT)
-            # Wait for live feed items to render
-            await page.wait_for_selector("[class*='live-item'], [class*='article'], .live-content",
-                                         timeout=10_000)
-            await asyncio.sleep(1)  # let JS hydration finish
+            # Wait for SPA container to appear (attached, not necessarily visible)
+            try:
+                await page.wait_for_selector(".livenews-main",
+                                             state="attached",
+                                             timeout=10_000)
+            except Exception:
+                # Fallback: wait for any .live-item to be attached
+                await page.wait_for_selector(".live-item",
+                                             state="attached",
+                                             timeout=5_000)
+            await asyncio.sleep(2)  # let SPA hydrate
 
             headlines = await page.evaluate("""() => {
                 const items = [];
-                // WallstreetCN live items — try multiple selectors
-                const selectors = [
-                    '[class*="live-item"]', '[class*="LiveCard"]',
-                    'article', '[class*="article-item"]'
-                ];
-                let elements = [];
-                for (const sel of selectors) {
-                    elements = document.querySelectorAll(sel);
-                    if (elements.length > 5) break;
-                }
+                const elements = document.querySelectorAll('.live-item');
                 for (const el of elements) {
-                    const title = el.textContent?.trim()?.substring(0, 200) || '';
-                    const link = el.querySelector('a')?.href || '';
-                    const timeEl = el.querySelector('time, [class*="time"]');
-                    const time = timeEl?.textContent?.trim() || '';
-                    if (title.length > 10) {
-                        items.push({title, url: link, time});
+                    const titleEl = el.querySelector('.live-item_title');
+                    const contentEl = el.querySelector('.live-item_html');
+                    const title = (titleEl?.textContent || '').trim();
+                    const content = (contentEl?.textContent || '').trim();
+                    const linkEl = el.querySelector('a[href]');
+                    const url = linkEl?.href || '';
+                    // Use title if available, otherwise first 80 chars of content
+                    const combined = title || content?.substring(0, 80) || '';
+                    if (combined.length > 10) {
+                        items.push({
+                            title: title || content?.substring(0, 200) || '',
+                            snippet: content || title || '',
+                            url: url
+                        });
                     }
                 }
                 return items.slice(0, 15);
@@ -403,11 +445,12 @@ class WebScraper:
                 title = _HTML_RE.sub("", h.get("title", "")).strip()
                 if not title or len(title) < 10:
                     continue
+                snippet = _HTML_RE.sub("", h.get("snippet", title)).strip()
                 items.append(NewsItem(
                     title=title,
                     url=h.get("url", ""),
                     source="华尔街见闻",
-                    content_snippet=title,
+                    content_snippet=snippet[:300],
                 ))
 
             logger.info("WebScraper: WallstreetCN → %d items", len(items))
