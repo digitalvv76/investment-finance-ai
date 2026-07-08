@@ -338,12 +338,15 @@ def content_quality_filter(text: str, tickers_found: str = "",
     # Chinese is supplementary. Chinese-language news must explicitly
     # prove US market relevance (US tickers, US macro, global commodity,
     # extreme market events, or geopolitical crisis) to get full weight.
-    # Otherwise it gets ×0.7 (was ×0.5, too aggressive — killed genuine
-    # financial news about KOSPI crash, US-Iran war, etc.)
+    # Pure Chinese domestic news (no US/global market signal) → heavily
+    # demoted.  Only items with very high raw scores (~0.75+) reach the
+    # 0.3 push threshold.  CCP propaganda is caught separately at ×0.15.
+    # Items about US stocks, global indices, commodities, or extreme
+    # events are exempted by _has_us_market_signal / _has_global_market_stress.
     if (_is_chinese_dominant(text_lower)
             and not _has_us_market_signal(text_lower, has_tickers)
             and not _has_global_market_stress(text_lower)):
-        multipliers.append(0.7)
+        multipliers.append(0.4)
 
     # --- Category 1: CCP propaganda (most severe) ---
     if _is_ccp_propaganda(text_lower):
