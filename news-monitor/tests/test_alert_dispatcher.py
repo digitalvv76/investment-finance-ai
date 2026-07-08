@@ -42,9 +42,9 @@ def test_classify_critical_by_score(dispatcher):
 
 
 def test_classify_important_by_score(dispatcher):
-    level, reason = dispatcher.classify(0.60)
+    level, reason = dispatcher.classify(0.50)
     assert level == AlertLevel.IMPORTANT
-    assert "0.60" in reason
+    assert "0.50" in reason
 
 
 def test_classify_normal_by_score(dispatcher):
@@ -103,7 +103,7 @@ def test_classify_empty_matches_non_watchlist(dispatcher):
 
 
 def test_classify_none_matches(dispatcher):
-    level, reason = dispatcher.classify(0.60, None)
+    level, reason = dispatcher.classify(0.50, None)
     assert level == AlertLevel.IMPORTANT
 
 
@@ -142,7 +142,7 @@ async def test_dispatch_important_no_pushover(dispatcher, sample_item):
         push_calls.append(disable_notification)
 
     result = await dispatcher.dispatch(
-        sample_item, priority_score=0.60,
+        sample_item, priority_score=0.50,
         telegram_push_fn=mock_push,
     )
     assert result.level == AlertLevel.IMPORTANT

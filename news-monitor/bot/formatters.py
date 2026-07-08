@@ -1,5 +1,6 @@
 """Message formatters for Telegram Bot output — all in Chinese."""
 
+import json
 import os
 from typing import Dict, List, Optional
 
@@ -192,16 +193,50 @@ def format_fast_alert(item: dict, analyst_note: str = "",
     # Build message body
     msg = f"{header}\n{title}"
 
-    # Impact score + confidence
+    # Urgency badge (LLM-determined)
+    urgency = item.get('_urgency', '')
+    urgency_badges = {
+        'FLASH': '⚡ FLASH',
+        'ALERT': '🔔 ALERT',
+        'WATCH': '👀 WATCH',
+    }
+    if urgency in urgency_badges:
+        msg += f"\n\n{urgency_badges[urgency]}"
+
+    # Impact score + confidence + greed index
     if impact_score > 0:
-        msg += f"\n\n💥 冲击: {impact_score}分"
+        msg += f"\n💥 冲击: {impact_score}分"
         if confidence > 0:
             msg += f" | 置信度: {confidence}%"
+        greed_index = int(item.get('_greed_index', 50) or 50)
+        msg += f" | 贪婪指数: {greed_index}"
 
-    # Analyst note (from ImpactEvaluator LLM)
-    note = analyst_note or item.get('analyst_note', '')
+    # Flash note (LLM push narrative) — primary, fallback to analyst_note
+    note = item.get('_flash_note', '') or analyst_note or item.get('analyst_note', '')
     if note:
         msg += f"\n\n{note}"
+
+    # Key points
+    key_points_raw = item.get('_key_points', '[]') or '[]'
+    try:
+        key_points = json.loads(key_points_raw) if isinstance(key_points_raw, str) else key_points_raw
+    except (json.JSONDecodeError, TypeError):
+        key_points = []
+    if key_points:
+        msg += "\n\n📌 要点"
+        for pt in key_points:
+            msg += f"\n• {pt}"
+
+    # Risk flags
+    risk_flags_raw = item.get('_risk_flags', '[]') or '[]'
+    try:
+        risk_flags = json.loads(risk_flags_raw) if isinstance(risk_flags_raw, str) else risk_flags_raw
+    except (json.JSONDecodeError, TypeError):
+        risk_flags = []
+    if risk_flags:
+        msg += "\n\n⚠️ 风险"
+        for rf in risk_flags:
+            msg += f"\n• {rf}"
 
     # Related tickers + sector ETFs
     etf_line = _build_ticker_etf_line(tickers, macro_tags, event_category)

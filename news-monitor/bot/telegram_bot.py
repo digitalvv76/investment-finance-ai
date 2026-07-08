@@ -98,7 +98,12 @@ class NewsBot:
     async def push_alert(self, item: dict, analyst_note: str = "",
                           event_category: str = "",
                           impact_score: int = 0, confidence: int = 0,
-                          disable_notification: bool = False):
+                          disable_notification: bool = False,
+                          urgency: str = "",
+                          sentiment: str = "",
+                          greed_index: int = 50,
+                          key_points: str = "",
+                          risk_flags: str = ""):
         """Push a fast lane alert — English original + Chinese translation.
 
         The English message includes analyst note, ticker CN names, and

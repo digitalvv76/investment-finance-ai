@@ -1157,3 +1157,6 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - `news-monitor/tests/__manifest__.json` — 注册 test_web_scraper.py
 
 ---
+---
+
+## 2026-07-08T17:25+08:00 · 会话开始

@@ -54,9 +54,12 @@ class PushoverChannel:
             "id": item.id, "title": item.title, "source": item.source,
             "url": item.url, "tickers_found": item.tickers_found,
             "macro_tags": item.macro_tags,
-            "_analyst_note": decision.analyst_note,
+            "_analyst_note": decision.flash_note or decision.analyst_note,
             "_event_category": decision.event_category,
             "_impact_score": str(decision.impact_score),
+            "_urgency": decision.urgency,
+            "_sentiment": decision.sentiment,
+            "_greed_index": str(decision.greed_index),
             "_confidence": "0",
         }
 
@@ -97,16 +100,27 @@ class TelegramChannel:
             "url": item.url,
             "tickers_found": item.tickers_found,
             "macro_tags": item.macro_tags,
+            "priority_score": item.priority_score,
+            "_urgency": decision.urgency,
+            "_sentiment": decision.sentiment,
+            "_greed_index": decision.greed_index,
+            "_key_points": decision.key_points,
+            "_risk_flags": decision.risk_flags,
         }
 
         try:
             await self._bot.push_alert(
                 alert_dict,
-                analyst_note=decision.analyst_note,
+                analyst_note=decision.flash_note or decision.analyst_note,
                 event_category=decision.event_category,
                 impact_score=decision.impact_score,
                 confidence=80,
                 disable_notification=disable_notification,
+                urgency=decision.urgency,
+                sentiment=decision.sentiment,
+                greed_index=decision.greed_index,
+                key_points=decision.key_points,
+                risk_flags=decision.risk_flags,
             )
             return True
         except Exception:

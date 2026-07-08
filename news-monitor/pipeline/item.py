@@ -19,7 +19,13 @@ class DispatchDecision:
     alert_reason: str = ""
     impact_score: int = 0
     signal_score: float = 0.0
+    urgency: str = "INFO"          # FLASH|ALERT|WATCH|INFO — LLM-determined push priority
+    sentiment: str = ""            # BULLISH|CAUTIOUSLY_BULLISH|NEUTRAL|CAUTIOUSLY_BEARISH|BEARISH
+    greed_index: int = 50          # 0-100 fear/greed context
     analyst_note: str = ""
+    flash_note: str = ""           # 3-5 sentence push narrative
+    key_points: str = ""           # JSON array of bullet takeaways
+    risk_flags: str = ""           # JSON array of risk warnings
     needs_deep: bool = False
     event_category: str = ""
     strategic_matches: list = field(default_factory=list)
