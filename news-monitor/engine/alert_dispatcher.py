@@ -124,18 +124,16 @@ class AlertDispatcher:
         is_macro: bool = False,     # is this a macro/geopolitical/systemic event?
         timeliness: float | None = None,  # 0–1, from signal_score; low = stale/analyst report
     ) -> tuple[AlertLevel, str]:
-        """Determine alert level from priority score + strategic signals + impact prediction.
+        """Determine alert level from LLM urgency or legacy formula.
 
-        When impact_assessment is available (from ImpactEvaluator LLM), it takes
-        precedence over the legacy priority_score-based classification.  The
-        composite formula is: (impact_score × 0.7 + confidence × 0.3) × rel_mult.
-
-        rel_mult ranges 0.3–1.5 based on portfolio/watchlist match (1.0 = neutral).
+        Urgency-first: when ImpactEvaluator LLM provides an urgency field,
+        it takes absolute precedence. The LLM understands event semantics
+        (war > earnings > analyst opinion) and is not fooled by keyword
+        mismatches. Fallback to composite formula if LLM unavailable.
 
         **Watchlist gate**: for individual stock news (has_tickers=True) that is
         NOT macro/geopolitical (is_macro=False), the alert level is capped at
         NORMAL unless rel_mult shows portfolio/watchlist relevance (rel_mult > 0.5).
-        This prevents phone pushes for stocks the user doesn't own or track.
 
         **Timeliness gate**: analyst reports and stale news (timeliness < 0.25)
         are capped at NORMAL — no phone buzz.  They still go to Telegram.
@@ -145,27 +143,45 @@ class AlertDispatcher:
         """
         strategic_matches = strategic_matches or []
 
-        # --- NEW: impact-prediction-first classification ---
+        # --- LLM urgency-first classification ---
         if impact_assessment is not None:
+            urgency = getattr(impact_assessment, 'urgency', '')
             impact = getattr(impact_assessment, 'impact_score', 0)
             conf = getattr(impact_assessment, 'confidence', 0)
-            composite = round((impact * 0.7 + conf * 0.3) * rel_mult, 1)
 
-            if composite >= CRITICAL_PRIORITY * 100:   # 70
-                level, reason = AlertLevel.CRITICAL, (
-                    f"high_impact: composite={composite} "
-                    f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
-                )
-            elif composite >= IMPORTANT_PRIORITY * 100:  # 50
-                level, reason = AlertLevel.IMPORTANT, (
-                    f"moderate_impact: composite={composite} "
-                    f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
-                )
+            if urgency in ('FLASH', 'ALERT', 'WATCH', 'INFO'):
+                # LLM-determined urgency — trust it over formula
+                if urgency == 'FLASH':
+                    level, reason = AlertLevel.CRITICAL, (
+                        f"LLM FLASH: impact={impact} conf={conf}"
+                    )
+                elif urgency == 'ALERT':
+                    level, reason = AlertLevel.IMPORTANT, (
+                        f"LLM ALERT: impact={impact} conf={conf}"
+                    )
+                elif urgency == 'WATCH':
+                    level, reason = AlertLevel.NORMAL, (
+                        f"LLM WATCH: impact={impact} conf={conf}"
+                    )
+                else:  # INFO
+                    level, reason = AlertLevel.NORMAL, (
+                        f"LLM INFO: impact={impact} conf={conf}"
+                    )
             else:
-                level, reason = AlertLevel.NORMAL, (
-                    f"low_impact: composite={composite} "
-                    f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
-                )
+                # Legacy fallback: composite formula
+                composite = round((impact * 0.7 + conf * 0.3) * rel_mult, 1)
+                if composite >= CRITICAL_PRIORITY * 100:
+                    level, reason = AlertLevel.CRITICAL, (
+                        f"composite={composite} (impact={impact} conf={conf})"
+                    )
+                elif composite >= IMPORTANT_PRIORITY * 100:
+                    level, reason = AlertLevel.IMPORTANT, (
+                        f"composite={composite} (impact={impact} conf={conf})"
+                    )
+                else:
+                    level, reason = AlertLevel.NORMAL, (
+                        f"composite={composite} (impact={impact} conf={conf})"
+                    )
             # Fall through to watchlist gate below
         else:
             # --- LEGACY: score + strategic classification (fallback) ---
@@ -256,6 +272,7 @@ class AlertDispatcher:
         strategic_matches: list | None = None,
         telegram_push_fn=None,
         timeliness: float | None = None,
+        impact_assessment=None,
     ) -> DispatchResult:
         """Classify and dispatch through appropriate channels.
 
@@ -268,6 +285,7 @@ class AlertDispatcher:
                               If None, Telegram channel is skipped (testing).
             timeliness: 0–1 from signal_score.  Low timeliness blocks phone push
                         (analyst reports etc.) but Telegram is still delivered.
+            impact_assessment: Optional ImpactAssessment from LLM evaluator.
 
         Returns:
             DispatchResult summarising what was done.
@@ -275,6 +293,7 @@ class AlertDispatcher:
         level, reason = self.classify(
             priority_score, strategic_matches,
             timeliness=timeliness,
+            impact_assessment=impact_assessment,
         )
         title = item.get("title", "")[:80]
         channels: list[str] = []

@@ -284,21 +284,39 @@ class NewsMonitor:
                     level = AlertLevel.NORMAL
                     reason = f"llm_review_not_actionable (was: {reason})"
 
-            # ---- Inject analyst note + impact scores for push formatters ----
+            # ---- Inject LLM assessment fields for push formatters ----
             analyst_note = ""
+            flash_note = ""
             event_category = ""
             impact_score = 0
             confidence = 0
+            urgency = ""
+            sentiment = ""
+            greed_index = 50
+            key_points = "[]"
+            risk_flags = "[]"
             if impact_assessment:
                 analyst_note = getattr(impact_assessment, 'analyst_note', '') or ''
+                flash_note = getattr(impact_assessment, 'flash_note', '') or ''
                 event_category = getattr(impact_assessment, 'event_category', '') or ''
                 impact_score = int(getattr(impact_assessment, 'impact_score', 0) or 0)
                 confidence = int(getattr(impact_assessment, 'confidence', 0) or 0)
+                urgency = getattr(impact_assessment, 'urgency', '') or ''
+                sentiment = getattr(impact_assessment, 'sentiment', '') or ''
+                greed_index = int(getattr(impact_assessment, 'greed_index', 50) or 50)
+                key_points = getattr(impact_assessment, 'key_points', '[]') or '[]'
+                risk_flags = getattr(impact_assessment, 'risk_flags', '[]') or '[]'
                 updated['analyst_note'] = analyst_note
                 updated['_analyst_note'] = analyst_note  # for alert_dispatcher
+                updated['_flash_note'] = flash_note
                 updated['_event_category'] = event_category
                 updated['_impact_score'] = impact_score
                 updated['_confidence'] = confidence
+                updated['_urgency'] = urgency
+                updated['_sentiment'] = sentiment
+                updated['_greed_index'] = greed_index
+                updated['_key_points'] = key_points
+                updated['_risk_flags'] = risk_flags
 
             # ---- Alert dispatching ----
             if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT):
@@ -309,6 +327,7 @@ class NewsMonitor:
                     strategic_matches=strategic_matches,
                     telegram_push_fn=tg_push,
                     timeliness=sig.get("timeliness"),
+                    impact_assessment=impact_assessment,
                 )
                 logger.info(
                     "Alert dispatched: level=%s channels=%s reason=%s",

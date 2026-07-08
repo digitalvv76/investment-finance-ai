@@ -88,6 +88,9 @@ OUTPUT FORMAT (strict JSON, no markdown wrapping):
   "event_category": "<monetary|geopolitical|macro_data|corporate|regulatory|other>",
   "surprise_level": "<expected|minor_surprise|major_surprise|shock>",
   "breadth": "<single_stock|sector|broad_market|cross_asset>",
+  "urgency": "<FLASH|ALERT|WATCH|INFO>",
+  "sentiment": "<BULLISH|CAUTIOUSLY_BULLISH|NEUTRAL|CAUTIOUSLY_BEARISH|BEARISH>",
+  "greed_index": <0-100 integer, current market sentiment: 0=extreme fear, 100=extreme greed>,
   "reasoning_chain": ["Step 1: ...", "Step 2: ...", "Step 3: ...", "Step 4: ...", "Step 5: ..."],
   "similar_historical_events": ["Event (approx date): brief impact description"],
   "expected_sectors_affected": ["Technology", "Financials"],
@@ -98,5 +101,26 @@ OUTPUT FORMAT (strict JSON, no markdown wrapping):
     "commodities": "<direction> <magnitude>"
   },
   "calibration_note": "Based on past assessments, this evaluator tends to [over/under]estimate [type] events by ~[X] points",
-  "analyst_note": "以买方分析师口吻，用2-4句中文写出对此事件的判断。叙事化行文，包含：发生了什么 → 为什么重要 → 投资含义。使用'我们认为'、'建议关注'、'值得留意'等分析师用语。不要罗列数据，要写出判断。"
+  "flash_note": "以买方分析师口吻，用3-5句中文写出推送正文。叙事化行文，比 analyst_note 更精炼有力。包含：发生了什么 → 为什么重要 → 投资含义。使用'我们认为'、'建议关注'、'值得留意'等分析师用语。",
+  "key_points": ["要点1：一句话核心事实", "要点2：市场传导逻辑", "要点3：受影响的资产/板块"],
+  "risk_flags": ["风险提示1", "风险提示2"]
 }
+
+URGENCY CLASSIFICATION GUIDE:
+  FLASH  — Extreme event that will move multiple asset classes immediately.
+            War declaration, military strike, circuit breaker triggered,
+            central bank emergency action, sovereign default, major assassination.
+            This WILL be pushed to the user's phone with an alarm sound.
+  ALERT  — High-impact event that matters to the user's portfolio/watchlist.
+            Earnings surprise >10%, M&A >$10B, FDA approval, major macro data
+            surprise (CPI/NFP >2σ), sector-wide regulatory change, significant
+            geopolitical escalation with clear market impact.
+            This will be pushed to Telegram immediately.
+  WATCH  — Notable event worth monitoring. Moderate earnings beat, analyst
+           upgrade/downgrade of a major stock, minor macro data deviation,
+           routine central bank speech with no new guidance.
+           This goes to a quiet Telegram channel.
+  INFO   — Low impact or purely informational. Routine market commentary,
+           single-stock moves <3%, predicted/expected data releases,
+           analyst reports with no new catalyst.
+           This is archived and NOT pushed.
