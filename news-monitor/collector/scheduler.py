@@ -218,29 +218,27 @@ class NewsScheduler:
             await self._insert_and_notify(items)
 
     async def _tick_15min(self):
-        """15-minute tick: Twitter (Chromium-heavy, moved from 5-min to reduce load).
+        """15-minute tick: currently no-op (Twitter disabled for resource conservation).
 
-        Browser is launched on-demand and closed after fetch to free ~500MB memory
-        between ticks.  Trade-off: ~3s startup per tick vs. lower baseline memory.
+        To re-enable Twitter: uncomment the Twitter fetch + browser close below,
+        and uncomment twitter_fetcher.startup() in _run_loop().
         """
-        twitter_task = self._safe_fetch(
-            self.twitter_fetcher.fetch_all(), "twitter"
-        )
-
-        results = await asyncio.gather(twitter_task)
-        items = []
-        for result in results:
-            if result:
-                items.extend(result)
-
-        if items:
-            await self._insert_and_notify(items)
-
-        # Close Twitter browser after fetch to free memory
-        try:
-            await self.twitter_fetcher.close()
-        except Exception as e:
-            logger.warning("Twitter browser close failed: %s", e)
+        # Twitter disabled — too heavy for 2C4G ECS (3 Chromium instances = 180% CPU)
+        # twitter_task = self._safe_fetch(
+        #     self.twitter_fetcher.fetch_all(), "twitter"
+        # )
+        # results = await asyncio.gather(twitter_task)
+        # items = []
+        # for result in results:
+        #     if result:
+        #         items.extend(result)
+        # if items:
+        #     await self._insert_and_notify(items)
+        # try:
+        #     await self.twitter_fetcher.close()
+        # except Exception as e:
+        #     logger.warning("Twitter browser close failed: %s", e)
+        pass
 
     async def _tick_30min(self):
         """30-minute tick: low-priority background tasks.
@@ -288,11 +286,13 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"Playwright startup failed: {e}")
 
-        # Startup Twitter browser (Playwright + auth cookie)
-        try:
-            await self.twitter_fetcher.startup()
-        except Exception as e:
-            logger.warning(f"Twitter fetcher startup failed (non-fatal): {e}")
+        # Startup Twitter browser (DISABLED — too heavy for 2C4G ECS)
+        # To re-enable: uncomment below + restore _tick_15min Twitter fetch
+        # try:
+        #     await self.twitter_fetcher.startup()
+        # except Exception as e:
+        #     logger.warning(f"Twitter fetcher startup failed (non-fatal): {e}")
+        logger.info("Twitter: disabled (resource conservation)")
 
         while self._running:
             now = time.monotonic()

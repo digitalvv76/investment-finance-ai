@@ -216,21 +216,18 @@ async def test_tick_5min_fetches_finnhub_only(scheduler_setup):
 
 
 @pytest.mark.asyncio
-async def test_tick_15min_fetches_twitter(scheduler_setup):
-    """15-min tick now runs Twitter (moved from 5-min to reduce CPU/memory load)."""
+async def test_tick_15min_is_noop(scheduler_setup):
+    """15-min tick is a no-op — Twitter disabled for resource conservation."""
     s = scheduler_setup["scheduler"]
 
-    from storage.models import NewsItem
-    twitter_items = [NewsItem(title="Tweet", url="https://n.com/3", source="Twitter")]
     s.twitter_fetcher = MagicMock()
-    s.twitter_fetcher.fetch_all = AsyncMock(return_value=twitter_items)
+    s.twitter_fetcher.fetch_all = AsyncMock()
     s.twitter_fetcher.close = AsyncMock()
 
     await s._tick_15min()
 
-    s.twitter_fetcher.fetch_all.assert_called_once()
-    s.twitter_fetcher.close.assert_called_once()  # browser closed after fetch
-    scheduler_setup["db"].insert_news.assert_called()
+    s.twitter_fetcher.fetch_all.assert_not_called()
+    scheduler_setup["db"].insert_news.assert_not_called()
 
 
 @pytest.mark.asyncio
