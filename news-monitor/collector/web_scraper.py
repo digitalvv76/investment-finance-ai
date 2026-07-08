@@ -75,7 +75,8 @@ class WebScraper:
             self._scrape_sina(),
             self._scrape_wallstreetcn(),
             self._scrape_cnbc(),
-            self._scrape_marketwatch(),
+            # MarketWatch returns 401 (anti-bot) — RSS MarketWatch covers it (10 items/120s)
+            # self._scrape_marketwatch(),
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
