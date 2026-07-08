@@ -59,6 +59,7 @@ fi
 info "3/5  Syncing code → ECS"
 FILES=(
     "news-monitor/engine/alert_dispatcher.py"
+    "news-monitor/engine/content_filter.py"
     "news-monitor/engine/deep_lane.py"
     "news-monitor/engine/fast_lane.py"
     "news-monitor/engine/priority.py"

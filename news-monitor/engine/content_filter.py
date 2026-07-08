@@ -336,10 +336,14 @@ def content_quality_filter(text: str, tickers_found: str = "",
 
     # --- Category 0: Chinese-language default demotion ---
     # Chinese is supplementary. Chinese-language news must explicitly
-    # prove US market relevance (US tickers, US macro, global commodity)
-    # to get full weight.  Otherwise it gets ×0.5.
-    if _is_chinese_dominant(text_lower) and not _has_us_market_signal(text_lower, has_tickers):
-        multipliers.append(0.5)
+    # prove US market relevance (US tickers, US macro, global commodity,
+    # extreme market events, or geopolitical crisis) to get full weight.
+    # Otherwise it gets ×0.7 (was ×0.5, too aggressive — killed genuine
+    # financial news about KOSPI crash, US-Iran war, etc.)
+    if (_is_chinese_dominant(text_lower)
+            and not _has_us_market_signal(text_lower, has_tickers)
+            and not _has_global_market_stress(text_lower)):
+        multipliers.append(0.7)
 
     # --- Category 1: CCP propaganda (most severe) ---
     if _is_ccp_propaganda(text_lower):
@@ -574,6 +578,8 @@ def _has_us_market_signal(text_lower: str, has_tickers: bool) -> bool:
         "white house", "白宫", "congress", "国会", "us government",
         "chips act", "芯片法案", "inflation reduction act",
         "executive order", "行政命令",
+        # USA itself — the most basic US market signal (was missing!)
+        "美国", "usa", "united states", "u.s.",
         # Global systemic with US linkage
         "sanctions", "制裁", "tariff", "关税", "trade war", "贸易战",
         "oil supply", "原油供应", "crude", "opec",
@@ -581,8 +587,70 @@ def _has_us_market_signal(text_lower: str, has_tickers: bool) -> bool:
         # US market Chinese keywords
         "美股", "美联储", "纳斯达克", "标普", "道琼斯",
         "华尔街", "硅谷",
+        # Major global indices (systemic to US markets)
+        "kospi", "韩国综指", "韩国综合指数", "韩国股市",
+        "nikkei", "日经", "日经指数", "日本股市",
+        "hsi", "恒生", "恒生指数", "港股",
+        "dax", "ftse", "欧洲股市", "欧股",
+        # Extreme market events — always globally relevant
+        "熔断", "circuit breaker", "trading halt",
+        # Geopolitical crisis — directly impacts US markets
+        "开战", "宣战", "军事打击", "军事行动", "空袭",
+        "declares war", "military strike", "air strike",
     ]
     return any(kw in text_lower for kw in us_signals)
+
+
+def _has_global_market_stress(text_lower: str) -> bool:
+    """Detect extreme global market events that are ALWAYS US-market-relevant.
+
+    This bypasses the Chinese-language demotion for events like:
+      - Circuit breaker / trading halt on a major index
+      - War / military conflict declaration
+      - Extreme % moves (>3%) on global indices or commodities
+
+    These events impact US markets regardless of the reporting language.
+    """
+    # Circuit breaker / trading halt (always systemic)
+    if any(kw in text_lower for kw in [
+        "熔断", "circuit breaker", "trading halt", "暂停交易",
+        "触发熔断", "跌停熔断",
+    ]):
+        return True
+
+    # War / military conflict declaration
+    if any(kw in text_lower for kw in [
+        "开战", "宣战", "军事打击", "军事行动",
+        "declares war", "declaration of war",
+        "military strike", "air strike", "invasion",
+    ]):
+        return True
+
+    # Extreme % moves on major indices (KOSPI, Nikkei, HSI, etc.)
+    # Pattern: index name near a 4%+ move or "crash/plunge/surge" language
+    _major_index_patterns = [
+        r'(kospi|kosdaq|nikkei|hsi|hang\s*seng|dax|ftse|euro\s*stoxx)',
+        r'(韩国|日经|恒生|欧洲|德国|法国|英国).{0,15}(股市|指数|综指)',
+    ]
+    _extreme_move_patterns = [
+        r'(暴跌|暴涨|崩盘|plunge|crash|surge|soar|tumble|collapse)',
+        r'[4-9]\d*\s*%',      # 4% or more
+        r'\d{2,}\s*%',         # 10% or more (double-digit)
+    ]
+    has_index = any(re.search(p, text_lower) for p in _major_index_patterns)
+    has_extreme = any(re.search(p, text_lower) for p in _extreme_move_patterns)
+    if has_index and has_extreme:
+        return True
+
+    # Extreme crude oil moves (>5%) — impacts all global markets
+    _oil_crash = [
+        r'(原油|油价|crude|oil|brent|wti).{0,20}',
+        r'.{0,20}(暴跌|暴涨|崩盘|飙升|plunge|crash|surge|spike)',
+    ]
+    if all(re.search(p, text_lower) for p in _oil_crash):
+        return True
+
+    return False
 
 
 def _has_multi_asset(text_lower: str) -> bool:
