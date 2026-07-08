@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-07-08T14:45+08:00 · V1 修改窗口关闭
+
+### ECS 稳定性
+- ✅ ECS 2C4G → 4C8G 升配
+- ✅ 心跳 60s → 120s，CPU 95% → 2%
+- ✅ Twitter 采集关闭 (Chromium 太重，代码注释保留)
+- ✅ journald 50MB + Docker 日志轮转
+
+### 推送质量 (v1-stable 4 commits)
+- 时效性门禁: alert_dispatcher.py timeliness < 0.25 拦截手机 Pushover (`b6bfeba`)
+- LLM 评分: impact_v1.txt 分析师观点/推测 ≤ 25，标题vs内容检测 (`b6bfeba`)
+- main.py 传 timeliness 到 classify/dispatch (`b6bfeba`)
+- Twitter 频率: 5min → 15min → 关闭 (`38d268e`, `9636fbf`)
+- 心跳 120s (`41fe70d`)
+
+### 监控
+- IO Monitor 部署 (systemd 自启, Telegram 预警)
+- UptimeRobot App 配置 (建议间隔 1min)
+
+### 踩坑
+- ECS 宕机根因: kcompactd 内存碎片整理卡死 → 内存不足，非 IOPS
+- 轻量服务器不能单独升云盘，只能整机升套餐
+- UptimeRobot Email 通知容易被忽略 → App 推送 + 1min 间隔
+
+---
+
 ## 2026-07-03 · 会话 — P0 数据源扩展：Twitter + 中国金融新闻
 
 ### P0 任务结果总览
@@ -1034,3 +1060,38 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 
 ---
 
+
+---
+
+## 2026-07-08T00:23+08:00 · 会话开始
+
+---
+
+## 2026-07-08T13:50+08:00 · 应急 — ECS IOPS 过载导致服务中断
+
+### 问题
+- 🔴 凌晨 05:45 阿里云告警：云盘读写 IO 延迟过长/IOPS 上限
+- SSH 超时、Vercel 502、Docker 容器日志为空
+- 根因：采集任务瞬时集中爆发（爬虫+模型+浏览器+Docker 存储层叠加）冲破 ESSD 云盘 IOPS 上限
+- 轻量应用服务器 2C4G / ESSD 50G，不能单独升云盘，只能整机升套餐
+
+### 恢复
+- ✅ 轻量服务器控制台 → 强制重启 → 服务 2-3 分钟恢复
+- ✅ Vercel `/api/health` 恢复 200
+
+### 优化
+- ✅ systemd journald: 168MB → 40MB，上限 50MB
+- ✅ Docker 日志轮转：10MB×3，daemon.json 配置
+- ✅ news.db 已是 WAL 模式（无需改动），chroma.sqlite3 仅 2.5MB 非凶��
+
+### 监控加固
+- ✅ ECS IO Monitor 部署：每 60s 检查 IOPS，超标 Telegram 预警（systemd 开机自启）
+- ✅ UptimeRobot App 推送（之前只用邮件，没留意）
+- ✅ 阿里云一键告警已配置
+- 📋 四道防线：IO Monitor → UptimeRobot App → 阿里云一键告警 → 阿里云短信
+
+### 踩坑记录
+- `.claude/TROUBLESHOOTING.md` + `.claude/memory/ecs-disk-iops.md` 已记录
+- SESSION.md + MEMORY.md 已更新
+
+## 2026-07-08T05:45+08:00 · 会话开始

@@ -24,6 +24,16 @@ systemctl enable sshd && systemctl restart sshd
 **修复**: 关闭 Web Dashboard (WEB_PORT=0)、清空 Twitter/Playwright 源、停 Nginx/snapd。结果：负载 25.9→0.07，内存 1293MB→465MB。
 **长期**: 考虑升级到 4GB 后恢复 Twitter 采集。
 
+### ECS 云盘 IOPS 过载导致服务不可用 (2026-07-08)
+**症状**: 阿里云告警 "云盘读写IO延迟过长或IOPS上限"。SSH 超时，Vercel 502，容器日志为空。
+**根因**: 采集任务瞬时集中爆发（爬虫+模型+浏览器+Docker存储层叠加），IOPS 冲破云盘上限。
+**修复**:
+1. 轻量应用服务器控制台 → 强制重启实例
+2. journald 限 50MB: `journalctl --vacuum-size=50M` + `/etc/systemd/journald.conf` 配 `SystemMaxUse=50M`
+3. Docker 日志轮转: `/etc/docker/daemon.json` 配 `max-size:10m max-file:3`
+**预防**: 观察是否复发，若频繁则升级套餐（轻量服务器不能单独升云盘）。
+**验证**: `ssh root@47.76.50.77 "docker ps"` + `curl https://class1-cyan.vercel.app/api/health`
+
 ### ECS Docker 构建时网络问题
 **症状**: `docker compose build` 卡在下载/安装阶段。
 **根因**: 阿里云 ECS 访问 GitHub/Docker Hub 可能受限。
