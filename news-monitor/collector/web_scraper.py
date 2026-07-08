@@ -119,8 +119,8 @@ class WebScraper:
                     const href = a.href || '';
                     // Sina news links look like: /roll/..., /detail-..., or contain sina.com.cn
                     if (title.length > 15 && !seen.has(href) &&
-                        (href.includes('sina.com.cn') || href.includes('/roll/') ||
-                         href.includes('/detail-'))) {
+                        (href.includes('sina.cn') || href.includes('/roll/') ||
+                         href.includes('/detail-') || href.includes('/pc/7x24/'))) {
                         seen.add(href);
                         items.push({title: title.substring(0, 200), url: href});
                     }
