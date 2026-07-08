@@ -298,7 +298,7 @@ class NewsScheduler:
             now = time.monotonic()
 
             try:
-                if now - last_1min >= self._get_frequency(60):
+                if now - last_1min >= self._get_frequency(120):
                     await self._heartbeat_tick()
                     last_1min = now
 
