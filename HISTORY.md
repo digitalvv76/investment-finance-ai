@@ -1080,3 +1080,15 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 ---
 
 ## 2026-07-07T19:41+08:00 · 会话开始
+
+---
+
+## 2026-07-08T21:26+08:00 · 会话结束 — 持续演进事件推送设计
+
+- 📊 生产推送效果观察报告 (ECS SSH 只读快照): 近24h fast_pushed 79 / urgency 全 INFO+WATCH, **零手机推送(Pushover 0)**; 全类别 calibration bias 正偏 (macro_data +56, geopolitical +46); 回填预测普遍是真实市场 2-5x; 递送管道 0 失败 healthy
+- 🔍 定位问题: 高影响地缘新闻 (霍尔木兹 I95 / 伊朗 I85) 被 LLM 判 INFO 静音; 根因=逐条打分, 识别不到 24h 滚动大事件的累积升级 (触发案例 wallstreetcn 3776459 美伊冲突)
+- ⚠️ 关键发现: 事件聚类 (NewsCluster/EventLine) 是死代码, 生产未接线, find_or_create_event 第二条印证不建簇 → 需先激活
+- 📐 设计 spec (`06b0755`): 事件级三段式升级推送 — 多源+高影响→响铃, 市场确认→警笛, 反转/静默6h→收尾; 每事件≤3推送(手机≤2)
+- 📋 实施计划 (`f4f6f02`): 11 个 TDD 任务, 方案A (周期扫描 EventEscalator 状态机 挂 _tick_5min, 复用 AlertDispatcher + impact_collector 取价 + 加油价)
+- 🎛️ 用户定阈值: 市场确认 |ΔSPX|≥0.2% / ΔVIX≥+5% / |Δ油|≥0.5% + 时间对齐 + 方向闸
+- ⏸️ 未开始编码 — 计划已存盘, 下次从 Task 1 起; 文档在 docs/superpowers/{specs,plans}/2026-07-08-*
