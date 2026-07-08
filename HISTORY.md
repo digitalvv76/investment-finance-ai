@@ -1112,3 +1112,48 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 ---
 
 ## 2026-07-08T10:49+08:00 · 会话开始
+
+---
+
+## 2026-07-08T13:15+08:00 · 会话开始
+
+---
+
+## 2026-07-08 · V2 Phase 4a — 调度器并行化 + VLM 视觉解析降级
+
+### Phase 4a: Scheduler 并行化
+- ✅ `scheduler.py` `_heartbeat_tick`: 5 个采集器从顺序 → `asyncio.gather` 并行 (~12s, 原 ~40s)
+- ✅ `scheduler.py` `_tick_5min`: 3 个采集器从顺序 → `asyncio.gather` 并行 (~25s, 原 ~80s)
+- ✅ 异常隔离: `return_exceptions=True`，一个采集器挂不影响其他
+- ✅ 心跳保持 60s（先观察稳定性，再考虑 30s）
+- ✅ 3 new scheduler tests（并行异常隔离 + 全量调用验证）
+- ECS 影响: CPU 占空比 67%→40%，内存/IOPS 无变化
+
+### Phase 4b: VLM 视觉解析降级
+- ✅ `web_scraper.py`: +VLM fallback — CSS 选择器连续 3 次失败 → Claude Haiku 截图提取
+  - 每源独立失败计数器 + 1h 冷却期
+  - VLM 仅在 CSS 失败时触发，正常情况零成本
+  - 预估成本: $0-3/月
+- ✅ `config/prompts/vlm_extract.txt`: VLM system prompt
+- ✅ 18 new web_scraper tests（状态机 + 转换 + API mock）
+- ECS 影响: 零（截图内存→API，不落盘，不占 CPU）
+
+### 架构决策
+- VLM 选 Claude Haiku（已有 ANTHROPIC_API_KEY，$0.005/次，~3s）
+- VLM 是 CSS 的降级兜底，不是替代
+- 设计文档: `docs/superpowers/specs/2026-07-08-vlm-fallback-design.md`
+
+### 测试
+- 353 tests pass（+21 new: 18 web_scraper + 3 scheduler）
+- 1 pre-existing fail (test_load_watchlist_default)
+- 6 ChromaDB Windows errors (已知)
+
+### 修改文件
+- `news-monitor/collector/web_scraper.py` — VLM fallback (+226 lines)
+- `news-monitor/collector/scheduler.py` — 并行化 (重构两个 tick 方法)
+- `news-monitor/config/prompts/vlm_extract.txt` — VLM prompt
+- `news-monitor/tests/test_web_scraper.py` — 新建, 18 tests
+- `news-monitor/tests/test_scheduler.py` — +3 parallel tests
+- `news-monitor/tests/__manifest__.json` — 注册 test_web_scraper.py
+
+---

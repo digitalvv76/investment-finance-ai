@@ -131,6 +131,11 @@
       "related_scripts": [],
       "also_tests": []
     },
+    "tests/test_web_scraper.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
     "tests/test_vector_store.py": {
       "tests": [],
       "related_scripts": [],

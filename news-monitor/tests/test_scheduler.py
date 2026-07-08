@@ -285,3 +285,79 @@ async def test_callback_error_isolation(scheduler_setup):
     await s._notify_callbacks([item])
 
     good.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Phase 4a: parallelized tick — exception isolation
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_heartbeat_parallel_exception_isolation(scheduler_setup):
+    """If one collector raises, others still produce results (gather isolation)."""
+    s = scheduler_setup["scheduler"]
+    callback = AsyncMock()
+    s.on_news_batch(callback)
+
+    from storage.models import NewsItem
+
+    # Chinese fetcher fails, RSS succeeds
+    s.chinese_fetcher.fetch_all = AsyncMock(side_effect=RuntimeError("chinese boom"))
+    rss_items = [NewsItem(title="RSS OK", url="https://x.com/1", source="CNBC")]
+    s.rss_fetcher.fetch_all = AsyncMock(return_value=rss_items)
+    s.playwright_fetcher.fetch_source = AsyncMock(return_value=[])
+    s.api_fetcher.check_all = AsyncMock(return_value=[])
+    s.web_scraper.fetch_all = AsyncMock(return_value=[])
+
+    await s._heartbeat_tick()
+
+    # Callback should still receive RSS items despite Chinese failure
+    callback.assert_called_once()
+    called_with = callback.call_args[0][0]
+    titles = [item.title for item in called_with]
+    assert "RSS OK" in titles
+
+
+@pytest.mark.asyncio
+async def test_tick_5min_parallel_exception_isolation(scheduler_setup):
+    """If one 5-min collector fails, others still produce results."""
+    s = scheduler_setup["scheduler"]
+    callback = AsyncMock()
+    s.on_news_batch(callback)
+
+    from storage.models import NewsItem
+
+    # Twitter fails, Finnhub succeeds
+    s.playwright_fetcher.fetch_source = AsyncMock(return_value=[])
+    s.twitter_fetcher.fetch_all = AsyncMock(side_effect=RuntimeError("twitter boom"))
+    finnhub_items = [NewsItem(title="Finn OK", url="https://x.com/2", source="Finnhub")]
+    s.finnhub_fetcher.fetch_all = AsyncMock(return_value=finnhub_items)
+
+    await s._tick_5min()
+
+    callback.assert_called_once()
+    called_with = callback.call_args[0][0]
+    titles = [item.title for item in called_with]
+    assert "Finn OK" in titles
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_parallel_all_collectors_called(scheduler_setup):
+    """All 5 collectors are invoked (not just the first one)."""
+    s = scheduler_setup["scheduler"]
+    callback = AsyncMock()
+    s.on_news_batch(callback)
+
+    # Mock all fetchers to return empty lists
+    s.chinese_fetcher.fetch_all = AsyncMock(return_value=[])
+    s.rss_fetcher.fetch_all = AsyncMock(return_value=[])
+    s.playwright_fetcher.fetch_source = AsyncMock(return_value=[])
+    s.api_fetcher.check_all = AsyncMock(return_value=[])
+    s.web_scraper.fetch_all = AsyncMock(return_value=[])
+
+    await s._heartbeat_tick()
+
+    s.chinese_fetcher.fetch_all.assert_called_once()
+    s.rss_fetcher.fetch_all.assert_called_once()
+    s.playwright_fetcher.fetch_source.assert_called()
+    s.api_fetcher.check_all.assert_called_once()
+    s.web_scraper.fetch_all.assert_called_once()
