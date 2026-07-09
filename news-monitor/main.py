@@ -105,6 +105,7 @@ class NewsMonitor:
         db_path = settings["storage"]["sqlite_path"]
         self.db = Database(db_path)
         self.db.init_db()
+        self.db.migrate_event_escalation()
 
         # ---- vector store (semantic dedup + similarity) -------------
         self.vector_store = VectorStore(
@@ -156,6 +157,24 @@ class NewsMonitor:
             self.bot = None
         else:
             self.bot = NewsBot(token, self.db, self.config, self.deep_lane, self.learner, self.curator, self.trainer)
+
+        # ---- event clustering + escalation (NEW V1) -------------------
+        from engine.cluster import NewsCluster
+        from engine.market_snapshot import MarketSnapshot
+        from engine.event_escalator import EventEscalator
+
+        self.cluster = NewsCluster(self.db, vector_store=self.vector_store)
+        self.market_snapshot = MarketSnapshot()
+        self.escalator = EventEscalator(
+            self.db, self.alert_dispatcher, self.market_snapshot, self.config,
+            telegram_push_provider=lambda: (
+                self.alert_dispatcher.wrap_telegram_push(self.bot) if self.bot else None
+            ),
+        )
+
+        # Inject into scheduler (created earlier)
+        self.scheduler.cluster = self.cluster
+        self.scheduler.escalator = self.escalator
 
         # ---- web dashboard (optional) --------------------------------
         web_port = int(os.environ.get("WEB_PORT", "0"))

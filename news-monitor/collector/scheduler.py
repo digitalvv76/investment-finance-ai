@@ -57,6 +57,10 @@ class NewsScheduler:
             watchlist=self._load_watchlist()
         )
 
+        # Setter-injected by main.py after all dependencies are ready
+        self.cluster = None
+        self.escalator = None
+
     def _load_watchlist(self) -> list:
         """Load watchlist from .claude/memory/watchlist-state.md.
 
@@ -110,6 +114,11 @@ class NewsScheduler:
             # Index into vector store AFTER insert (needs item.id)
             if self.dedup:
                 self.dedup.index_item(item)
+            if self.cluster:
+                try:
+                    self.cluster.find_or_create_event(item)
+                except Exception as e:
+                    logger.debug("cluster failed for %s: %s", item.id, e)
 
         await self._notify_callbacks(items)
 
@@ -220,6 +229,12 @@ class NewsScheduler:
 
         if items:
             await self._insert_and_notify(items)
+
+        if self.escalator:
+            try:
+                await self.escalator.sweep()
+            except Exception as e:
+                logger.error("escalator sweep failed: %s", e)
 
     async def _tick_15min(self):
         """15-minute tick: currently no-op (Twitter disabled for resource conservation).

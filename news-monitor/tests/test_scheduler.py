@@ -303,3 +303,26 @@ async def test_callback_error_isolation(scheduler_setup):
     await s._notify_callbacks([item])
 
     good.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# V1: clustering + escalation wiring
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_tick_5min_runs_escalator_sweep(scheduler_setup):
+    s = scheduler_setup["scheduler"]
+    s.finnhub_fetcher = MagicMock()
+    s.finnhub_fetcher.fetch_all = AsyncMock(return_value=[])
+    s.escalator = AsyncMock()
+    await s._tick_5min()
+    s.escalator.sweep.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_insert_and_notify_clusters(scheduler_setup):
+    s = scheduler_setup["scheduler"]
+    s.cluster = MagicMock()
+    from storage.models import NewsItem
+    await s._insert_and_notify([NewsItem(id=5, title="US strikes Iran")])
+    s.cluster.find_or_create_event.assert_called()

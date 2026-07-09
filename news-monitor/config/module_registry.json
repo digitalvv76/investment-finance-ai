@@ -98,6 +98,10 @@
       "tests": ["tests/test_entity_extractor.py"],
       "related_scripts": ["scripts/acceptance_test.py"]
     },
+    "engine/event_escalator.py": {
+      "tests": ["tests/test_event_escalator.py"],
+      "related_scripts": []
+    },
     "engine/event_matcher.py": {
       "tests": ["tests/test_event_matcher.py"],
       "related_scripts": []
@@ -116,6 +120,10 @@
     },
     "engine/impact_learner.py": {
       "tests": [],
+      "related_scripts": []
+    },
+    "engine/market_snapshot.py": {
+      "tests": ["tests/test_market_snapshot.py"],
       "related_scripts": []
     },
     "engine/learner.py": {
