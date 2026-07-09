@@ -42,10 +42,10 @@ from engine.trainer import Trainer
 from engine.alert_dispatcher import AlertDispatcher, AlertLevel
 from engine.strategic_detector import StrategicDetector
 from engine.impact_evaluator import ImpactEvaluator
-from engine.event_driven_evaluator import EventDrivenEvaluator
+from engine.event_driven_evaluator import EventDrivenEvaluator, watchlist_safety_net
 from engine.impact_learner import ImpactLearner
 from engine.event_matcher import EventMatcher
-from engine.relevance import signal_score, get_portfolio_summary
+from engine.relevance import signal_score, get_portfolio_summary, get_tracked_tickers
 from engine.actionability_review import ActionabilityReviewer
 from bot.telegram_bot import NewsBot
 
@@ -359,7 +359,17 @@ class NewsMonitor:
                 and event_assessment.is_event
                 and not event_assessment.should_push
             )
-            if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT) or weak_catalyst:
+            # Watchlist/portfolio safety net: non-event news, but the sentinel
+            # flagged a substantive action (notable) on a name the user tracks.
+            # Silent Telegram only — phone stays strict (never fires here).
+            wl_safety_net = watchlist_safety_net(event_assessment, get_tracked_tickers())
+            if wl_safety_net:
+                reason = ("watchlist_safety_net: notable action on "
+                          + ",".join(event_assessment.ticker_hint))
+                logger.info("Watchlist safety net → silent TG: %s — %s",
+                            ",".join(event_assessment.ticker_hint),
+                            (item.title or "")[:60])
+            if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT) or weak_catalyst or wl_safety_net:
                 tg_push = self.alert_dispatcher.wrap_telegram_push(self.bot)
                 result = await self.alert_dispatcher.dispatch(
                     item=updated,

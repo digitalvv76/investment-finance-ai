@@ -81,6 +81,23 @@ class TestEventAssessmentParsing:
         assert ea.sector_tags == []
         assert ea.should_push is False
 
+    def test_parses_notable_flag_on_filtered(self):
+        # is_event=false but the LLM flags a substantive action on a US name:
+        # ticker_hint + notable must survive the filter path.
+        raw = ('{"is_event": false, "reason": "UBS 大幅上调目标价", '
+               '"ticker_hint": ["TSLA"], "notable": true}')
+        ea = EventAssessment.from_json(raw)
+        assert ea.is_event is False
+        assert ea.should_push is False
+        assert ea.notable is True
+        assert ea.ticker_hint == ["TSLA"]
+
+    def test_notable_defaults_false(self):
+        raw = '{"is_event": false, "reason": "no catalyst triggered"}'
+        ea = EventAssessment.from_json(raw)
+        assert ea.notable is False
+        assert ea.ticker_hint == []
+
 
 class TestDecisionMapping:
     """Alert level mapping from intensity."""

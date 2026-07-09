@@ -284,6 +284,15 @@ def _get_watchlist() -> set[str]:
     return _watchlist
 
 
+def get_tracked_tickers() -> set[str]:
+    """Union of portfolio + watchlist tickers, uppercased.
+
+    Used by the watchlist safety net to decide whether a non-event news item
+    touches something the user actually follows.
+    """
+    return {t.upper() for t in (_get_portfolio() | _get_watchlist())}
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Dimension 1 — Timeliness (时效性)      0.0–1.0
 # ═══════════════════════════════════════════════════════════════════════════

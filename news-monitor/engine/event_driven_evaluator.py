@@ -46,6 +46,7 @@ class EventAssessment:
     headline_signal: str = ""                                # Chinese trading logic
     ticker_hint: list[str] = field(default_factory=list)
     risk_snapshot: str = ""                                  # Chinese risk point
+    notable: bool = False                                    # non-event but substantive action (drives watchlist safety net)
     filter_reason: str = ""                                  # why filtered (non-event)
     raw_json: str = ""                                       # raw LLM response for audit
 
@@ -82,6 +83,7 @@ class EventAssessment:
             result.headline_signal = str(data.get("headline_signal", "")).strip()
             result.ticker_hint = _parse_str_list(data.get("ticker_hint", []))
             result.risk_snapshot = str(data.get("risk_snapshot", "")).strip()
+            result.notable = bool(data.get("notable", False))
             result.filter_reason = str(data.get("filter_reason", data.get("reason", ""))).strip()
         except (json.JSONDecodeError, TypeError, ValueError) as e:
             logger.warning("EventDrivenEval: JSON parse failed — %s", e)
@@ -267,6 +269,20 @@ class EventDrivenEvaluator:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def watchlist_safety_net(ea: "EventAssessment | None", tracked: set[str]) -> bool:
+    """Should a non-event news item still get a silent Telegram ping?
+
+    True only when the sentinel judged is_event=false BUT flagged a substantive
+    action (notable=true) on a ticker the user tracks (watchlist ∪ portfolio).
+    Real catalysts (is_event=true) flow through the normal event path, not here.
+    The phone is never involved on this path — silent Telegram only.
+    """
+    if ea is None or ea.is_event or not ea.notable:
+        return False
+    hits = {t.strip().upper() for t in ea.ticker_hint if t and t.strip()}
+    return bool(hits & tracked)
 
 
 def _parse_int_list(val) -> list[int]:

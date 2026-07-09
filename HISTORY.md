@@ -1311,3 +1311,27 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 ---
 
 ## 2026-07-09T22:07+08:00 · 会话开始
+
+---
+
+## 2026-07-10T06:50+08:00 · 会话开始
+
+### 补录：上次会话 4 个缺失提交 (2026-07-10 凌晨)
+| Commit | 时间 | 说明 |
+|--------|------|------|
+| `c6efc06` | 00:56 | feat(eval): 事件驱动催化剂哨兵设为 PRIMARY 评估器 (V1)。取消 prescreen，FastLane 阈值 0.3→0.15，零 DB 迁移，旧 ImpactEvaluator 休眠 |
+| `c3b2e73` | 01:03 | docs: 记录事件驱动哨兵在 V1 上线 |
+| `e02d3e6` | 01:33 | feat(push): 弱催化剂三档推送 — is_event 且 intensity 1-2 → 仅 Telegram 静音 |
+| `dba9995` | 01:38 | docs: 记录 Telegram 弱催化剂档 + 定时检查发现 |
+
+### 本会话：诊断"哨兵上线后零推送" + 关注股安全网
+- **诊断（systematic-debugging）**：ECS healthy 无宕机。6h 内 66 条评估 **全部 is_event=false → no_push**（连静音 TG 都没有）。哨兵正确拦掉体育/政治噪音，但也**误杀关注股真实异动**（特斯拉 UBS 上调目标价、MU/AMD/MRVL 飙升、Meta 自研芯片链）。根因：事件哨兵是**很窄的硬门禁**，非 5 类硬催化剂就整条丢弃 → 从"推太多"矫枉过正成"零推送"。
+- **关键发现**：现有 `tickers_found` 字段不可信 —— 子串匹配把"el**arm**"/Teva 误标为 ARM，又漏掉 Applied Materials。不能拿它做推送开关。
+- **方案 A（用户选定：仅实质动作才推）**：改由**已读全文的 LLM** 输出选股，不碰坏字段。
+  - `event_driven_v1.txt`：is_event=false 也输出 `ticker_hint`（准确美股代码）+ `notable`（是否实质动作）
+  - `event_driven_evaluator.py`：`EventAssessment` 加 `notable`；新增纯函数 `watchlist_safety_net(ea, tracked)`
+  - `relevance.py`：新增 `get_tracked_tickers()`（watchlist ∪ portfolio）
+  - `main.py`：`is_event=false 且 notable 且命中关注股/持仓` → NORMAL 静音 Telegram（手机严格不变，永不响）
+- **TDD**：先写失败测试 → 实现 → 绿。新增 `tests/test_watchlist_safety_net.py`；registry-mapped 70 passed。
+- **真实 LLM 端到端验收**（`scripts/accept_watchlist_safety_net.py`）5/5 PASS：特斯拉 PT hike→fire(TSLA)；MRVL surge→fire；El Nino→ticker=[] 不 fire（ARM 假阳性已消失）；Teva→正确标 TEVA 且 notable=false 不 fire；体育→不 fire。
+- 待续：部署 ECS + 现场确认真实 fresh 新闻触发静音 TG。

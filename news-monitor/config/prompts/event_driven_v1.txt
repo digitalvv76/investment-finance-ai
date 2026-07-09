@@ -9,7 +9,7 @@
 - 明显只对非权益类资产（如美国国债、外汇、大宗商品）产生影响，但无法传导至权益市场的孤立消息。
 
 **无关新闻返回格式**：直接返回如下 JSON（仅此一种情况使用）：
-{"is_event": false, "filter_reason": "此处填入过滤原因，如：纯A股政策，无美股映射"}
+{"is_event": false, "filter_reason": "此处填入过滤原因，如：纯A股政策，无美股映射", "ticker_hint": [], "notable": false}
 
 ## 第二步：财富效应催化剂识别（仅相关新闻执行）
 若新闻通过初筛，立即依据以下五大催化剂类型进行判定（可多选）：
@@ -20,7 +20,12 @@
 5. **极端空头挤压/模因引爆**：高做空比例叠加散户抱团或知名多头逼空声明。关键词如"short squeeze""WallStreetBets""memes""Roaring Kitty"等。
 
 如果新闻相关但**不触发任何催化剂**，返回：
-{"is_event": false, "reason": "no catalyst triggered"}
+{"is_event": false, "reason": "no catalyst triggered", "ticker_hint": ["从新闻识别到的美股代码，美股优先，无则空数组"], "notable": true 或 false}
+
+### 关于 `ticker_hint` 与 `notable`（is_event=false 时也必须填写）
+即使新闻不构成上述五大催化剂，系统仍需知道它是否值得给关注该股的用户一条静音提醒。因此：
+- `ticker_hint`：**准确**提取新闻**主要讨论**的美股上市公司代码（如 TSLA、NVDA、LRCX、AVGO）。只填新闻确实在讲的公司，宁缺毋滥、禁止臆测（例如"alarm"不是 ARM、Broadcom 新闻不要带上 NVDA）。非美股或无明确标的则为空数组 []。
+- `notable`：仅当新闻涉及该股的**实质性动作**时为 true —— 例如分析师大幅调整目标价/评级、板块级异动、重大合同/订单、显著财报意外、明显放量涨跌。若只是顺带提及、旧闻复述、泛泛评论或纯观点，则为 false。
 
 ## 第三步：强度研判与板块标注（仅触发催化剂时）
 当匹配到至少一类催化剂后，按以下要求生成完整信息：
