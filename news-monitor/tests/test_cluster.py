@@ -136,3 +136,11 @@ class TestNewsCluster:
         events = cluster.merge_into_events([])
         assert isinstance(events, list)
         assert len(events) == 0
+
+    def test_second_similar_article_creates_event(self, cluster, mock_db):
+        """A second corroborating article about a lone singleton forms an event."""
+        existing = {"id": 1, "title": "US strikes Iran nuclear sites", "event_line_id": None}
+        mock_db.get_recent_news.return_value = [existing]
+        item = NewsItem(id=2, title="US strikes Iran nuclear facilities")
+        event_id = cluster.find_or_create_event(item)
+        assert event_id is not None  # second corroborating article → event line
