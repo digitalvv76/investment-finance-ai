@@ -1121,3 +1121,7 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - ✅ 记入 .claude/TROUBLESHOOTING.md + 跨会话 memory (tests-never-send-real-pushes)
 - 📌 分支 v1-stable tip: `7e8f84b`; 事件级升级推送功能 = 14 commit 全部 review 通过 + READY
 - ⏸️ 部署仍待人工确认 (deploy_ecs.sh + 观察 sweep/IOPS → cherry-pick 回 main)
+
+---
+
+## 2026-07-09T13:15+08:00 · 会话开始
