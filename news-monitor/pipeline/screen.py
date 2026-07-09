@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SCREEN_THRESHOLD = 0.40  # Minimum priority_score to continue
+SCREEN_THRESHOLD = 0.0  # Event-driven evaluator is the real filter; SCREEN only enriches
 
 
 class ScreenStage:

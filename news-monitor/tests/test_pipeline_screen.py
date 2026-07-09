@@ -21,7 +21,7 @@ class TestScreenStage:
 
     @pytest.mark.asyncio
     async def test_happy_path(self, stage, mock_fast_lane):
-        """Items with priority >= 0.3 pass through."""
+        """Items are enriched and pass through — filtering is in EVALUATE."""
         from datetime import datetime
         from storage.models import NewsItem
 
@@ -45,8 +45,8 @@ class TestScreenStage:
         assert result[0].is_breaking is True
 
     @pytest.mark.asyncio
-    async def test_below_threshold_filtered(self, stage, mock_fast_lane):
-        """Items with priority < 0.3 are dropped."""
+    async def test_low_priority_passes_through(self, stage, mock_fast_lane):
+        """Items with low priority pass through — filtering is downstream in EVALUATE."""
         from datetime import datetime
         from storage.models import NewsItem
 
@@ -60,7 +60,7 @@ class TestScreenStage:
         mock_fast_lane.process.return_value = enriched
 
         result = await stage.process(items)
-        assert len(result) == 0
+        assert len(result) == 1  # passes through, filtering is in EVALUATE
 
     @pytest.mark.asyncio
     async def test_empty_input(self, stage):
