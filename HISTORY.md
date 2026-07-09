@@ -1283,7 +1283,7 @@ in-session recording (Layer 2, deferred).
 
 ---
 
-## 2026-07-09T13:05+08:00 · 清理预存测试债 (4 failed + 6 errors → 0) · `fe8e6fe`
+## 2026-07-09T13:05+08:00 · 清理预存测试债 (4 failed + 6 errors → 0) · `4c21bd3`
 
 **背景**: 07-08 遗留测试债，非本次引入。断言随源码演进过时 + Windows ChromaDB 文件锁。
 
