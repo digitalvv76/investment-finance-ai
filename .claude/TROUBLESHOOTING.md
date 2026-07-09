@@ -173,3 +173,10 @@ systemctl enable sshd && systemctl restart sshd
 ---
 
 > **使用方式**: 遇到问题 → 解决后立即追加一条到这里。下次看 SESSION.md 之前先扫一眼最近 3 条。
+
+## 2026-07-09 · 单元测试真的把推送发到手机 (Pushover)
+- **现象**: 开发 TDD 期间, 用户手机连续收到「📰 事件聚合(4源)：美伊冲突升级 / High Priority / From digitalvvnewsmoni」多条推送。
+- **根因**: `tests/test_dispatch_event.py` 里 IMPORTANT 用例直接 `AlertDispatcher()` 真实实例, 注释假设「no pushover creds」是错的 —— 本地 `.env` 有 `PUSHOVER_APP_TOKEN`/`PUSHOVER_USER_KEY`, `pushover_available=True`, IMPORTANT 分支真的调 `_pushover_high()` → 真实手机推送。测试反复跑 → 连收多条。
+- **为何没在 ECS 日志发现**: 走的是本地 Pushover, 不经 ECS/Telegram, 所以 ECS 只读排查 (sendMessage) 查不到。
+- **修复** (`7e8f84b`): 加 fixture 强制清空 `_pushover_token`/`_pushover_users` + stub `_pushover_high`/`_pushover_emergency` 抛错兜底。既有 `test_alert_dispatcher.py:136` 早有此安全模式, 新测试漏抄。
+- **规矩**: 任何测试构造真实 `AlertDispatcher()` 并调 `dispatch`/`dispatch_event`, 必须先禁用 pushover 凭证 (清空 token/users) 且 stub 发送方; 别依赖「凭证不存在」的假设。首选 mock dispatcher (如 e2e/escalator 测试)。

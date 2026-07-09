@@ -1092,3 +1092,32 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - 📋 实施计划 (`f4f6f02`): 11 个 TDD 任务, 方案A (周期扫描 EventEscalator 状态机 挂 _tick_5min, 复用 AlertDispatcher + impact_collector 取价 + 加油价)
 - 🎛️ 用户定阈值: 市场确认 |ΔSPX|≥0.2% / ΔVIX≥+5% / |Δ油|≥0.5% + 时间对齐 + 方向闸
 - ⏸️ 未开始编码 — 计划已存盘, 下次从 Task 1 起; 文档在 docs/superpowers/{specs,plans}/2026-07-08-*
+
+---
+
+## 2026-07-09T09:19+08:00 · 会话开始
+
+## 2026-07-09T10:xx+08:00 · 会话 — 事件级升级推送 11 任务全部实现 (子代理驱动 SDD)
+
+- ✅ 用 superpowers:subagent-driven-development 执行 11 任务计划 (逐任务: 实现子代理 → review 子代理 → 修复循环)
+- ✅ Task 1 (`04aa5ed`): event-escalation.json 配置 + ConfigLoader.load_event_escalation()
+- ✅ Task 2 (`8307652`): EventLine 5 字段 + migrate_event_escalation (幂等 ADD COLUMN) + 4 查询方法
+- ✅ Task 3 (`e96bf57` + fix `d342964`): AlertDispatcher.dispatch_event (CRITICAL/IMPORTANT/NORMAL); 修复 _event_body 死负载 → 加 _flash_note/_analyst_note 让文案真正到达 telegram/pushover
+- ✅ Task 4 (`5a8d6b5`): MarketSnapshot.since — SPX/VIX/Brent 自参考时刻涨跌 (yfinance + to_thread, 永不抛错)
+- ✅ Task 5 (`67c3893` + fix `5ea1731`): 修复聚类死代码 — 第二条印证新闻建簇, 两条都挂 news_ids + source_count=2 + 回写 seed FK
+- ✅ Task 6-8 (`858efa9`/`f9dbf88`+fix`4ab8ac6`/`7c99539`): EventEscalator 状态机 NONE→ALERTED→CONFIRMED→CLOSED + 市场确认(方向闸+时间对齐) + sweep 错误隔离; 修复 fromisoformat 崩溃防护 + 强化市场确认测试
+- ✅ Task 9 (`6060228`): 接线 scheduler/main (setter 注入解决构造顺序), module_registry 更新
+- ✅ Task 10 (`4d44169`): e2e 美伊场景 — 恰好 3 推送 IMPORTANT→CRITICAL→NORMAL, 无刷屏
+- ✅ Task 11 (`5e08c32`): migration/rollback 脚本 (本地双向验证通过)
+- ✅ 最终整分支 review (fable): READY — 架构/集成/生产就绪全 PASS, 无 Critical/Important; 反刷屏 ≤3 结构性保证
+- 📊 27 个功能测试全绿
+- ⚠️ 遗留 (需人工确认): git push origin v1-stable → ECS 部署 (deploy_ecs.sh + 观察 sweep/IOPS) → 验证后 cherry-pick 回 main
+- 📝 跟进小项 (非阻断): event-escalation.json 有 4 个死配置键 (cooldown_hours/max_pushes_per_event/reversal_retrace_pct/sweep_interval_minutes 未被读取); 静默>12h 事件会掉出活跃窗口不发 CLOSED
+
+## 2026-07-09T~11:00+08:00 · 事故修复 + 收尾
+
+- 🚨 用户手机收到多条「事件聚合(4源)：美伊冲突升级 High」— 定位为**本次单元测试真发 Pushover**(非线上/非测试假推送器): test_dispatch_event.py IMPORTANT 用例用真实 AlertDispatcher() 且本地 .env 有 PUSHOVER 凭证, TDD 反复跑 → 真推送。走本地 Pushover 不经 ECS, 故 ECS 日志查不到。
+- ✅ 修复 (`7e8f84b`): fixture 强制清空 pushover 凭证 + stub 发送方抛错兜底; 3/3 通过; 排查确认其他测试安全 (test_alert_dispatcher 早有此模式, test_impact_push 仅分类)
+- ✅ 记入 .claude/TROUBLESHOOTING.md + 跨会话 memory (tests-never-send-real-pushes)
+- 📌 分支 v1-stable tip: `7e8f84b`; 事件级升级推送功能 = 14 commit 全部 review 通过 + READY
+- ⏸️ 部署仍待人工确认 (deploy_ecs.sh + 观察 sweep/IOPS → cherry-pick 回 main)

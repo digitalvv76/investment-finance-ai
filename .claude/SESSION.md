@@ -1,37 +1,36 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-08 21:26 CST (V1 窗口 / v1-stable)
+> 最后更新: 2026-07-09 ~10:30 CST (V1 窗口 / v1-stable)
 
-## ✅ 本次完成 (设计 + 规划, 未编码)
+## ✅ 本次完成 — 事件级升级推送 11 任务 + 推送安全事故修复并 review 通过
 
-### 推送效果观察报告 (ECS 只读快照)
-- 近24h: fast_pushed 79 / urgency 全 INFO+WATCH → **零手机推送**
-- 全类别 calibration bias 正偏 (macro_data +56, geopolitical +46), 预测约真实市场 2-5x
-- 递送管道 healthy, 0 失败
+- 子代理驱动 SDD 执行完 11 任务 + 3 修复循环，共 14 个功能 commit（`04aa5ed`..`5e08c32`）
+- 状态机 NONE→ALERTED→CONFIRMED→CLOSED 全链路激活（含修复聚类死代码）
+- 27 个功能测试全绿；最终整分支 review (fable) 判定 **READY**，无 Critical/Important
+- 反刷屏 ≤3 推送为结构性保证（3 条单向转换 + 终态 CLOSED 停用行）
 
-### 持续演进事件 · 事件级升级推送 (设计完成)
-- 触发案例: 美伊冲突 (wallstreetcn 3776459), 24h 滚动演进大事件被逐条静音
-- 关键发现: 事件聚类 NewsCluster/EventLine 是死代码, 生产未接线
-- 设计 spec: `06b0755` — docs/superpowers/specs/2026-07-08-continuous-event-escalation-push-design.md
-- 实施计划: `f4f6f02` — docs/superpowers/plans/2026-07-08-continuous-event-escalation-push.md (11 TDD 任务)
+## 📋 下一步（需人工确认后执行）
 
-## 📋 下一步
+1. `git push origin v1-stable`（HISTORY.md 尚有未提交改动，push 前先 commit）
+2. ECS 部署：`bash news-monitor/scripts/deploy_ecs.sh`；容器内先显式跑 `python scripts/migrate_event_escalation.py`（启动也会自动 migrate，此为保险）
+3. 部署后观察：`docker logs` grep `Event #|ALERTED|CONFIRMED|CLOSED` + IOPS
+4. 生产验证生效后 → 主窗口 `D:\class1` cherry-pick 相关 commit 回 main
 
-1. **从 Task 1 开始编码** (方案A): 配置 → EventLine 迁移 → dispatch_event → MarketSnapshot → 修聚类 → EventEscalator 状态机 → 接线 → e2e → 部署
-2. 执行方式: 子代理驱动 (推荐) 或会话内 executing-plans
-3. DB 迁移走 /db-migration; 部署后 ECS 观察 sweep 日志 + IOPS; 验证后 cherry-pick 回 main
+## 🩹 跟进小项（非阻断，可开 follow-up ticket）
 
-## 🩹 上次踩坑 / 注意
+- `config/event-escalation.json` 有 4 个死配置键未被读取：`cooldown_hours` / `max_pushes_per_event` / `close.reversal_retrace_pct` / `sweep_interval_minutes`（sweep 周期硬编码在 `_tick_5min`）
+- 静默边界：CLOSE 在 6h 触发，但活跃窗口 12h；若事件静默 >12h（如长时间停机）会掉出 `get_active_event_lines`，永不发 CLOSED（保持 is_active=1）。6h 宽限使其不太可能，记录给 ops
+- Task 3 通道命名 `telegram_alert` vs 现有 `dispatch()` 的 `telegram_silent`（仅 channels_used 字符串，cosmetic）
 
-- 事件聚类死代码: find_or_create_event 匹配不到既有事件线时从不建簇, singleton 不升级 → Task 5 修复
-- 市场确认阈值很松 (0.2%/0.5% 噪音级), 已加方向+时间闸滤噪音 (用户确认)
-- V1 铁律: 本窗口只做 v1-stable, 部署验证后才 cherry-pick 回 main
+## ⚠️ 铁律
+
+- 本窗口只做 v1-stable；部署验证后才 cherry-pick 回 main
+- SDD 进度账本在 `.superpowers/sdd/progress.md`（含每任务 commit 范围 + review 结论 + minor 清单）
 
 ## 📊 系统健康
 
 | 组件 | 状态 |
 |------|------|
-| ECS 4C8G | ✅ healthy (Up 3h+) |
-| news-monitor | ✅ healthy, 0 推送失败 |
-| Pushover 手机推送 | ⚠️ 近24h 零 (待本设计改进) |
-| 待编码 | 事件级升级推送 11 任务 |
+| 事件级升级推送 | ✅ 已实现 + review 通过 (未部署) |
+| 功能测试 | ✅ 27/27 (含推送安全修复) |
+| 部署 | ⏸️ 待人工确认 |
