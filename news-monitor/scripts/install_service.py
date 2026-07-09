@@ -105,6 +105,7 @@ def install():
         "ALPHA_VANTAGE_API_KEY",
         "PUSHOVER_APP_TOKEN",
         "PUSHOVER_USER_KEY",
+        "PUSHOVER_USER_KEY_2",
         "WEB_PORT",          # Enable web dashboard (8080)
     ]
 

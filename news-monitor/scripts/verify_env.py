@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", st
 log = logging.getLogger("verify_env")
 
 CRITICAL_VARS = ["TELEGRAM_BOT_TOKEN", "DEEPSEEK_API_KEY"]
-RECOMMENDED_VARS = ["PUSHOVER_APP_TOKEN", "PUSHOVER_USER_KEY"]
+RECOMMENDED_VARS = ["PUSHOVER_APP_TOKEN", "PUSHOVER_USER_KEY", "PUSHOVER_USER_KEY_2"]
 OPTIONAL_VARS = ["FRED_API_KEY", "ALPHA_VANTAGE_API_KEY", "ANTHROPIC_API_KEY"]
 
 
@@ -70,22 +70,26 @@ def check_connectivity() -> list[str]:
             warnings.append(msg)
 
     pushover_token = os.environ.get("PUSHOVER_APP_TOKEN", "")
-    pushover_user = os.environ.get("PUSHOVER_USER_KEY", "")
-    if pushover_token and pushover_user:
-        try:
-            import urllib.parse
-            data = urllib.parse.urlencode({
-                "token": pushover_token, "user": pushover_user
-            }).encode()
-            req = urllib.request.Request(
-                "https://api.pushover.net/1/users/validate.json", data=data
-            )
-            urllib.request.urlopen(req, timeout=5)
-            log.info("  [OK] Pushover API reachable")
-        except Exception as e:
-            msg = f"Pushover API unreachable: {e}"
-            log.warning("  [WARN] %s", msg)
-            warnings.append(msg)
+    pushover_users = [
+        (os.environ.get("PUSHOVER_USER_KEY", ""), "PUSHOVER_USER_KEY"),
+        (os.environ.get("PUSHOVER_USER_KEY_2", ""), "PUSHOVER_USER_KEY_2"),
+    ]
+    for user_key, var_name in pushover_users:
+        if pushover_token and user_key:
+            try:
+                import urllib.parse
+                data = urllib.parse.urlencode({
+                    "token": pushover_token, "user": user_key
+                }).encode()
+                req = urllib.request.Request(
+                    "https://api.pushover.net/1/users/validate.json", data=data
+                )
+                urllib.request.urlopen(req, timeout=5)
+                log.info("  [OK] Pushover API reachable (%s)", var_name)
+            except Exception as e:
+                msg = f"Pushover API unreachable ({var_name}): {e}"
+                log.warning("  [WARN] %s", msg)
+                warnings.append(msg)
 
     return warnings
 

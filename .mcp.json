@@ -29,7 +29,10 @@
     },
     "stock-scanner": {
       "command": "npx",
-      "args": ["-y", "stock-scanner-mcp", "--enable-workspace"]
+      "args": ["-y", "stock-scanner-mcp", "--enable-workspace"],
+      "env": {
+        "FINNHUB_API_KEY": "${FINNHUB_API_KEY}"
+      }
     },
     "sec-edgar": {
       "command": "uvx",

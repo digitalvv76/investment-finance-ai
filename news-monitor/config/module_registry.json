@@ -33,6 +33,11 @@
       "tests": ["tests/test_chinese_fetcher.py"],
       "related_scripts": ["scripts/test_new_fetchers.py"]
     },
+    "collector/finnhub_fetcher.py": {
+      "tests": [],
+      "related_scripts": [],
+      "_note": "Finnhub API — per-ticker company news. Requires FINNHUB_API_KEY. Tested via live API call."
+    },
     "collector/dedup.py": {
       "tests": ["tests/test_dedup.py"],
       "related_scripts": ["scripts/acceptance_test.py"]
