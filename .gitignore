@@ -31,6 +31,7 @@ Desktop.ini
 .claude/telemetry/
 .claude/logs/
 .claude/plans/
+.claude/worktrees/
 
 # ====== Logs (generated) ======
 logs/
@@ -42,7 +43,10 @@ data/cache/
 data/alerts.log
 data/audit.log
 data/theses/
+data/chroma/
+data/news.db
 news-monitor/data/
+news-monitor/temp_feedback.docx
 
 # ====== Scripts ======
 scripts/__pycache__/

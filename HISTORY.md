@@ -91,6 +91,16 @@
 - **测试**: 新增 `TestRetiredSources::test_marketwatch_scraper_retired` 守护 (19/19 pass)
 - ⚠️ **待办**: v1-stable 同样含此爬虫，需在 V1 窗口 cherry-pick + 部署 ECS 才能让 V1 生产同步收益
 
+### 工作区清债 — 未跟踪文件三分类
+- **提交**: `data/holidays.json` (配置, 被 exchange_calendar/impact_collector 读取), `news-monitor/pytest.ini`, `news-monitor/tests/conftest.py`, `docs/news-monitor-prompts.md`, `docs/phone-notification-guide.md`, `scripts/ecs_io_monitor.py`, `scripts/test_signal.py`
+- **gitignore**: `data/news.db` (运行时 DB), `data/chroma/` (向量库), `news-monitor/temp_feedback.docx` (临时)
+- **不动**: 3 个过时脚本告警 (test_phone_alert/test_new_fetchers/acceptance_test) 为纯 mtime 咨询性，非损坏；test_phone_alert 会真推送故不跑
+
+### V2 影子测试首跑 (进行中)
+- `run_v2_local.py --duration 600 --keep-db -v` 本地 10min，只采集处理不推送
+- 启动健康: 心跳 282 items, RSS 90/中文 98/scraper(CNBC15+Sina20+WSCN15), 去重 112/282
+- MarketWatch 修复实跑确认: 无 scraper 尝试、RSS 覆盖 10 条
+
 ---
 
 ## 2026-07-03 · 会话 — P0 数据源扩展：Twitter + 中国金融新闻
