@@ -89,6 +89,7 @@ FILES=(
     "news-monitor/config/sources.yaml"
     "news-monitor/config/settings.yaml"
     "news-monitor/config/keywords.yaml"
+    "news-monitor/config/loader.py"
     "news-monitor/config/prompts/impact_v1.txt"
     "news-monitor/config/module_registry.json"
     "news-monitor/config/event-escalation.json"
