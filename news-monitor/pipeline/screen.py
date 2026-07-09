@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SCREEN_THRESHOLD = 0.0  # Event-driven evaluator is the real filter; SCREEN only enriches
+SCREEN_THRESHOLD = 0.15  # Low bar: filters only garbage; event-driven evaluator is the real gate
 
 
 class ScreenStage:
