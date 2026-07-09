@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-07-10T00:45+08:00 · 🎭 影子部署基础设施就绪
+
+### DRY_RUN_PUSH 静音模式 (`f8620d1`)
+- `pipeline/dispatch.py`: DRY_RUN_PUSH=true 时只记录 WOULD-PUSH 日志，不调 channel.send()
+- `docker/docker-compose.shadow.yml`: 独立容器 `news-monitor-shadow`、端口 8081、独立数据卷 `news_data_shadow`/`news_logs_shadow`、push token 全置空
+- `deploy-shadow.sh`: 一键部署 (scp→docker build→health check)，`--down` 停止，`--logs` 查看
+- 不影响 V1 生产
+
+### 灰度决策已定
+- 用户选 A（影子并行对比）
+- 路线: 部署影子 → 关 Twitter/Playwright 跑 1 天 → 开 Playwright 跑 1 天 → 对比 V1 推送 → 切
+
+### 测试
+- 392 passed / 0 failed
+
+---
+
 ## 2026-07-10T00:22+08:00 · 🧠 事件驱动评估引擎 — 替换 LLM 自由打分
 
 > 用户提供三步判断规则（相关性初筛→五类催化剂→强度1-5星），替代旧 LLM 自由评分。temperature=0，结构化 JSON 输出，中文推送。

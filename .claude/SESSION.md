@@ -3,31 +3,37 @@
 > 🔔 **[2026-07-09 来自 V1 窗口] ECS 灰度前必读交接 → [`.claude/V1-TO-V2-HANDOFF.md`](V1-TO-V2-HANDOFF.md)**
 > 含：今天的安全修复(`cab7d4f` 已在 main，含生死攸关的 `../config` 卷路径)、V2≠V1 提醒、灰度架构坑、**需先与用户确认 A/B 方案**。开工先读它。
 
-> 最后更新: 2026-07-10 (事件驱动评估引擎上线)
+> 最后更新: 2026-07-10 (收工 — 事件驱动引擎 + 影子环境就绪)
 
-## ✅ 本次完成 (2026-07-10 · 凌晨)
+## ✅ 本次完成 (2026-07-10)
 
-### 事件驱动评估引擎 (替换 LLM 自由打分)
-- **用户规则**: 三步判断 (相关性初筛 → 五类催化剂 → 强度1-5星)，temperature=0，结构化 JSON
-- **prompt**: `config/prompts/event_driven_v1.txt` — 用户口述规则完整版
-- **引擎**: `engine/event_driven_evaluator.py` — LLM 调用 + JSON 解析 + should_push 判断
-- **管道集成**: `EvaluateStage` 优先走事件驱动，不触发催化剂时 fallback 旧 ImpactEvaluator
-- **决策**: `is_event=true + intensity≥3` 才推，headline_signal/risk_snapshot 中文
-- **测试**: 392 passed / 0 failed (+15 新测试)
+### 事件驱动评估引擎
+- 用户三步规则 → `event_driven_v1.txt` prompt + `EventDrivenEvaluator`
+- 决策: `is_event=true + intensity≥3` → push
+- SCREEN_THRESHOLD: 0.40→0.15（平衡覆盖率与成本）
+- 中文输出: headline_signal / risk_snapshot
+- 392 tests 绿
 
-### V1 交接已读
-- `.claude/V1-TO-V2-HANDOFF.md` 4 点已消化
-- 安全修复已在 main (`cab7d4f`)
-- 灰度 A/B 待用户拍板
+### 影子部署基础设施
+- `DRY_RUN_PUSH` 静音模式
+- `docker-compose.shadow.yml` — 独立容器/端口/数据卷
+- `deploy-shadow.sh` — 一键部署，不影响 V1
+
+### 之前 (2026-07-09)
+- 孤儿代码移植 P1+P3 (377 tests)
+- V1→V2 交接简报已读
 
 ## 📋 下一步
 
-- 🎯 **灰度方式 A/B**: 用户拍板影子并行还是直接切
-- 🏭 搭影子环境 → V2 隔离跑 → 对比 V1
+- 🚀 **部署影子到 ECS**: `./deploy-shadow.sh`
+- 📊 影子跑 1-2 天 → 对比 V1 推送 → 确认无误后切
+- 🟡 P2 推送下限: 已被事件驱动引擎替代，不需要了
 
-## ✅ 之前完成 (2026-07-09 · 晚)
+## ⚠️ 上次踩坑
 
-### 孤儿代码移植 P1 + P3 (main, 9 文件, 377 tests 绿)
+- rescue 分支 vector_store 删了 close() → V2 必须保留
+- rescue docker-compose ECS 特定路径 → 不移植
+- EventAssessment.alert_level intensity=3 边界 bug → 已修
 
 **用户选择方案 B：P1 + P3 一起，P2 单独定。**
 
