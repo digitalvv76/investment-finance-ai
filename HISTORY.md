@@ -1371,3 +1371,21 @@ in-session recording (Layer 2, deferred).
 
 **后续**: (1) 灰度上 ECS: Web SSE → Telegram → Pushover; (2) 孤儿代码独立审计收尾（首次后台跑 600s 卡死，partial: strategic_detector 缺 CFIUS/救助调优=候选; web_scraper/impact_evaluator V2 反而领先）。
 
+---
+
+## 2026-07-09T20:15 · ✅ 孤儿代码独立审计完成 (只读, 未改代码)
+
+> 拆 3 个并行 Explore 代理（collectors / engine+storage / config+infra）审 rescue 分支 47 文件 vs main。基线 `cd32d73`。**核心发现: 孤儿代码主体是一个在生产直接搭建、未进 git 的完整产品功能——识别"政府干预/关键矿产/救助"类新闻（CFIUS/DOE 拨款/政府注资兜底/稀土），V2 完全缺失。** 印证 no-direct-server-edits 铁律的必要性。
+
+**V2 缺失清单（按价值，= 下次移植候选）:**
+- 🔴 P1-a **去重 bug** `collector/dedup.py`: 缓存满时 destructive `clear()` 一次性清空全部去重记忆 → 周期性重复推送洪水。真正确性 bug。(附带 breaking 前缀归一化 + 批内 Jaccard/语义去重)
+- 🔴 P1-b **政府干预/关键矿产检测**（打包, 跨 4 文件）: `strategic_detector.py`(CFIUS/backstop/bailout/DOE 实体+拨款评分, subsidy=provides/policy=approves) + `relevance.py`(gov-intervention/CFIUS/critical-minerals 高影响权重+sector signals) + `keywords.yaml`(+47 触发词) 。三者必须一起移植否则半接线。
+- 🟡 P2-a **推送下限** `settings.yaml` `impact_push.min_impact_for_push: 30`: 低于 30 分不推。**改变什么会推给用户 → 需用户拍板参数**。
+- 🟡 P2-b **全球市场压力路径** `content_filter.py` `_has_global_market_stress()`: 熔断/战争/指数崩盘/油价暴动 中文急讯不再被降权压制。
+- 🟢 P3 性能/加固: `rss_fetcher`/`twitter_fetcher` 并发化; docker `pids:200`(防 Chromium 进程泄漏); `deep_lane.py` 3-phase 盘前/盘后实时行情; `vector_store.pair_similarity`(依赖 P1-a 批内去重)。
+
+**⛔ 明确不移植（环境漂移/噪音/V2 已领先）:** web_scraper MarketWatch(V2 已退役, 移回=倒退)、`collector/sources.yaml`(走错路径没人读)、docker WEB_DASHBOARD_URL/绝对路径(ECS 特定)、`.bak`、一次性测试脚本、`impact_evaluator`(V2 更新, 孤儿收严=回归)、`prompts/impact_v1.txt`(字节相同)、models/database/alert_dispatcher(V2 已含或更优)。
+
+**待用户决策 (下次会话开场先问)**: 移植范围三选一 — A) 先 P1(bug+政府干预检测); B) P1+P3 一起, P2 单独定; C) 只修去重 bug。P2 因改推送行为需用户先确认参数。
+
+
