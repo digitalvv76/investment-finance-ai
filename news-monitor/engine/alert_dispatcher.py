@@ -55,6 +55,7 @@ CRITICAL_PRIORITY = 0.55      # PriorityScorer scores >= this → CRITICAL
 IMPORTANT_PRIORITY = 0.45     # "" >= this → IMPORTANT
 STRATEGIC_CRITICAL_CONF = 0.70  # Strategic match confidence >= this → CRITICAL
 GOV_INTERVENTION_CRITICAL = True  # Any gov_intervention match → auto CRITICAL
+TIMELINESS_PHONE_MIN = 0.25   # Timeliness below this → skip phone push (analyst reports etc.)
 
 # ---------------------------------------------------------------------------
 # Pushover config
@@ -97,11 +98,16 @@ class AlertDispatcher:
 
     def __init__(self) -> None:
         self._pushover_token = os.environ.get("PUSHOVER_APP_TOKEN", "")
-        self._pushover_user = os.environ.get("PUSHOVER_USER_KEY", "")
+        # Support multiple phones: PUSHOVER_USER_KEY (primary) + PUSHOVER_USER_KEY_2 (secondary)
+        self._pushover_users: list[str] = []
+        for key in [os.environ.get("PUSHOVER_USER_KEY", ""),
+                    os.environ.get("PUSHOVER_USER_KEY_2", "")]:
+            if key:
+                self._pushover_users.append(key)
 
     @property
     def pushover_available(self) -> bool:
-        return bool(self._pushover_token and self._pushover_user)
+        return bool(self._pushover_token and self._pushover_users)
 
     # ------------------------------------------------------------------
     # Classification
@@ -114,66 +120,146 @@ class AlertDispatcher:
         is_breaking: bool = False,
         impact_assessment=None,  # ImpactAssessment | None
         rel_mult: float = 1.0,   # relevance multiplier from portfolio/watchlist
+        has_tickers: bool = False,  # does the news mention individual stocks?
+        is_macro: bool = False,     # is this a macro/geopolitical/systemic event?
+        timeliness: float | None = None,  # 0–1, from signal_score; low = stale/analyst report
     ) -> tuple[AlertLevel, str]:
-        """Determine alert level from priority score + strategic signals + impact prediction.
+        """Determine alert level from LLM urgency or legacy formula.
 
-        When impact_assessment is available (from ImpactEvaluator LLM), it takes
-        precedence over the legacy priority_score-based classification.  The
-        composite formula is: (impact_score × 0.7 + confidence × 0.3) × rel_mult.
+        Urgency-first: when ImpactEvaluator LLM provides an urgency field,
+        it takes absolute precedence. The LLM understands event semantics
+        (war > earnings > analyst opinion) and is not fooled by keyword
+        mismatches. Fallback to composite formula if LLM unavailable.
 
-        rel_mult ranges 0.3–1.5 based on portfolio/watchlist match (1.0 = neutral).
+        **Watchlist gate**: for individual stock news (has_tickers=True) that is
+        NOT macro/geopolitical (is_macro=False), the alert level is capped at
+        NORMAL unless rel_mult shows portfolio/watchlist relevance (rel_mult > 0.5).
+
+        **Timeliness gate**: analyst reports and stale news (timeliness < 0.25)
+        are capped at NORMAL — no phone buzz.  They still go to Telegram.
+        Breaking events and macro news bypass this gate.
 
         Returns (AlertLevel, reason_string).
         """
         strategic_matches = strategic_matches or []
 
-        # --- NEW: impact-prediction-first classification ---
+        # --- LLM urgency-first classification ---
         if impact_assessment is not None:
+            urgency = getattr(impact_assessment, 'urgency', '')
             impact = getattr(impact_assessment, 'impact_score', 0)
             conf = getattr(impact_assessment, 'confidence', 0)
-            composite = round((impact * 0.7 + conf * 0.3) * rel_mult, 1)
 
-            if composite >= CRITICAL_PRIORITY * 100:   # 70
-                return AlertLevel.CRITICAL, (
-                    f"high_impact: composite={composite} "
-                    f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
-                )
-            elif composite >= IMPORTANT_PRIORITY * 100:  # 50
-                return AlertLevel.IMPORTANT, (
-                    f"moderate_impact: composite={composite} "
-                    f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
+            if urgency in ('FLASH', 'ALERT', 'WATCH', 'INFO'):
+                # LLM-determined urgency — trust it over formula
+                if urgency == 'FLASH':
+                    level, reason = AlertLevel.CRITICAL, (
+                        f"LLM FLASH: impact={impact} conf={conf}"
+                    )
+                elif urgency == 'ALERT':
+                    level, reason = AlertLevel.IMPORTANT, (
+                        f"LLM ALERT: impact={impact} conf={conf}"
+                    )
+                elif urgency == 'WATCH':
+                    level, reason = AlertLevel.NORMAL, (
+                        f"LLM WATCH: impact={impact} conf={conf}"
+                    )
+                else:  # INFO
+                    level, reason = AlertLevel.NORMAL, (
+                        f"LLM INFO: impact={impact} conf={conf}"
+                    )
+            else:
+                # Legacy fallback: composite formula
+                composite = round((impact * 0.7 + conf * 0.3) * rel_mult, 1)
+                if composite >= CRITICAL_PRIORITY * 100:
+                    level, reason = AlertLevel.CRITICAL, (
+                        f"composite={composite} (impact={impact} conf={conf})"
+                    )
+                elif composite >= IMPORTANT_PRIORITY * 100:
+                    level, reason = AlertLevel.IMPORTANT, (
+                        f"composite={composite} (impact={impact} conf={conf})"
+                    )
+                else:
+                    level, reason = AlertLevel.NORMAL, (
+                        f"composite={composite} (impact={impact} conf={conf})"
+                    )
+            # Fall through to watchlist gate below
+        else:
+            # --- LEGACY: score + strategic classification (fallback) ---
+            gov_matches = [m for m in strategic_matches if m.category == "gov_intervention"]
+            if gov_matches:
+                top = max(m.confidence for m in gov_matches)
+                return AlertLevel.CRITICAL, f"gov_intervention match (conf={top:.2f})"
+
+            # --- auto-CRITICAL: high-confidence NVIDIA strategic event ---
+            nvda_critical = [
+                m for m in strategic_matches
+                if m.category in ("nvda_investment", "nvda_endorsement", "nvda_competitive_threat")
+                and m.confidence >= STRATEGIC_CRITICAL_CONF
+            ]
+            if nvda_critical:
+                top = max(m.confidence for m in nvda_critical)
+                return AlertLevel.CRITICAL, f"nvda strategic event (conf={top:.2f})"
+
+            # --- score-based classification ---
+            # NOTE: priority alone can trigger CRITICAL for systemic events (bailouts, wars, etc.)
+            # but earnings drama / CEO commentary without strategic signal stays at IMPORTANT.
+            #
+            # For watchlist stocks (rel_mult > 0.5), lower the IMPORTANT threshold from
+            # 0.45 to 0.35 — the user explicitly wants to know about these companies.
+            is_watchlist = rel_mult > 0.5
+            imp_threshold = 0.35 if is_watchlist else IMPORTANT_PRIORITY
+            crit_threshold = CRITICAL_PRIORITY  # same for both paths
+
+            if priority_score >= crit_threshold:
+                level, reason = AlertLevel.CRITICAL, f"priority_score={priority_score:.2f} >= {crit_threshold}"
+            elif priority_score >= imp_threshold:
+                level, reason = AlertLevel.IMPORTANT, (
+                    f"priority_score={priority_score:.2f} >= {imp_threshold}"
+                    + (" (watchlist)" if is_watchlist else "")
                 )
             else:
-                return AlertLevel.NORMAL, (
-                    f"low_impact: composite={composite} "
-                    f"(impact={impact} conf={conf} rel={rel_mult:.1f})"
-                )
+                return AlertLevel.NORMAL, "routine news"
 
-        # --- LEGACY: score + strategic classification (fallback) ---
-        gov_matches = [m for m in strategic_matches if m.category == "gov_intervention"]
-        if gov_matches:
-            top = max(m.confidence for m in gov_matches)
-            return AlertLevel.CRITICAL, f"gov_intervention match (conf={top:.2f})"
-
-        # --- auto-CRITICAL: high-confidence NVIDIA strategic event ---
-        nvda_critical = [
-            m for m in strategic_matches
-            if m.category in ("nvda_investment", "nvda_endorsement", "nvda_competitive_threat")
+        # --- WATCHLIST GATE ---
+        # For individual stock news that the user doesn't own or track,
+        # cap the alert at NORMAL (no phone push, Telegram silent only).
+        # Macro/geopolitical events (FOMC, CPI, war) always pass through.
+        # Gov_intervention / NVDA strategic matches always pass through.
+        has_strategic = any(
+            m.category in ("gov_intervention", "nvda_investment", "nvda_endorsement")
             and m.confidence >= STRATEGIC_CRITICAL_CONF
-        ]
-        if nvda_critical:
-            top = max(m.confidence for m in nvda_critical)
-            return AlertLevel.CRITICAL, f"nvda strategic event (conf={top:.2f})"
+            for m in strategic_matches
+        )
+        if has_strategic:
+            logger.info(
+                "Watchlist gate: bypassed — strategic match (level=%s, reason=%s)",
+                level.value, reason,
+            )
+            return level, reason
 
-        # --- score-based classification ---
-        # NOTE: priority alone can trigger CRITICAL for systemic events (bailouts, wars, etc.)
-        # but earnings drama / CEO commentary without strategic signal stays at IMPORTANT.
-        if priority_score >= CRITICAL_PRIORITY:
-            return AlertLevel.CRITICAL, f"priority_score={priority_score:.2f} >= {CRITICAL_PRIORITY}"
-        elif priority_score >= IMPORTANT_PRIORITY:
-            return AlertLevel.IMPORTANT, f"priority_score={priority_score:.2f} >= {IMPORTANT_PRIORITY}"
-        else:
-            return AlertLevel.NORMAL, "routine news"
+        is_stock_news = has_tickers and not is_macro
+        is_untracked = rel_mult <= 0.5
+        if is_stock_news and is_untracked and level != AlertLevel.NORMAL:
+            logger.info(
+                "Watchlist gate: demoting %s -> NORMAL (rel=%.2f, has_tickers=%s, is_macro=%s)",
+                level.value, rel_mult, has_tickers, is_macro,
+            )
+            return AlertLevel.NORMAL, f"not_in_watchlist (was: {reason})"
+
+        # --- TIMELINESS GATE ---
+        # Phone push requires timeliness.  Analyst reports, research notes,
+        # and other non-breaking content lack the urgency to justify
+        # interrupting the user on their phone — they can wait for
+        # Telegram review.  Breaking news and macro events bypass.
+        if timeliness is not None and timeliness < TIMELINESS_PHONE_MIN:
+            if not is_breaking and not is_macro:
+                logger.info(
+                    "Timeliness gate: blocking phone for %s (timeliness=%.2f < %.2f)",
+                    level.value, timeliness, TIMELINESS_PHONE_MIN,
+                )
+                return level, f"phone_blocked:low_timeliness={timeliness:.2f} (was: {reason})"
+
+        return level, reason
 
     # ------------------------------------------------------------------
     # Channel dispatch
@@ -185,6 +271,8 @@ class AlertDispatcher:
         priority_score: float,
         strategic_matches: list | None = None,
         telegram_push_fn=None,
+        timeliness: float | None = None,
+        impact_assessment=None,
     ) -> DispatchResult:
         """Classify and dispatch through appropriate channels.
 
@@ -195,37 +283,59 @@ class AlertDispatcher:
             telegram_push_fn: async callable(item, disable_notification: bool)
                               Called by *this* method for NORMAL/IMPORTANT Telegram sends.
                               If None, Telegram channel is skipped (testing).
+            timeliness: 0–1 from signal_score.  Low timeliness blocks phone push
+                        (analyst reports etc.) but Telegram is still delivered.
+            impact_assessment: Optional ImpactAssessment from LLM evaluator.
 
         Returns:
             DispatchResult summarising what was done.
         """
-        level, reason = self.classify(priority_score, strategic_matches)
+        level, reason = self.classify(
+            priority_score, strategic_matches,
+            timeliness=timeliness,
+            impact_assessment=impact_assessment,
+        )
         title = item.get("title", "")[:80]
         channels: list[str] = []
+        phone_blocked = reason.startswith("phone_blocked:")
 
         if level == AlertLevel.CRITICAL:
             logger.warning("CRITICAL alert: %s | reason=%s", title, reason)
 
-            # Pushover emergency (heartbeat until acknowledged)
-            if self.pushover_available:
-                await self._pushover_emergency(item)
-                channels.append("pushover_emergency")
+            if phone_blocked:
+                # Timeliness gate: still send Telegram alert, but skip phone emergency
+                logger.info("Phone push blocked (timeliness) — Telegram only for: %s", title)
+                if telegram_push_fn:
+                    await telegram_push_fn(item, disable_notification=False)
+                    channels.append("telegram_alert")
+            else:
+                # Pushover emergency (heartbeat until acknowledged)
+                if self.pushover_available:
+                    await self._pushover_emergency(item)
+                    channels.append("pushover_emergency")
 
-            # Telegram triple-push (force vibration on Android)
-            if telegram_push_fn:
-                await self._telegram_triple(item, telegram_push_fn)
-                channels.append("telegram_triple")
+                # Telegram triple-push (force vibration on Android)
+                if telegram_push_fn:
+                    await self._telegram_triple(item, telegram_push_fn)
+                    channels.append("telegram_triple")
 
         elif level == AlertLevel.IMPORTANT:
             logger.info("IMPORTANT alert: %s | reason=%s", title, reason)
 
-            if self.pushover_available:
-                await self._pushover_high(item)
-                channels.append("pushover_high")
+            if phone_blocked:
+                # Timeliness gate: Telegram alert, skip phone
+                logger.info("Phone push blocked (timeliness) — Telegram only for: %s", title)
+                if telegram_push_fn:
+                    await telegram_push_fn(item, disable_notification=False)
+                    channels.append("telegram_alert")
+            else:
+                if self.pushover_available:
+                    await self._pushover_high(item)
+                    channels.append("pushover_high")
 
-            if telegram_push_fn:
-                await telegram_push_fn(item, disable_notification=False)
-                channels.append("telegram_alert")
+                if telegram_push_fn:
+                    await telegram_push_fn(item, disable_notification=False)
+                    channels.append("telegram_alert")
 
         else:  # NORMAL
             if telegram_push_fn:
@@ -268,40 +378,45 @@ class AlertDispatcher:
         )
         url = item.get("url", "")
 
-        payload = {
-            "token": self._pushover_token,
-            "user": self._pushover_user,
-            "title": title,
-            "message": body,
-            "priority": priority,
-            "sound": sound,
-            "html": 1,  # enables <a href> links in the message body
-            **kwargs,
-        }
+        # Send to all registered phones
+        success_count = 0
+        for user_key in self._pushover_users:
+            payload = {
+                "token": self._pushover_token,
+                "user": user_key,
+                "title": title,
+                "message": body,
+                "priority": priority,
+                "sound": sound,
+                "html": 1,  # enables <a href> links in the message body
+                **kwargs,
+            }
 
-        # Emergency priority requires retry + expire
-        if priority == 2:
-            payload.setdefault("retry", 30)    # retry every 30 seconds (more aggressive)
-            payload.setdefault("expire", 3600)  # stop after 1 hour
+            # Emergency priority requires retry + expire
+            if priority == 2:
+                payload.setdefault("retry", 30)    # retry every 30 seconds (more aggressive)
+                payload.setdefault("expire", 3600)  # stop after 1 hour
 
-        # URL for deep link (supplementary — body already has HTML links)
-        if url:
-            payload["url"] = url
-            payload["url_title"] = "阅读原文"
+            # URL for deep link (supplementary — body already has HTML links)
+            if url:
+                payload["url"] = url
+                payload["url_title"] = "阅读原文"
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(PUSHOVER_API, json=payload, timeout=10) as resp:
-                    if resp.status == 200:
-                        logger.info("Pushover sent [priority=%d]: %s", priority, title[:60])
-                        return True
-                    else:
-                        body_text = await resp.text()
-                        logger.error("Pushover failed [%d]: %s", resp.status, body_text[:200])
-                        return False
-        except Exception as e:
-            logger.error("Pushover error: %s", e)
-            return False
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(PUSHOVER_API, json=payload, timeout=10) as resp:
+                        if resp.status == 200:
+                            logger.info("Pushover sent [priority=%d, user=%s...]: %s",
+                                        priority, user_key[:8], title[:60])
+                            success_count += 1
+                        else:
+                            body_text = await resp.text()
+                            logger.error("Pushover failed [%d, user=%s...]: %s",
+                                         resp.status, user_key[:8], body_text[:200])
+            except Exception as e:
+                logger.error("Pushover error [user=%s...]: %s", user_key[:8], e)
+
+        return success_count > 0
 
     async def _pushover_emergency(self, item: dict) -> bool:
         """Emergency Pushover: repeats every 30s until user acknowledges."""
@@ -375,21 +490,22 @@ class AlertDispatcher:
         async def _push(item: dict, disable_notification: bool = True) -> None:
             from bot.formatters import format_fast_alert, build_feedback_keyboard
 
-            chat_id = bot._get_chat_id()
-            if not chat_id:
+            chat_ids = bot._get_chat_ids()
+            if not chat_ids:
                 return
 
             text = format_fast_alert(item)
             keyboard = build_feedback_keyboard(item.get("id", 0))
 
-            try:
-                await bot._app.bot.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    reply_markup=keyboard,
-                    disable_notification=disable_notification,
-                )
-            except Exception as e:
-                logger.error("Telegram dispatch failed: %s", e)
+            for cid in chat_ids:
+                try:
+                    await bot._app.bot.send_message(
+                        chat_id=cid,
+                        text=text,
+                        reply_markup=keyboard,
+                        disable_notification=disable_notification,
+                    )
+                except Exception as e:
+                    logger.error("Telegram dispatch failed → chat %s: %s", cid, e)
 
         return _push
