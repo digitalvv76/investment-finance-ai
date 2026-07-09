@@ -43,6 +43,48 @@
 
 ---
 
+## 2026-07-08T15:05+08:00 · V2 Phase 4a+4b + 本地测试环境
+
+### V2 管道 (`98b0e3f`)
+- Phase 4a: scheduler 并行化 (fetch 阶段并发)
+- Phase 4b: VLM 视觉兜底 (截图 → 视觉模型解析)
+
+### 本地影子测试器 (`9ad534c`)
+- 新建 `news-monitor/scripts/run_v2_local.py` (129 行)
+- 独立测试库 `data/v2_test.db` (monkey-patch DB 路径，不碰 settings.yaml)
+- 推送全关 (Telegram + Pushover token 置空, WEB_PORT=0)
+- `--duration N` 定时自停, 退出自动清库 (`--keep-db` 保留)
+- 用法: `python scripts/run_v2_local.py --duration 600 [-v]`
+
+### 会话同步 (`30261d1`)
+
+---
+
+## 2026-07-08T22:21+08:00 · V2 LLM urgency 迁移 + ECS CPU 宕机修复
+
+### V2 采纳 V1 紧急度分类 (`6bcb018`)
+- V2 引入 V1 的 LLM urgency classification + Actionability Review
+- 会话同步 (`8040cce`)
+
+### ECS CPU 饱和根因修复 (`87fbf35`)
+- **诊断**: WallstreetCN DOM 变更 (07:09 UTC) → wait_for_selector 146 次超时; Chrome 子进程泄漏 (295 进程 + 100 zombie); PlaywrightFetcher page 泄露 (异常路径不 close); 容器无 PidsLimit
+- **修复**: WallstreetCN + Sina 新 DOM selector (`state: attached`); 浏览器每 2h 自动重启; `finally page.close()`; PidsLimit=200
+- **结果**: CPU 14% idle → 95% idle; zombie 100 → 0; 采集失败 0; Sina 0→20 items, WallstreetCN 超时→15 items
+
+### 踩坑
+- DOM selector 用 `state: attached` 而非默认 `visible`，避免懒加载/动画导致的超时
+- 长驻 Playwright 浏览器必须设进程数上限 (PidsLimit) + 定期重启，否则子进程泄漏拖垮 CPU
+
+---
+
+## 2026-07-09 · 补债会话 — HISTORY/manifest 对齐
+
+- 注册 `scripts/run_v2_local.py` 到 `news-monitor/scripts/__manifest__.json` (消除 session_startup 误报)
+- 补录 07-08 下午→晚间三段缺失记录 (V2 Phase 4, 本地测试器, LLM urgency, ECS CPU 修复)
+- 说明: manifest 检查误报根因是相对路径不匹配 (真实路径 `news-monitor/scripts/`)
+
+---
+
 ## 2026-07-03 · 会话 — P0 数据源扩展：Twitter + 中国金融新闻
 
 ### P0 任务结果总览
@@ -1186,3 +1228,7 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 ---
 
 ## 2026-07-08T21:45+08:00 · 会话开始
+
+---
+
+## 2026-07-09T09:08+08:00 · 会话开始

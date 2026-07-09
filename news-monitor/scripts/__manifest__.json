@@ -46,6 +46,11 @@
       "related_scripts": [],
       "also_tests": []
     },
+    "scripts/run_v2_local.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
     "scripts/score_all_events.py": {
       "tests": [],
       "related_scripts": [],
