@@ -1,0 +1,39 @@
+{
+  "modules": {
+    "pipeline/item.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": ["tests/test_pipeline_ingest.py", "tests/test_pipeline_screen.py", "tests/test_pipeline_evaluate.py", "tests/test_pipeline_dispatch.py"]
+    },
+    "pipeline/ingest.py": {
+      "tests": ["tests/test_pipeline_ingest.py"],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "pipeline/screen.py": {
+      "tests": ["tests/test_pipeline_screen.py"],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "pipeline/evaluate.py": {
+      "tests": ["tests/test_pipeline_evaluate.py"],
+      "related_scripts": [],
+      "also_tests": ["tests/test_alert_dispatcher.py"]
+    },
+    "pipeline/dispatch.py": {
+      "tests": ["tests/test_pipeline_dispatch.py"],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "pipeline/deep.py": {
+      "tests": ["tests/test_pipeline_deep.py"],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "pipeline/channel.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": ["tests/test_pipeline_dispatch.py", "tests/test_alert_dispatcher.py"]
+    }
+  }
+}
