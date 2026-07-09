@@ -17,11 +17,21 @@
 3. **🔴 8080 公网裸奔** — 随下次「孤儿代码合并+部署」一并修
 4. ~~HISTORY.md 补录 19 commits~~ ✅ 已完成
 
-## ⏳ 当前会话 — 收尾中
+## ⏳ 当前会话 — 已完成
 
 - [x] HISTORY.md 19 commit 哈希补录
-- [ ] commit + push v1-stable
-- [ ] `dev_checklist.py`
+- [x] commit + push v1-stable
+- [x] 合并 rescue/ecs-prod-drift-20260708 孤儿代码 → v1-stable
+- [x] 修复 4 个预存测试失败 (338 passed, 0 failed)
+- [x] ECS 部署事件升级推送 (DB migration + deploy.sh 缺 loader.py 修复 + rebuild)
+- [x] 容器 healthy，event-escalation 就绪
+
+## 📋 下一步
+
+1. **观察生产 sweep** — 等新闻聚类出 event_line 后，观察 EventEscalator 三段式推送是否正常
+2. **8080 公网裸奔** — Vercel 改走 :80 认证 + 8080 收内网
+3. **轮换 root 密码 + 凭证备份**（非紧急）
+4. **cherry-pick 事件升级回 main**（验证通过后）
 
 ## ⚠️ 铁律
 

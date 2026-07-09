@@ -70,7 +70,8 @@ ENV WEB_USERNAME=""
 ENV WEB_PASSWORD=""
 
 # Health check: hit the /health endpoint (no auth required)
-HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+# Longer timeout+retries to tolerate LLM-heavy batch processing (155 items × 3 concurrent LLM calls)
+HEALTHCHECK --interval=60s --timeout=30s --start-period=240s --retries=5 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 CMD ["python", "main.py"]

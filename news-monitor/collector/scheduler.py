@@ -160,7 +160,7 @@ class NewsScheduler:
 
         if items:
             logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api)")
-            await self._insert_and_notify(items)
+            asyncio.create_task(self._insert_and_notify(items))
 
     async def _scraper_tick(self):
         """Web scraper tick: runs every 60s, independent of heartbeat."""
@@ -170,7 +170,7 @@ class NewsScheduler:
         )
         if items:
             logger.info(f"Scraper: {len(items)} items")
-            await self._insert_and_notify(items)
+            asyncio.create_task(self._insert_and_notify(items))
 
     async def _safe_fetch(self, coro_or_items, label: str) -> list:
         """Await a coroutine or return a list, catching and logging errors.

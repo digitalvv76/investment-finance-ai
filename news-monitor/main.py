@@ -213,7 +213,11 @@ class NewsMonitor:
             _impact_cfg.get("max_concurrent_llm", 3)
         )
 
-        for item in pushed:
+        for idx, item in enumerate(pushed):
+            # Yield every 5 items to keep web server responsive
+            if idx % 5 == 0:
+                await asyncio.sleep(0)
+
             # Persist the enriched fields from fast-lane processing.
             self.db.update_news_status(
                 item.id,
