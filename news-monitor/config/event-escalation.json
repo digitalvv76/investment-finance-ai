@@ -1,0 +1,12 @@
+{
+  "alert_trigger": { "min_source_count": 3, "min_peak_impact": 70, "active_window_hours": 12 },
+  "market_confirm": {
+    "spx_pct": 0.2, "vix_pct": 5.0, "brent_pct": 0.5,
+    "time_aligned": true, "direction_gated": true,
+    "oil_relevant_categories": ["geopolitical", "macro_data"]
+  },
+  "close": { "reversal_retrace_pct": 50, "silence_hours": 6 },
+  "cooldown_hours": 3,
+  "max_pushes_per_event": 3,
+  "sweep_interval_minutes": 5
+}
