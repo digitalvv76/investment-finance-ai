@@ -42,6 +42,7 @@ from engine.trainer import Trainer
 from engine.alert_dispatcher import AlertDispatcher, AlertLevel
 from engine.strategic_detector import StrategicDetector
 from engine.impact_evaluator import ImpactEvaluator
+from engine.event_driven_evaluator import EventDrivenEvaluator
 from engine.impact_learner import ImpactLearner
 from engine.event_matcher import EventMatcher
 from engine.relevance import signal_score, get_portfolio_summary
@@ -143,11 +144,13 @@ class NewsMonitor:
 
         # ---- impact evaluator (LLM, async, isolated) --------
         self.impact_evaluator = ImpactEvaluator()
+        self.event_evaluator = EventDrivenEvaluator()
         self.impact_learner = ImpactLearner()
         self.event_matcher = EventMatcher()
         self.actionability_reviewer = ActionabilityReviewer()
         logger.info("ImpactEvaluator initialized (threshold=%.2f, event_matcher=%d events)",
                     ImpactEvaluator.THRESHOLD, self.event_matcher.event_count)
+        logger.info("EventDrivenEvaluator initialized (prompt v1, temperature=0)")
         logger.info("Portfolio/Relevance: %s", get_portfolio_summary())
 
         # ---- Telegram bot -------------------------------------------
@@ -208,6 +211,7 @@ class NewsMonitor:
                 dispatcher=self.alert_dispatcher,
                 actionability_reviewer=self.actionability_reviewer,
                 db=self.db,
+                event_evaluator=self.event_evaluator,
             ),
             DispatchStage(channels=channels),
             DeepStage(deep_lane=self.deep_lane),

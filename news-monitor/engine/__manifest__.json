@@ -99,6 +99,11 @@
       "tests": [],
       "related_scripts": [],
       "also_tests": ["tests/test_event_escalator.py"]
+    },
+    "engine/event_driven_evaluator.py": {
+      "tests": ["tests/test_event_driven_evaluator.py"],
+      "related_scripts": [],
+      "also_tests": []
     }
   }
 }

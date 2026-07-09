@@ -29,6 +29,14 @@ class DispatchDecision:
     needs_deep: bool = False
     event_category: str = ""
     strategic_matches: list = field(default_factory=list)
+    # ── Event-driven evaluation fields ──
+    event_types: list[int] = field(default_factory=list)  # catalyst type codes 1-5
+    intensity: int = 0           # 1-5 stars, only meaningful when is_event=True
+    sector_tags: list[str] = field(default_factory=list)
+    headline_signal: str = ""    # 中文一句话交易逻辑
+    ticker_hint: list[str] = field(default_factory=list)
+    risk_snapshot: str = ""      # 中文最大风险点
+    filter_reason: str = ""      # 过滤原因（非事件时）
 
 
 @dataclass

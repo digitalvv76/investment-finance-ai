@@ -3,9 +3,29 @@
 > 🔔 **[2026-07-09 来自 V1 窗口] ECS 灰度前必读交接 → [`.claude/V1-TO-V2-HANDOFF.md`](V1-TO-V2-HANDOFF.md)**
 > 含：今天的安全修复(`cab7d4f` 已在 main，含生死攸关的 `../config` 卷路径)、V2≠V1 提醒、灰度架构坑、**需先与用户确认 A/B 方案**。开工先读它。
 
-> 最后更新: 2026-07-09 (收工 — 孤儿代码移植 P1+P3 完成)
+> 最后更新: 2026-07-10 (事件驱动评估引擎上线)
 
-## ✅ 本次完成 (2026-07-09 · 晚)
+## ✅ 本次完成 (2026-07-10 · 凌晨)
+
+### 事件驱动评估引擎 (替换 LLM 自由打分)
+- **用户规则**: 三步判断 (相关性初筛 → 五类催化剂 → 强度1-5星)，temperature=0，结构化 JSON
+- **prompt**: `config/prompts/event_driven_v1.txt` — 用户口述规则完整版
+- **引擎**: `engine/event_driven_evaluator.py` — LLM 调用 + JSON 解析 + should_push 判断
+- **管道集成**: `EvaluateStage` 优先走事件驱动，不触发催化剂时 fallback 旧 ImpactEvaluator
+- **决策**: `is_event=true + intensity≥3` 才推，headline_signal/risk_snapshot 中文
+- **测试**: 392 passed / 0 failed (+15 新测试)
+
+### V1 交接已读
+- `.claude/V1-TO-V2-HANDOFF.md` 4 点已消化
+- 安全修复已在 main (`cab7d4f`)
+- 灰度 A/B 待用户拍板
+
+## 📋 下一步
+
+- 🎯 **灰度方式 A/B**: 用户拍板影子并行还是直接切
+- 🏭 搭影子环境 → V2 隔离跑 → 对比 V1
+
+## ✅ 之前完成 (2026-07-09 · 晚)
 
 ### 孤儿代码移植 P1 + P3 (main, 9 文件, 377 tests 绿)
 

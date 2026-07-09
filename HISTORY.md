@@ -4,6 +4,43 @@
 
 ---
 
+## 2026-07-10T00:22+08:00 · 🧠 事件驱动评估引擎 — 替换 LLM 自由打分
+
+> 用户提供三步判断规则（相关性初筛→五类催化剂→强度1-5星），替代旧 LLM 自由评分。temperature=0，结构化 JSON 输出，中文推送。
+
+### 新增文件
+- `config/prompts/event_driven_v1.txt` — 用户口述规则的完整 prompt 模板（三步法+五类催化剂+中文输出）
+- `engine/event_driven_evaluator.py` — EventDrivenEvaluator + EventAssessment dataclass
+  - 双 provider (DeepSeek→Anthropic)，same pattern as ImpactEvaluator
+  - `EventAssessment.from_json()` — JSON 解析+markdown 包裹剥离+类型强制
+  - `should_push` = is_event=True + intensity≥3
+  - `alert_level`: intensity≥5→critical, 3-4→important
+- `tests/test_event_driven_evaluator.py` — 15 tests (JSON 解析/边界/决策逻辑)
+
+### 修改文件
+- `pipeline/item.py`: DispatchDecision 新增 event_types/intensity/sector_tags/headline_signal/ticker_hint/risk_snapshot/filter_reason
+- `pipeline/evaluate.py`: EvaluateStage 新增 Path A (EventDrivenEvaluator 优先)，Path B (旧 ImpactEvaluator fallback)
+  - `_apply_event_assessment()` — 映射 intensity→alert_level，填充所有新字段
+  - 事件驱动判断"不推"时，直接用 filter_reason 设 NORMAL
+- `main.py`: 实例化 EventDrivenEvaluator + 注入 EvaluateStage
+- `engine/__manifest__.json`: 注册 event_driven_evaluator
+
+### 决策流程变化
+```
+旧: SCREEN → ImpactEvaluator(LLM自由打分0-100) → AlertDispatcher.classify → push?
+新: SCREEN → EventDrivenEvaluator(三步判断,JSON) → is_event+intensity≥3 → push?
+              ↓ (不触发催化剂)
+              ImpactEvaluator(legacy fallback) → old classify
+```
+
+### 测试
+- **392 passed / 0 failed / 0 errors** (+15 新)
+
+### V1 交接
+- 已读 `.claude/V1-TO-V2-HANDOFF.md`: 安全修复已在 main、V2≠V1、灰度架构坑、A/B 待拍板
+
+---
+
 ## 2026-07-08T11:20+08:00 · V1 爬虫提速
 
 ### 改动
