@@ -1,4 +1,5 @@
 """Configuration loader with env var interpolation and validation."""
+import json
 import logging
 import os
 import re
@@ -141,6 +142,14 @@ class ConfigLoader:
         if 'keywords' not in self._cache:
             self._cache['keywords'] = self._load_yaml('keywords.yaml')
         return self._cache['keywords']
+
+    def load_event_escalation(self) -> dict:
+        """Load event-escalation thresholds (config/event-escalation.json)."""
+        if 'event_escalation' not in self._cache:
+            path = self.config_dir / 'event-escalation.json'
+            with open(path, 'r', encoding='utf-8') as f:
+                self._cache['event_escalation'] = json.load(f)
+        return self._cache['event_escalation']
 
     def reload(self):
         self._cache.clear()
