@@ -42,10 +42,13 @@ services:
     environment:
       # Always enable web dashboard in container
       - WEB_PORT=8080
-      - WEB_DASHBOARD_URL=http://47.76.50.77:8080
-      # Basic Auth credentials (from .env, empty = no auth)
-      - WEB_USERNAME=${WEB_USERNAME:-}
-      - WEB_PASSWORD=${WEB_PASSWORD:-}
+      # Phone links must go through Vercel HTTPS proxy, never raw IP
+      # (see memory: vercel-proxy-architecture)
+      - WEB_DASHBOARD_URL=https://class1-cyan.vercel.app
+      # NOTE: WEB_USERNAME / WEB_PASSWORD are injected via env_file (../../.env).
+      # Do NOT declare them here with ${VAR:-} substitution — compose resolves
+      # ${VAR} against the compose-dir .env (which does not exist), producing an
+      # EMPTY value that overrides env_file and silently disables Basic Auth.
       - TZ=America/New_York
       # ECS has direct internet — override dev proxy from .env
       - HTTPS_PROXY=

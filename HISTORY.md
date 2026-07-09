@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-07-09 · 会话 — 修复 8080 公网裸奔 (启用应用层 Basic Auth)
+
+### 根因
+- 实测：外部无认证 GET `/api/stats` 等返回 200 吐真实数据，连错误密码也 200 → 认证完全未生效
+- 定位：容器内 `WEB_USERNAME` 为空（`printenv` len=1）；`.env` 有凭证、`server.py:107` 已注册中间件、`web/auth.py` 逻辑正确
+- **真凶**: `docker-compose.yml` 的 `environment:` 块写了 `WEB_USERNAME=${WEB_USERNAME:-}`。compose 变量替换只读 compose 同目录 `.env`（不存在）→ 解析为空串；且 `environment:` 优先级高于 `env_file:` → 覆盖掉 env_file 注入的真凭证 → 中间件判定"未配置认证"→ 透传裸奔
+
+### 修复
+- `docker/docker-compose.yml`: 删除 `WEB_USERNAME`/`WEB_PASSWORD` 的 `${..:-}` 覆盖行，改由 `env_file: ../../.env` 注入；`WEB_DASHBOARD_URL` 从裸 IP 改为 `https://class1-cyan.vercel.app`（符合 vercel-proxy 铁律）
+- `deploy.sh`: FILES 数组加入 `news-monitor/docker/docker-compose.yml`（此前 compose 从不被部署，是一直没修好的原因）
+
+### 影响面核实（改动安全）
+- 手机深度分析链接 `/api/news/{id}/analyze` → `auth.py:52` 已豁免 → 不受影响
+- Vercel 托管页面（index/briefing/datetime/nvda）→ 不调用被锁接口 → 不受影响
+- 泄露的 `/api/stats`、`/api/news/recent`、`/api/alerts/history` + 写接口 → 变 401（目的达成）
+
 ## 2026-07-08T15:05+08:00 · V1 内容过滤 + LLM urgency 重构
 
 ### 中文内容分层 (`c75efa2`)
@@ -1243,3 +1259,7 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - 🧠 EventEscalator sweep 就绪, 等新闻聚类出 event_line
 - ⚠️ 新浪财经 API 全 403, 仅靠华尔街见闻 (17 条/轮)
 - ⚠️ 8080 公网裸奔 (未修)
+
+---
+
+## 2026-07-09T22:07+08:00 · 会话开始

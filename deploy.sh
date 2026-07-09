@@ -93,6 +93,7 @@ FILES=(
     "news-monitor/config/prompts/impact_v1.txt"
     "news-monitor/config/module_registry.json"
     "news-monitor/config/event-escalation.json"
+    "news-monitor/docker/docker-compose.yml"
     "news-monitor/pipeline/item.py"
     "news-monitor/pipeline/ingest.py"
     "news-monitor/pipeline/screen.py"
