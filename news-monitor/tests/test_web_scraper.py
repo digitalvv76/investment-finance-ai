@@ -53,6 +53,19 @@ class TestVlmStateMachine:
         result = scraper._should_use_vlm("CNBC", 2)
         assert result is True  # Still in VLM mode
 
+
+class TestRetiredSources:
+    """Guard against re-adding scrapers for anti-bot-blocked sources."""
+
+    def test_marketwatch_scraper_retired(self):
+        """MarketWatch homepage sits behind DataDome (HTTP 401 to headless
+        Chromium → zero <a> tags). It is covered by the Dow Jones RSS feed
+        instead. Do NOT re-add a homepage scraper — it only wastes a browser
+        page load and a VLM screenshot on a blank challenge page.
+        """
+        scraper = WebScraper()
+        assert not hasattr(scraper, "_scrape_marketwatch")
+
     def test_vlm_cooldown_expired_css_still_low_re_triggers(self):
         """After cool-down, if CSS still returns too few, VLM re-fires."""
         scraper = WebScraper()

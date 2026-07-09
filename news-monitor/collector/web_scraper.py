@@ -135,7 +135,8 @@ class WebScraper:
             self._scrape_sina(),
             self._scrape_wallstreetcn(),
             self._scrape_cnbc(),
-            self._scrape_marketwatch(),
+            # MarketWatch homepage is behind DataDome (HTTP 401 to headless
+            # Chromium → 0 links). Covered by the mw_topstories RSS feed instead.
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -528,59 +529,8 @@ class WebScraper:
     # ------------------------------------------------------------------
     # MarketWatch
     # ------------------------------------------------------------------
-
-    async def _scrape_marketwatch(self) -> List[NewsItem]:
-        """Scrape marketwatch.com homepage headlines."""
-        items: List[NewsItem] = []
-        page = None
-        try:
-            page = await self._browser.new_page()
-            await page.set_extra_http_headers({"User-Agent": UA})
-            await page.goto("https://www.marketwatch.com/",
-                           wait_until="domcontentloaded",
-                           timeout=SCRAPE_TIMEOUT)
-            await asyncio.sleep(2)
-
-            headlines = await page.evaluate("""() => {
-                const items = [];
-                const seen = new Set();
-                const links = document.querySelectorAll('a[href]');
-                for (const a of links) {
-                    const href = a.href || '';
-                    const title = (a.textContent || '').trim();
-                    // MarketWatch article URLs contain /story/ or year/month patterns
-                    if (title.length > 20 && !seen.has(href) && href.includes('marketwatch.com') && !href.includes('/quote/')) {
-                        seen.add(href);
-                        items.push({title: title.substring(0, 200), url: href});
-                    }
-                }
-                return items.slice(0, 15);
-            }""")
-
-            for h in headlines:
-                items.append(NewsItem(
-                    title=h["title"],
-                    url=h["url"],
-                    source="MarketWatch",
-                    content_snippet=h["title"],
-                ))
-
-            if not items:
-                # Debug: dump raw link count
-                raw = await page.evaluate("document.querySelectorAll('a[href]').length")
-                logger.warning("WebScraper: MarketWatch → 0 items (page had %d links)", raw)
-            else:
-                logger.info("WebScraper: MarketWatch → %d items", len(items))
-
-            # VLM fallback if CSS returned too few
-            if self._should_use_vlm("MarketWatch", len(items)):
-                vlm_headlines = await self._vlm_extract(page, "MarketWatch")
-                if vlm_headlines:
-                    items = self._vlm_items_to_news(vlm_headlines, "MarketWatch")
-
-        except Exception as e:
-            logger.warning("WebScraper: MarketWatch scrape failed: %s", e)
-        finally:
-            if page:
-                await page.close()
-        return items
+    # Homepage scraper retired 2026-07-09: marketwatch.com is protected by
+    # DataDome, which serves HTTP 401 + a JS-challenge shell (zero <a> tags)
+    # to headless Chromium. Top stories are ingested via the Dow Jones RSS
+    # feed (config/sources.yaml → mw_topstories) instead. See the Bloomberg
+    # note in sources.yaml for the same anti-bot precedent.

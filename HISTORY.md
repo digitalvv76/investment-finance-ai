@@ -83,6 +83,14 @@
 - 补录 07-08 下午→晚间三段缺失记录 (V2 Phase 4, 本地测试器, LLM urgency, ECS CPU 修复)
 - 说明: manifest 检查误报根因是相对路径不匹配 (真实路径 `news-monitor/scripts/`)
 
+### MarketWatch scraper 返回 0 — 根因修复
+- **根因** (系统化调试): marketwatch.com 首页受 **DataDome** 反爬保护，对 headless Chromium 返回 **HTTP 401 + JS 挑战壳页 (零 `<a>` 标签)**。真实浏览器 189 链接/78 通过过滤，headless total=0。非选择器问题。
+- **证据**: headless 复现 status=401, body_innertext_len=0, html 含 `var dd={'rt':'c'...}` + `data-cfasync` + `#cmsg` (DataDome 签名)
+- **修复**: 退役 `_scrape_marketwatch` 首页爬虫，改走已有 Dow Jones RSS (`mw_topstories`, 验证 10 条实时头条覆盖)。遵循 sources.yaml 中 Bloomberg 同类反爬先例
+- **附带收益**: 消除每轮对空白 401 页的 browser page 加载 + VLM 截图浪费 (与 07-08 CPU 饱和修复方向一致)
+- **测试**: 新增 `TestRetiredSources::test_marketwatch_scraper_retired` 守护 (19/19 pass)
+- ⚠️ **待办**: v1-stable 同样含此爬虫，需在 V1 窗口 cherry-pick + 部署 ECS 才能让 V1 生产同步收益
+
 ---
 
 ## 2026-07-03 · 会话 — P0 数据源扩展：Twitter + 中国金融新闻
