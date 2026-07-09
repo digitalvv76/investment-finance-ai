@@ -77,13 +77,13 @@
 
 ---
 
-## 2026-07-09 · 补债会话 — HISTORY/manifest 对齐
+## 2026-07-09 · 补债会话 — HISTORY/manifest 对齐 (`20a8537`)
 
 - 注册 `scripts/run_v2_local.py` 到 `news-monitor/scripts/__manifest__.json` (消除 session_startup 误报)
 - 补录 07-08 下午→晚间三段缺失记录 (V2 Phase 4, 本地测试器, LLM urgency, ECS CPU 修复)
 - 说明: manifest 检查误报根因是相对路径不匹配 (真实路径 `news-monitor/scripts/`)
 
-### MarketWatch scraper 返回 0 — 根因修复
+### MarketWatch scraper 返回 0 — 根因修复 (`6cf390a`)
 - **根因** (系统化调试): marketwatch.com 首页受 **DataDome** 反爬保护，对 headless Chromium 返回 **HTTP 401 + JS 挑战壳页 (零 `<a>` 标签)**。真实浏览器 189 链接/78 通过过滤，headless total=0。非选择器问题。
 - **证据**: headless 复现 status=401, body_innertext_len=0, html 含 `var dd={'rt':'c'...}` + `data-cfasync` + `#cmsg` (DataDome 签名)
 - **修复**: 退役 `_scrape_marketwatch` 首页爬虫，改走已有 Dow Jones RSS (`mw_topstories`, 验证 10 条实时头条覆盖)。遵循 sources.yaml 中 Bloomberg 同类反爬先例
@@ -91,7 +91,7 @@
 - **测试**: 新增 `TestRetiredSources::test_marketwatch_scraper_retired` 守护 (19/19 pass)
 - ⚠️ **待办**: v1-stable 同样含此爬虫，需在 V1 窗口 cherry-pick + 部署 ECS 才能让 V1 生产同步收益
 
-### 工作区清债 — 未跟踪文件三分类
+### 工作区清债 — 未跟踪文件三分类 (`642dcba`)
 - **提交**: `data/holidays.json` (配置, 被 exchange_calendar/impact_collector 读取), `news-monitor/pytest.ini`, `news-monitor/tests/conftest.py`, `docs/news-monitor-prompts.md`, `docs/phone-notification-guide.md`, `scripts/ecs_io_monitor.py`, `scripts/test_signal.py`
 - **gitignore**: `data/news.db` (运行时 DB), `data/chroma/` (向量库), `news-monitor/temp_feedback.docx` (临时)
 - **不动**: 3 个过时脚本告警 (test_phone_alert/test_new_fetchers/acceptance_test) 为纯 mtime 咨询性，非损坏；test_phone_alert 会真推送故不跑
@@ -101,7 +101,7 @@
 - 启动健康: 心跳 282 items, RSS 90/中文 98/scraper(CNBC15+Sina20+WSCN15), 去重 112/282
 - MarketWatch 修复实跑确认: 无 scraper 尝试、RSS 覆盖 10 条
 
-### 影子测试三大发现 — 深挖 + 修复
+### 影子测试三大发现 — 深挖 + 修复 (`fe9d481`)
 - **#1 (真缺口, 已修)**: `insert_assessment()` 全项目零调用 → 评估结果从不持久化 → 校准脚本饿死。修复: EvaluateStage 加 `db` 参数, 评估后 `insert_assessment(impact)`, `item.id` 守护防悬空 FK; main.py 接线 `db=self.db`; 3 个 TDD 测试。**验证: 新跑 impact_assessments 15 行 (原 0), FK 0 悬空**
 - **#2 (非 bug, 设计正确)**: Deep lane 对 0.4–0.69「重要不紧急」项标记 on-demand (用户点击才深度分析)。16 条 fast_pushed 全在此区间, 行为正确。窗口内无 >0.69 紧急项故未见自动深度。不改
 - **#3 (软噪音, 已修)**: `_validate_output` reasoning_chain 步数校验 `==5` → `4–6` 区间, 消除 "6 steps" explainability 噪音; degenerate 链(<4)仍拦截; 2 个测试

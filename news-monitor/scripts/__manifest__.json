@@ -71,6 +71,11 @@
       "related_scripts": [],
       "also_tests": []
     },
+    "scripts/session_end_backfill.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
     "scripts/sync_env_to_settings.py": {
       "tests": [],
       "related_scripts": [],
