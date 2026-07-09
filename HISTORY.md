@@ -1195,3 +1195,51 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 | `01ec40e` | docs: session shutdown — test failures noted, session closed |
 
 > 19 commits 全量补录完成。事件升级功能 14 commit READY，部署阻断于孤儿代码合并。
+
+---
+
+## 2026-07-09T17:19+08:00 · 会话 — 孤儿代码合并 + 事件升级部署 + 生产稳定性修复
+
+### Phase 1: 合并孤儿代码 (`8d1bc5a`)
+- 合并 `rescue/ecs-prod-drift-20260708` → v1-stable (45 files, +3457/-476)
+- 删除冗余文件: collector/sources.yaml, config/sources.yaml.bak
+- 保留 playwright_fetcher.py page.close() in finally (rescue 修复)
+- 修复 4 预存测试: test_impact_push ×3 (reason 格式) + test_scheduler (AAPL→NVDA)
+- 338 passed, 0 failed, 6 ChromaDB errors (Windows)
+
+### Phase 2: ECS 部署 (`2ae259a`, `bba989a`)
+- 更新 deploy.sh: 加 event_escalator.py, market_snapshot.py, loader.py, event-escalation.json
+- DB migration 直接 SQL (旧容器无 migrate_event_escalation 方法)
+- 19 files synced → Docker rebuild → healthy
+
+### Phase 3: 容器 unhealthy 修复 (`acc4f5c`)
+- **根因**: on_news_batch 被 await 在主 tick 中, 155 items × LLM 调用堵死事件循环 5-10 min
+- 修复: _insert_and_notify 改为 asyncio.create_task 后台执行, tick 立即返回
+- main.py 每 5 items yield (asyncio.sleep(0))
+- Dockerfile HEALTHCHECK: timeout 10s→30s, retries 3→5, start-period 120s→240s
+- 验证: 容器稳定 1h+, Pushover+Telegram 正常
+
+### Phase 4: 关注清单推送漏报修复 (`3cc7d59`, `436dd40`)
+- **问题**: 特斯拉 Optimus 定型 (impact=20) 被 min_impact_for_push=30 拦截
+- **修复 1**: 关注清单/持仓股票 min_push 从 30→20
+- **问题 2**: 华尔街见闻中文新闻 symbols[] 为空, 无 ticker → 无法匹配关注清单
+- **修复 2**: chinese_fetcher 新增 _CN_TICKER_MAP (45+ 中英文映射) + _detect_tickers_from_text()
+- 验证: 特斯拉→TSLA, 英伟达→NVDA ✅
+
+### 提交记录
+| Commit | 说明 |
+|--------|------|
+| `0ceb120` | docs: session wrap-up — HISTORY backfill 19 commits |
+| `8d1bc5a` | fix: merge rescue orphan code + fix 4 pre-existing test failures |
+| `2ae259a` | chore: add event-escalation files to deploy.sh |
+| `bba989a` | fix: add config/loader.py to deploy.sh |
+| `acc4f5c` | fix: prevent container unhealthy during LLM-heavy batch processing |
+| `3cc7d59` | fix: lower min_impact_for_push to 20 for watchlist stocks |
+| `436dd40` | fix: detect US tickers from Chinese company names |
+
+### 生产状态
+- 🟢 ECS 容器 healthy, 负载 0.12
+- 📱 Pushover + Telegram 双通道正常
+- 🧠 EventEscalator sweep 就绪, 等新闻聚类出 event_line
+- ⚠️ 新浪财经 API 全 403, 仅靠华尔街见闻 (17 条/轮)
+- ⚠️ 8080 公网裸奔 (未修)
