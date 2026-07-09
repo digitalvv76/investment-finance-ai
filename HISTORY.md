@@ -20,6 +20,16 @@
 - Vercel 托管页面（index/briefing/datetime/nvda）→ 不调用被锁接口 → 不受影响
 - 泄露的 `/api/stats`、`/api/news/recent`、`/api/alerts/history` + 写接口 → 变 401（目的达成）
 
+### 部署踩坑 — 又一处孤儿漂移
+- 首次 deploy 推上 git 版 compose 后容器起不来：卷挂载 `./config/sources.yaml`（=`docker/config/`，不存在）→ docker 误建目录 → mount 失败 → **生产短暂 DOWN**
+- 真相：真实文件在 `../config/sources.yaml`；服务器此前跑的是**未提交的孤儿修正 compose**，git 版路径一直是错的（[[ecs-prod-drift]] 再现）
+- 修复 `63b1c4e`：`./config` → `../config`，清理误建目录，git 与现实对齐
+
+### 提交 + 验证
+- Commits: `e0439cd`（认证修复）+ `63b1c4e`（卷路径修复）on v1-stable
+- 重建后容器 healthy(41s)；7 项验证全过：无认证/错误密码→401，正确密码→200，`/health`+深度分析链接→200，Vercel 代理无认证→401
+- 容器内 `WEB_USERNAME` len=6（非空，认证真正生效）
+
 ## 2026-07-08T15:05+08:00 · V1 内容过滤 + LLM urgency 重构
 
 ### 中文内容分层 (`c75efa2`)
