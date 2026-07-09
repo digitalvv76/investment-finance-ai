@@ -1323,3 +1323,27 @@ in-session recording (Layer 2, deferred).
 **红线遵守**: ECS 工作副本原封未动, 未部署, 未 cherry-pick v1-stable。
 
 **后续 (独立任务)**: 与 v1-stable 事件升级功能合并 + 测试, 通过后才能部署。另: 服务器安全加固 (root 弱密码 + SSH 密码登录) 待办。
+
+## 2026-07-09T16:20 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 6f90602 · 2026-07-09T13:21 · docs: cite real hash 4c21bd3 in HISTORY test-debt entry [skip-tests]
+
+---
+
+### 073a25a · 2026-07-09T13:21 · docs: SESSION.md — test debt cleared, next up V2 gray rollout [skip-tests]
+
+---
+
+### 9f5f261 · 2026-07-09T15:04 · docs: HISTORY — 生产孤儿代码归档进 rescue/ecs-prod-drift-20260708 [skip-tests]
+
+---
+
+### 5ae622e · 2026-07-09T16:17 · docs: SESSION.md — 2026-07-09 收工 (测试债清零 + 孤儿代码归档 + 纪律固化) [skip-tests]
+
+---
+
+---
+
+## 2026-07-09T17:16+08:00 · 会话开始
