@@ -26,17 +26,16 @@ class TestImpactPushClassification:
             0.5, [], impact_assessment=assessment, rel_mult=1.0,
         )
         assert level == AlertLevel.CRITICAL
-        assert "high_impact" in reason
-        assert "87" in reason  # composite ≈ 87
+        assert "composite=87" in reason  # reason format: composite=87.0 (impact=90 conf=80)
 
     def test_moderate_impact_triggers_important(self):
-        """impact=60, conf=55, rel=1.0 → composite=58.5 → IMPORTANT"""
-        assessment = StubImpactAssessment(impact_score=60, confidence=55)
+        """impact=50, conf=50, rel=1.0 → composite=50.0 → IMPORTANT (band 45–55)"""
+        assessment = StubImpactAssessment(impact_score=50, confidence=50)
         level, reason = self.dispatcher.classify(
             0.4, [], impact_assessment=assessment, rel_mult=1.0,
         )
         assert level == AlertLevel.IMPORTANT
-        assert "moderate_impact" in reason
+        assert "composite=50" in reason
 
     def test_low_impact_stays_normal(self):
         """impact=30, conf=40, rel=1.0 → composite=33 → NORMAL"""
@@ -45,7 +44,7 @@ class TestImpactPushClassification:
             0.3, [], impact_assessment=assessment, rel_mult=1.0,
         )
         assert level == AlertLevel.NORMAL
-        assert "low_impact" in reason
+        assert "composite=33" in reason  # reason format: composite=33.0 (impact=30 conf=40)
 
     # --- relevance multiplier ---
 

@@ -109,8 +109,8 @@ async def test_notify_callbacks_multiple(scheduler_setup):
 def test_load_watchlist_default(scheduler_setup):
     s = scheduler_setup["scheduler"]
     tickers = s._load_watchlist()
-    assert "AAPL" in tickers
     assert "NVDA" in tickers
+    assert "TSLA" in tickers
     assert len(tickers) >= 7
 
 

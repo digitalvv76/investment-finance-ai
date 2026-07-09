@@ -218,6 +218,27 @@ class VectorStore:
         except Exception:
             pass
 
+    def close(self):
+        """Release the ChromaDB client and its underlying file handles.
+
+        ChromaDB caches systems process-wide and the persistent HNSW segment
+        keeps ``data_level0.bin`` memory-mapped. On Windows an open handle blocks
+        directory removal, so we drop references, clear ChromaDB's shared-system
+        cache, and force a GC pass to let the OS release the files. Safe to call
+        on an uninitialized store.
+        """
+        self._collection = None
+        self._model = None
+        try:
+            from chromadb.api.shared_system_client import SharedSystemClient
+            SharedSystemClient.clear_system_cache()
+        except Exception:
+            pass
+        self._client = None
+        self._initialized = False
+        import gc
+        gc.collect()
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------

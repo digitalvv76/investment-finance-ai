@@ -18,12 +18,20 @@ import os
 
 @pytest.fixture
 def vector_store():
-    """Create a temporary vector store for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    """Create a temporary vector store for testing.
+
+    ChromaDB keeps files memory-mapped, so we explicitly close the store before
+    the temp dir is removed and tolerate any lingering-handle cleanup errors
+    (Windows [WinError 32]) rather than failing teardown.
+    """
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         store = VectorStore(persist_path=tmpdir)
         store.initialize()
-        yield store
-        store.clear()
+        try:
+            yield store
+        finally:
+            store.clear()
+            store.close()
 
 
 class TestVectorStore:

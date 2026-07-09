@@ -1282,3 +1282,22 @@ Does NOT cover no-commit decisions (skips/confirmations) — those still need
 in-session recording (Layer 2, deferred).
 
 ---
+
+## 2026-07-09T13:05+08:00 · 清理预存测试债 (4 failed + 6 errors → 0) · `fe8e6fe`
+
+**背景**: 07-08 遗留测试债，非本次引入。断言随源码演进过时 + Windows ChromaDB 文件锁。
+
+**修复**:
+- `test_impact_push.py` ×3: alert_dispatcher reason 格式已重写为 `composite=X (impact=.. conf=..)`，
+  测试仍断言旧的 `high_impact/moderate_impact/low_impact` 子串 → 更新为新格式断言。
+  moderate 用例 stub 取值 (impact=60/conf=55→composite=58.5) 漂过 CRITICAL 阈值 55，
+  重选 impact=50/conf=50→50.0 落回 IMPORTANT 档 [45,55)，保留该档覆盖。
+- `test_scheduler.py::test_load_watchlist_default` ×1: 默认 watchlist 已换 (无 AAPL，
+  NVDA/TSLA 打头) → 断言 AAPL → TSLA。
+- `test_vector_store.py` ×6 errors: teardown-only Windows [WinError 32] 文件锁。
+  给 `VectorStore` 加 `close()` (清 ChromaDB shared-system 缓存 + 释放 client 引用 + gc)，
+  fixture teardown 调 clear()+close()，temp dir 用 `ignore_cleanup_errors=True` 兜底。
+  修后句柄真正释放，兜底未触发。
+
+**结果**: 全量 360 passed / 0 failed / 0 errors。(7 warnings 为 Windows asyncio 子进程 teardown 噪音，无关)
+
