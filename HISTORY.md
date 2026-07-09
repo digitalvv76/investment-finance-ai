@@ -1256,3 +1256,29 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 ---
 
 ## 2026-07-09T09:08+08:00 · 会话开始
+
+## 2026-07-09T11:08 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### b60c379 · 2026-07-09T11:08 · feat: SessionEnd hook auto-backfills missing commits into HISTORY.md
+
+Layer 1 of memory durability. Fixes the recurring 'HISTORY.md N commits
+behind' seen on every restart: sessions ended without running the shutdown
+checklist, so commits (git log) outran the narrative record (HISTORY.md).
+
+Root design: match by commit SHORT HASH, not subject — HISTORY.md is human
+narrative and rarely repeats subjects verbatim, but entries cite the hash
+like (87fbf35). Bounded backfill walks commits newest->oldest and stops at
+the first already-cited hash (high-water mark), appending only this session's
+un-recorded tail with the full commit body (which carries the WHY).
+
+- session_end_backfill.py: idempotent, append-only, silent when no gap
+- settings.json: register SessionEnd hook
+- Retrofit hashes into today's 07-09 HISTORY entries (20a8537/6cf390a/642dcba/fe9d481)
+- Convention established: HISTORY entries cite their commit hash
+
+Does NOT cover no-commit decisions (skips/confirmations) — those still need
+in-session recording (Layer 2, deferred).
+
+---
