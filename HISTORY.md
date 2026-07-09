@@ -1125,3 +1125,36 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 ---
 
 ## 2026-07-09T13:15+08:00 · 会话开始
+
+## 2026-07-09T~13:55+08:00 · 部署事件升级推送时发现 ECS 生产代码严重岔开 + 抢救备份
+
+- 目标：部署 v1-stable 事件升级推送到 ECS。IOPS 门禁先查 → 健康（%util 0.37%，负载 0.07，容器 healthy 15h）
+- 🚨 读 deploy_ecs.sh 发现拉 origin/main，但功能在 v1-stable 未回 main → 改为手动从 v1-stable 部署
+- 🛑 上服务器查 /opt/news-monitor：**dirty 工作副本，30 文件 ~1451 行真实改动（去 ws）+ 15 新文件，git 无任何分支有**。HEAD=cd32d73，未 ahead、无 stash
+- 服务器独有真功能：时效性手机门槛（push-phone-rules）+ 双手机 PUSHOVER_USER_KEY_2、新 pipeline/ 模块、finnhub_fetcher、web_scraper、deep_lane+305/scheduler+199/dedup+164。正跑容器=这些未提交改动构建的
+- ✅ 抢救备份（零风险，不碰 git/不重启）：/opt/news-monitor-backup/2026-07-09_135506/（补丁 962KB + 15 文件 tar），验证补丁可 apply、tar 15 文件齐全；拉本地双份 D:\class1\.claude\backups\ecs-rescue\
+- ⏸️ 部署阻断：deploy 会覆盖这 1400 行使生产倒退。事件升级上线须先把服务器改动提交进 git + 与 v1-stable 合并测试
+- 📝 新记忆 ecs-prod-drift；根因=绕过 worktree→提交→部署流程直接改生产
+
+## 2026-07-09T~15:05+08:00 · 安全加固：关闭 SSH 密码登录
+
+- 取证陌生登录源 100.104.189.x：一个 /24 内轮换的源 IP（.2/.8/.34/.36/.54/.60/.62）、全 Accepted 无 Failed、7/3–6 活跃、7/6 后停用 → 判定=阿里云网页控制台"远程连接"终端代理段（100.64/10 CGNAT），非入侵。用户确认属实
+- 防锁死流程禁用 PasswordAuthentication：预检 authorized_keys(80B, ED25519 SHA256:v3Y+kSY)、确认 Pubkey 未禁 → 备份 sshd_config.bak.20260709_150431 → 3 行 yes→no → `sshd -t` OK → `systemctl reload ssh` → `sshd -T` 权威值 passwordauthentication no → 新连接实测密钥登录成功未锁死
+- 生效：passwordauthentication no / pubkeyauthentication yes / permitrootlogin yes
+- ⏭️ 残留待办：VNC 仍用 root 密码，弱密码 Qazwsx741% 仍在 bash_history 明文 → 轮换强密码 + 存凭证备份 + 清 history
+- 旁记：main 窗口已把孤儿代码归档进 rescue/ecs-prod-drift-20260708（交接说明生效）
+
+## 2026-07-09T~15:20+08:00 · 安全收尾：清 bash_history 明文密码 + 访问面盘点
+
+- 清除 /root/.bash_history 中 root 密码明文 2 处（`Qazwsx741@` 第1行 + `Qazwsx741%` chpasswd 命令第39行）；cat> 保原权限 600；全盘 grep /root /opt /etc 确认无其它副本
+- 访问面盘点：有 shell 账户 root+admin(uid1000,无sudo)+sync(系统)；SSH 密钥 root=ED25519 v3Y+kSY / admin=ECDSA swas-imported-key(阿里云轻量控制台导入,低权限)；sudo 组空；能读 root 明文密码的仅 root 级=用户本人钥匙/阿里云账号
+- ⚠️ 发现 8080 现 `0.0.0.0` 对外监听(记忆原记"仅127.0.0.1")→ 疑孤儿代码改 docker-compose 端口映射，待用户核对阿里云安全组
+- 密码轮换用户决定先不做(密码登录已关+明文已清,紧迫性降低,VNC 仍用故留待办)
+
+## 2026-07-09T~15:40+08:00 · 核实 8080 公网暴露：接口裸奔(确凿)
+
+- 用户要求核对阿里云安全组 8080。内部:docker 映射 0.0.0.0:8080, ufw inactive。外部(本机公网 103.62.49.130)直连 8080 秒回 200 → 安全组已放行公网
+- 🔴 严重: 外部无凭证 GET /api/stats(news_count2308/feedback42/impact310...)、/api/news/recent、/api/alerts/history 全 200 吐真实数据。写接口(POST/PUT/DELETE profile/training/filters)同套鉴权大概率同样敞(未实测写)
+- 矛盾点: .env 有 WEB_USERNAME 但运行容器未强制 Basic Auth(疑手改代码重建时未接入容器环境)→ 配置写着有密码, 实际裸奔
+- 不能直接关: 手机走 Vercel→直连 8080/api/*, 关安全组=断手机。nginx:80 有 htpasswd(401)但 Vercel 绕过
+- 修复方向(待规划): Vercel 改走 :80 认证+8080 收回 127.0.0.1; 或容器真启用 WEB_USERNAME 且 Vercel 带认证头。记入 memory ecs-server

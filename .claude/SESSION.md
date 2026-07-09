@@ -1,36 +1,38 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-09 ~10:30 CST (V1 窗口 / v1-stable)
+> 最后更新: 2026-07-09 ~15:20 CST (V1 窗口 / v1-stable)
 
-## ✅ 本次完成 — 事件级升级推送 11 任务 + 推送安全事故修复并 review 通过
+## ✅ 本次完成 — 部署受阻→抢救孤儿代码→安全加固
 
-- 子代理驱动 SDD 执行完 11 任务 + 3 修复循环，共 14 个功能 commit（`04aa5ed`..`5e08c32`）
-- 状态机 NONE→ALERTED→CONFIRMED→CLOSED 全链路激活（含修复聚类死代码）
-- 27 个功能测试全绿；最终整分支 review (fable) 判定 **READY**，无 Critical/Important
-- 反刷屏 ≤3 推送为结构性保证（3 条单向转换 + 终态 CLOSED 停用行）
+- **事件升级推送部署：暂停**。上服务器发现 `/opt/news-monitor` 是 dirty 工作副本，有 ~1451 行未提交孤儿代码（30 文件 + 15 新文件），直接部署会覆盖、使生产倒退 → 果断停手
+- **孤儿代码抢救**：双份备份（服务器 `/opt/news-monitor-backup/2026-07-09_135506/` + 本地 `.claude/backups/ecs-rescue/`），验证可还原；**main 窗口已归档进 `rescue/ecs-prod-drift-20260708`**（交接说明生效）
+- **来源取证**：孤儿代码=7/7–8 服务器上跑 Claude Code 改的；陌生登录 `100.104.189.x`=阿里云网页终端代理段（非入侵，用户确认）
+- **安全加固**：关闭 SSH 密码登录（`PasswordAuthentication no`，防锁死流程+新连接验证通过）；清除 bash_history 明文密码 2 处
+- 生产服务全程零中断，容器 healthy
 
-## 📋 下一步（需人工确认后执行）
+## 📋 下一步（均待人工确认/独立排期）
 
-1. `git push origin v1-stable`（HISTORY.md 尚有未提交改动，push 前先 commit）
-2. ECS 部署：`bash news-monitor/scripts/deploy_ecs.sh`；容器内先显式跑 `python scripts/migrate_event_escalation.py`（启动也会自动 migrate，此为保险）
-3. 部署后观察：`docker logs` grep `Event #|ALERTED|CONFIRMED|CLOSED` + IOPS
-4. 生产验证生效后 → 主窗口 `D:\class1` cherry-pick 相关 commit 回 main
-
-## 🩹 跟进小项（非阻断，可开 follow-up ticket）
-
-- `config/event-escalation.json` 有 4 个死配置键未被读取：`cooldown_hours` / `max_pushes_per_event` / `close.reversal_retrace_pct` / `sweep_interval_minutes`（sweep 周期硬编码在 `_tick_5min`）
-- 静默边界：CLOSE 在 6h 触发，但活跃窗口 12h；若事件静默 >12h（如长时间停机）会掉出 `get_active_event_lines`，永不发 CLOSED（保持 is_active=1）。6h 宽限使其不太可能，记录给 ops
-- Task 3 通道命名 `telegram_alert` vs 现有 `dispatch()` 的 `telegram_silent`（仅 channels_used 字符串，cosmetic）
+1. **事件升级推送部署（阻断中）** — 必须先把 `rescue/ecs-prod-drift-20260708` 与本窗口 v1-stable 事件升级功能**合并 + 测试通过**，才能部署。这是下一件独立开发活
+2. **轮换 root 强密码 + 存凭证备份**（非紧急：密码登录已关+明文已清，仅 VNC 仍用）
+3. **🔴 8080 公网裸奔（已核实）** — 外部无凭证可读 `/api/*` 真实数据（写接口大概率同样敞）；`.env` 设了 WEB_USERNAME 但运行容器未强制。**不能单独关**（手机走 Vercel→直连 8080）→ 随下次「孤儿代码合并+部署」一并修：Vercel 改走 :80 认证 + 8080 收内网，或容器真启用认证 + Vercel 带认证头
+4. 本会话收尾：`dev_checklist.py` → commit HISTORY/SESSION → `git push origin v1-stable`
 
 ## ⚠️ 铁律
 
-- 本窗口只做 v1-stable；部署验证后才 cherry-pick 回 main
-- SDD 进度账本在 `.superpowers/sdd/progress.md`（含每任务 commit 范围 + review 结论 + minor 清单）
+- 本窗口只做 v1-stable；孤儿代码归档在 main 窗口/rescue 分支
+- ⛔ 不对 ECS 工作副本做 checkout/reset（容器靠它跑）；不部署；两窗口不同时动同一服务器
+
+## 🩹 本次踩坑（已入 memory `ecs-prod-drift` / `ecs-server`）
+
+- 绕过「本地开发→提交→部署拉 git」流程直接改生产 → 代码岔开
+- `deploy_ecs.sh` 拉 `origin/main`，与 v1-stable 功能分支不符
+- 弱 root 密码 + SSH 密码登录曾开启（已关）
 
 ## 📊 系统健康
 
 | 组件 | 状态 |
 |------|------|
-| 事件级升级推送 | ✅ 已实现 + review 通过 (未部署) |
-| 功能测试 | ✅ 27/27 (含推送安全修复) |
-| 部署 | ⏸️ 待人工确认 |
+| 生产容器 | ✅ healthy，零中断 |
+| 事件升级推送 | ⏸️ 已实现(v1-stable)，未部署，阻断于孤儿代码合并 |
+| 孤儿代码 | ✅ 双份备份 + 已归档 rescue 分支 |
+| SSH 安全 | ✅ 仅密钥登录 |
