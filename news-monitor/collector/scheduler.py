@@ -11,6 +11,8 @@ from collector.playwright_fetcher import PlaywrightFetcher
 from collector.api_fetcher import APIFetcher
 from collector.twitter_fetcher import TwitterFetcher
 from collector.chinese_fetcher import ChineseNewsFetcher
+from collector.finnhub_fetcher import FinnhubNewsFetcher
+from collector.web_scraper import WebScraper
 from config.loader import ConfigLoader
 from storage.database import Database
 from storage.models import NewsItem
@@ -48,21 +50,35 @@ class NewsScheduler:
         self.chinese_fetcher = ChineseNewsFetcher(
             self.sources.get('chinese_sources', {})
         )
+        # Web scraper is optional — toggle via sources.yaml: web_scraper.enabled
+        scraper_cfg = self.sources.get('web_scraper', {})
+        self.web_scraper = WebScraper() if scraper_cfg.get('enabled', False) else None
+        self.finnhub_fetcher = FinnhubNewsFetcher(
+            watchlist=self._load_watchlist()
+        )
 
     def _load_watchlist(self) -> list:
-        """Load watchlist from .claude/memory/watchlist-state.md."""
-        tickers = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"]
+        """Load watchlist from .claude/memory/watchlist-state.md.
+
+        Tries multiple parent levels because the repo root differs between
+        Windows (D:/class1 = parents[3]) and Docker (/app = parents[2]).
+        """
+        tickers = ["NVDA", "TSLA", "SPCX", "PLTR", "SOXX", "SOXL", "RKLB",
+                   "KTOS", "BOT", "LRCX", "MRAAY", "CBRS", "ARM", "MRVL",
+                   "ASTS", "RGTI", "TEM", "NBIS", "OKLO", "SMR", "ARKK"]
         try:
             from pathlib import Path
-            # Resolve relative to this file, not the process CWD
-            _project_root = Path(__file__).resolve().parents[3]
-            watchlist_path = _project_root / ".claude" / "memory" / "watchlist-state.md"
-            if watchlist_path.exists():
-                content = watchlist_path.read_text()
-                import re
-                found = re.findall(r'\|\s*([A-Z]{1,5})\s*\|', content)
-                if found:
-                    tickers = [t for t in found if t.isalpha() and len(t) <= 5]
+            import re
+            module_file = Path(__file__).resolve()
+            # Try parents[2] (Docker: /app) and parents[3] (Windows: D:/class1)
+            for offset in (2, 3):
+                candidate = module_file.parents[offset] / ".claude" / "memory" / "watchlist-state.md"
+                if candidate.exists():
+                    content = candidate.read_text()
+                    found = re.findall(r'\|\s*([A-Z]{1,5})\s*\|', content)
+                    if found:
+                        tickers = [t for t in found if t.isalpha() and len(t) <= 5]
+                    break
         except Exception:
             pass
         return tickers
@@ -98,63 +114,135 @@ class NewsScheduler:
         await self._notify_callbacks(items)
 
     async def _heartbeat_tick(self):
-        """1-minute heartbeat: check Tier 2 breaking sources + API triggers."""
-        items = []
+        """Heartbeat (120s): cn + rss + playwright(hb) + api concurrently.
 
-        # Only heartbeat sources
-        heartbeat_sources = [
+        Web scraper moved to _scraper_tick (60s) for faster homepage polling.
+        """
+        # ---- Launch all collectors concurrently ----
+        cn_task = self._safe_fetch(
+            self.chinese_fetcher.fetch_all(), "chinese"
+        )
+        rss_task = self._safe_fetch(
+            self.rss_fetcher.fetch_all(), "rss"
+        )
+
+        # Heartbeat-only Playwright sources (ZeroHedge)
+        hb_sources = [
             s for s in self.sources.get('tier_2_playwright', [])
             if s.get('frequency_tier') == 'heartbeat'
         ]
+        pw_task = self._safe_fetch(
+            self._fetch_playwright_sources(hb_sources), "playwright(hb)"
+        )
 
-        for source in heartbeat_sources:
-            src_items = await self.playwright_fetcher.fetch_source(source)
-            items.extend(src_items)
+        api_task = self._safe_fetch(
+            self.api_fetcher.check_all(), "api"
+        )
 
-        # API triggers
-        api_items = await self.api_fetcher.check_all()
-        items.extend(api_items)
+        results = await asyncio.gather(
+            cn_task, rss_task, pw_task, api_task,
+        )
+
+        # ---- Merge all results ----
+        items = []
+        for result in results:
+            if result:
+                items.extend(result)
 
         if items:
-            logger.info(f"Heartbeat: {len(items)} items")
+            logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api)")
             await self._insert_and_notify(items)
-        else:
-            logger.debug("Heartbeat: no new items")
+
+    async def _scraper_tick(self):
+        """Web scraper tick: runs every 60s, independent of heartbeat."""
+        items = await self._safe_fetch(
+            self.web_scraper.fetch_all() if self.web_scraper is not None else [],
+            "web_scraper",
+        )
+        if items:
+            logger.info(f"Scraper: {len(items)} items")
+            await self._insert_and_notify(items)
+
+    async def _safe_fetch(self, coro_or_items, label: str) -> list:
+        """Await a coroutine or return a list, catching and logging errors.
+
+        Used by concurrent ticks — one collector failing must not drop the
+        results from the other collectors running in the same gather().
+        """
+        import inspect as _inspect
+        if _inspect.iscoroutine(coro_or_items):
+            try:
+                return await coro_or_items
+            except Exception as e:
+                logger.warning("%s fetch failed: %s", label, e)
+                return []
+        # Already a list (e.g. empty list for disabled scraper)
+        return coro_or_items or []
+
+    async def _fetch_playwright_sources(self, sources: list) -> list:
+        """Fetch a list of Playwright sources (serial within this group).
+
+        Kept serial because all sources share one browser instance;
+        parallel page access inside one browser is fragile.
+        """
+        items = []
+        for source in sources:
+            try:
+                src_items = await self.playwright_fetcher.fetch_source(source)
+                items.extend(src_items)
+            except Exception as e:
+                logger.warning("Playwright source %s failed: %s",
+                               source.get('name', '?'), e)
+        return items
 
     async def _tick_5min(self):
-        """5-minute tick: remaining Playwright sources + Twitter."""
+        """5-minute tick: Finnhub + remaining Playwright concurrent.
+
+        Twitter moved to 15-min tick to reduce Chromium CPU/memory pressure.
+        """
         sources = [
             s for s in self.sources.get('tier_2_playwright', [])
             if s.get('frequency_tier') != 'heartbeat'
         ]
-        items = []
-        for source in sources:
-            src_items = await self.playwright_fetcher.fetch_source(source)
-            items.extend(src_items)
 
-        # Twitter/X feeds via Nitter RSS proxy
-        try:
-            twitter_items = await self.twitter_fetcher.fetch_all()
-            items.extend(twitter_items)
-        except Exception as e:
-            logger.warning("Twitter fetch failed: %s", e)
+        pw_task = self._safe_fetch(
+            self._fetch_playwright_sources(sources), "playwright(5min)"
+        )
+        finnhub_task = self._safe_fetch(
+            self.finnhub_fetcher.fetch_all(), "finnhub"
+        )
+
+        results = await asyncio.gather(pw_task, finnhub_task)
+        items = []
+        for result in results:
+            if result:
+                items.extend(result)
 
         if items:
             await self._insert_and_notify(items)
 
     async def _tick_15min(self):
-        """15-minute tick: all RSS sources + Chinese financial news."""
-        items = await self.rss_fetcher.fetch_all()
+        """15-minute tick: currently no-op (Twitter disabled for resource conservation).
 
-        # Chinese financial news (新浪财经 + 华尔街见闻)
-        try:
-            cn_items = await self.chinese_fetcher.fetch_all()
-            items.extend(cn_items)
-        except Exception as e:
-            logger.warning("Chinese news fetch failed: %s", e)
-
-        if items:
-            await self._insert_and_notify(items)
+        To re-enable Twitter: uncomment the Twitter fetch + browser close below,
+        and uncomment twitter_fetcher.startup() in _run_loop().
+        """
+        # Twitter disabled — too heavy for 2C4G ECS (3 Chromium instances = 180% CPU)
+        # twitter_task = self._safe_fetch(
+        #     self.twitter_fetcher.fetch_all(), "twitter"
+        # )
+        # results = await asyncio.gather(twitter_task)
+        # items = []
+        # for result in results:
+        #     if result:
+        #         items.extend(result)
+        # if items:
+        #     await self._insert_and_notify(items)
+        # try:
+        #     await self.twitter_fetcher.close()
+        # except Exception as e:
+        #     logger.warning("Twitter browser close failed: %s", e)
+        pass
 
     async def _tick_30min(self):
         """30-minute tick: low-priority background tasks.
@@ -202,17 +290,25 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"Playwright startup failed: {e}")
 
-        # Startup Twitter browser (Playwright + auth cookie)
-        try:
-            await self.twitter_fetcher.startup()
-        except Exception as e:
-            logger.warning(f"Twitter fetcher startup failed (non-fatal): {e}")
+        # Startup Twitter browser (DISABLED — too heavy for 2C4G ECS)
+        # To re-enable: uncomment below + restore _tick_15min Twitter fetch
+        # try:
+        #     await self.twitter_fetcher.startup()
+        # except Exception as e:
+        #     logger.warning(f"Twitter fetcher startup failed (non-fatal): {e}")
+        logger.info("Twitter: disabled (resource conservation)")
+
+        last_scraper = 0
 
         while self._running:
             now = time.monotonic()
 
             try:
-                if now - last_1min >= self._get_frequency(60):
+                if now - last_scraper >= self._get_frequency(60):
+                    await self._scraper_tick()
+                    last_scraper = now
+
+                if now - last_1min >= self._get_frequency(120):
                     await self._heartbeat_tick()
                     last_1min = now
 
@@ -230,12 +326,14 @@ class NewsScheduler:
             except Exception as e:
                 logger.error(f"Scheduler tick error: {e}")
 
-            await asyncio.sleep(10)  # Check every 10 seconds
+            await asyncio.sleep(5)  # Check every 5 seconds (was 10s)
 
     async def start(self):
         """Start the scheduler."""
         logger.info("Scheduler starting...")
         self._running = True
+        if self.web_scraper is not None:
+            await self.web_scraper.startup()
         self._tasks.append(asyncio.create_task(self._run_loop()))
 
     async def stop(self):
@@ -249,3 +347,6 @@ class NewsScheduler:
         await self.api_fetcher.close()
         await self.twitter_fetcher.shutdown()
         await self.chinese_fetcher.close()
+        if self.web_scraper is not None:
+            await self.web_scraper.shutdown()
+        await self.finnhub_fetcher.close()

@@ -63,12 +63,13 @@ class PlaywrightFetcher:
         url = source['url']
         selectors = source.get('selectors', {})
         items: List[NewsItem] = []
+        page = None
 
         if not self._browser:
             await self.startup()
 
         try:
-            page: Page = await self._browser.new_page()
+            page = await self._browser.new_page()
             await page.set_extra_http_headers({
                 'User-Agent': (
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
@@ -126,13 +127,15 @@ class PlaywrightFetcher:
                     logger.debug(f"Playwright {name}: element extraction error — {e}")
                     continue
 
-            await page.close()
             logger.info(f"Playwright {name}: {len(items)} headlines")
 
         except asyncio.TimeoutError:
             logger.warning(f"Playwright {name}: page load timeout")
         except Exception as e:
             logger.error(f"Playwright {name}: {e}")
+        finally:
+            if page:
+                await page.close()
 
         return items
 

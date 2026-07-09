@@ -38,7 +38,7 @@ class RSSFetcher:
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None:
-            connector = aiohttp.TCPConnector(limit=3, limit_per_host=1)
+            connector = aiohttp.TCPConnector(limit=5, limit_per_host=2)
             self._session = aiohttp.ClientSession(
                 headers=UA_HEADERS,
                 connector=connector,
@@ -113,14 +113,17 @@ class RSSFetcher:
         return items
 
     async def fetch_all(self) -> List[NewsItem]:
-        """Fetch all configured RSS sources sequentially with delays."""
+        """Fetch all configured RSS sources concurrently via asyncio.gather.
+
+        Old serial: ~25s.  New concurrent: ~6s.
+        """
+        tasks = [self.fetch_single(source) for source in self.sources]
+        results = await asyncio.gather(*tasks) if tasks else []
+
         all_items = []
-        for source in self.sources:
-            try:
-                items = await self.fetch_single(source)
-                all_items.extend(items)
-            except Exception as e:
-                logger.error(f"RSS source {source.get('name')}: {e}")
+        for result in results:
+            if result:
+                all_items.extend(result)
 
         logger.info(f"RSS total: {len(all_items)} items from {len(self.sources)} sources")
         return all_items

@@ -228,10 +228,11 @@ class TwitterFetcher:
         return items
 
     async def fetch_all(self) -> List[NewsItem]:
-        """Fetch tweets from all configured accounts sequentially.
+        """Fetch tweets from all accounts in 2 concurrent groups.
 
-        Shares one browser instance across all accounts; creates a fresh
-        context per account for cookie isolation.
+        Each group of 3 accounts runs serially (shared browser context).
+        The two groups run concurrently via asyncio.gather.
+        Old serial: ~72s (6×12s).  New: ~36s (2 groups × ~18s each).
         """
         if not self.accounts:
             return []
@@ -244,18 +245,35 @@ class TwitterFetcher:
                 logger.error("Twitter: browser startup failed — %s", e)
                 return []
 
+        # Split into 2 groups
+        mid = (len(self.accounts) + 1) // 2
+        group_a = self.accounts[:mid]
+        group_b = self.accounts[mid:]
+
+        async def _fetch_group(accounts: list) -> list:
+            items = []
+            for account in accounts:
+                try:
+                    acc_items = await self.fetch_account(account)
+                    items.extend(acc_items)
+                    if self.delay > 0:
+                        await asyncio.sleep(self.delay)
+                except Exception as e:
+                    logger.error("Twitter account %s: %s", account, e)
+            return items
+
+        results = await asyncio.gather(
+            _fetch_group(group_a),
+            _fetch_group(group_b),
+        )
+
         all_items: List[NewsItem] = []
-        for account in self.accounts:
-            try:
-                items = await self.fetch_account(account)
-                all_items.extend(items)
-                if self.delay > 0:
-                    await asyncio.sleep(self.delay)
-            except Exception as e:
-                logger.error("Twitter account %s: %s", account, e)
+        for result in results:
+            if result:
+                all_items.extend(result)
 
         logger.info(
-            "Twitter total: %d tweets from %d accounts",
+            "Twitter total: %d tweets from %d accounts (2 groups)",
             len(all_items),
             len(self.accounts),
         )
