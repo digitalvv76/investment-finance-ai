@@ -36,3 +36,13 @@
 | 事件升级推送 | ⏸️ 已实现(v1-stable)，未部署，阻断于孤儿代码合并 |
 | 孤儿代码 | ✅ 双份备份 + 已归档 rescue 分支 |
 | SSH 安全 | ✅ 仅密钥登录 |
+
+## 🧪 已知预存测试失败（非本次引入；今日零源码改动，仅文档）
+
+- 4 real fails: `test_impact_push` ×3 (high/moderate/low classification) + `test_scheduler::test_load_watchlist_default` — 疑因本地 `alert_dispatcher.py` 缺孤儿代码时效性逻辑、测试按新行为写 → 随孤儿代码合并一并修
+- 6 errors: `test_vector_store` — Windows ChromaDB 文件锁，已知环境问题，非逻辑失败
+- 334 passed, 全绿前勿部署
+
+> 会话结束 — 2026-07-09T15:52 · 关机
+
+## ⚠️ 铁律
