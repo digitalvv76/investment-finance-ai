@@ -30,6 +30,13 @@
 - 重建后容器 healthy(41s)；7 项验证全过：无认证/错误密码→401，正确密码→200，`/health`+深度分析链接→200，Vercel 代理无认证→401
 - 容器内 `WEB_USERNAME` len=6（非空，认证真正生效）
 
+### cherry-pick 安全修复回 main + V2 灰度交接
+- main 的 compose 三个 bug 完全相同 → 手工套用等价修复(非 raw cherry-pick，因 HISTORY 分叉会冲突) → `cab7d4f` on main，已推送
+- 核实：main(V2) 与 v1-stable 已架构性分叉（main.py 差 336 行、pipeline 结构/内容过滤不同），V2≠"V1+新功能"
+- 发现灰度架构坑：main 的 deploy.sh 目标/容器名/端口/.env 与 V1 生产完全一致 → `./deploy.sh` 是顶替非并行，且会往真手机推真推送
+- 写交接简报 `.claude/V1-TO-V2-HANDOFF.md`(on main, `60a2e57`) + main SESSION.md 顶部指引：4 点(安全修复/V2≠V1/灰度坑/影子模式推荐)，让 V2 开工先读并与用户确认 A/B
+- 给用户的推荐：影子模式灰度(隔离容器+8081+独立卷+静音推送)，对比 2-3 天再切
+
 ## 2026-07-08T15:05+08:00 · V1 内容过滤 + LLM urgency 重构
 
 ### 中文内容分层 (`c75efa2`)
