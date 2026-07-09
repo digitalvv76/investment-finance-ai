@@ -71,7 +71,12 @@ class Database:
                     source_count INTEGER DEFAULT 0,
                     first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    is_active INTEGER DEFAULT 1
+                    is_active INTEGER DEFAULT 1,
+                    escalation_state TEXT DEFAULT 'NONE',
+                    peak_impact REAL DEFAULT 0.0,
+                    dominant_category TEXT DEFAULT '',
+                    dominant_sentiment TEXT DEFAULT '',
+                    alerted_at TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS feedback (
@@ -108,6 +113,12 @@ class Database:
                     event_category TEXT DEFAULT '',
                     surprise_level TEXT DEFAULT '',
                     breadth TEXT DEFAULT '',
+                    urgency TEXT DEFAULT 'INFO',
+                    sentiment TEXT DEFAULT '',
+                    greed_index INTEGER DEFAULT 50,
+                    flash_note TEXT DEFAULT '',
+                    key_points TEXT DEFAULT '',
+                    risk_flags TEXT DEFAULT '',
                     reasoning_chain TEXT DEFAULT '',
                     similar_events TEXT DEFAULT '',
                     expected_moves TEXT DEFAULT '',
@@ -151,11 +162,83 @@ class Database:
                 );
                 CREATE INDEX IF NOT EXISTS idx_health_type ON health_events(event_type);
             """)
-            # Migration: add analyst_note column to existing databases
-            try:
-                conn.execute("ALTER TABLE impact_assessments ADD COLUMN analyst_note TEXT DEFAULT ''")
-            except Exception:
-                pass  # column already exists
+            # Migrations: add new columns to existing databases (idempotent)
+            _migrations = [
+                "ALTER TABLE impact_assessments ADD COLUMN analyst_note TEXT DEFAULT ''",
+                "ALTER TABLE impact_assessments ADD COLUMN urgency TEXT DEFAULT 'INFO'",
+                "ALTER TABLE impact_assessments ADD COLUMN sentiment TEXT DEFAULT ''",
+                "ALTER TABLE impact_assessments ADD COLUMN greed_index INTEGER DEFAULT 50",
+                "ALTER TABLE impact_assessments ADD COLUMN flash_note TEXT DEFAULT ''",
+                "ALTER TABLE impact_assessments ADD COLUMN key_points TEXT DEFAULT ''",
+                "ALTER TABLE impact_assessments ADD COLUMN risk_flags TEXT DEFAULT ''",
+            ]
+            for stmt in _migrations:
+                try:
+                    conn.execute(stmt)
+                except Exception:
+                    pass  # column already exists
+
+    def migrate_event_escalation(self) -> None:
+        """Idempotently add escalation columns to event_lines."""
+        self.init_db()
+        cols_defs = [
+            ("escalation_state", "TEXT DEFAULT 'NONE'"),
+            ("peak_impact", "REAL DEFAULT 0.0"),
+            ("dominant_category", "TEXT DEFAULT ''"),
+            ("dominant_sentiment", "TEXT DEFAULT ''"),
+            ("alerted_at", "TEXT"),
+        ]
+        with self._get_conn() as conn:
+            existing = {r[1] for r in conn.execute("PRAGMA table_info(event_lines)").fetchall()}
+            for name, ddl in cols_defs:
+                if name not in existing:
+                    conn.execute(f"ALTER TABLE event_lines ADD COLUMN {name} {ddl}")
+
+    def get_active_event_lines(self, active_window_hours: int = 12) -> list[dict]:
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM event_lines WHERE is_active = 1 "
+                "AND last_updated > datetime('now', ?) "
+                "ORDER BY last_updated DESC",
+                (f"-{active_window_hours} hours",),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_event_escalation(self, event_id: int, **fields) -> None:
+        if not fields:
+            return
+        cols = ", ".join(f"{k} = ?" for k in fields)
+        with self._get_conn() as conn:
+            conn.execute(f"UPDATE event_lines SET {cols} WHERE id = ?",
+                         (*fields.values(), event_id))
+
+    def get_event_members(self, event_id: int) -> list[dict]:
+        with self._get_conn() as conn:
+            row = conn.execute("SELECT news_ids FROM event_lines WHERE id = ?",
+                               (event_id,)).fetchone()
+            if not row or not row["news_ids"]:
+                return []
+            ids = [int(x) for x in row["news_ids"].split(",") if x.strip().isdigit()]
+            if not ids:
+                return []
+            ph = ",".join("?" * len(ids))
+            members = conn.execute(
+                f"SELECT * FROM news WHERE id IN ({ph})", ids
+            ).fetchall()
+            return [dict(m) for m in members]
+
+    def get_peak_impact_for_news_ids(self, news_ids: list[int]) -> tuple[float, str, str]:
+        if not news_ids:
+            return (0.0, "", "")
+        ph = ",".join("?" * len(news_ids))
+        with self._get_conn() as conn:
+            row = conn.execute(
+                f"SELECT impact_score, event_category, sentiment FROM impact_assessments "
+                f"WHERE news_id IN ({ph}) ORDER BY impact_score DESC LIMIT 1", news_ids
+            ).fetchone()
+            if not row:
+                return (0.0, "", "")
+            return (float(row["impact_score"] or 0), row["event_category"] or "", row["sentiment"] or "")
 
     def insert_news(self, item: NewsItem) -> int:
         with self._get_conn() as conn:
@@ -296,13 +379,18 @@ class Database:
             c = conn.execute("""
                 INSERT INTO impact_assessments
                 (news_id, impact_score, confidence, event_category, surprise_level,
-                 breadth, reasoning_chain, similar_events, expected_moves,
-                 calibration_note, analyst_note, low_confidence, prompt_version, latency_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 breadth, urgency, sentiment, greed_index,
+                 reasoning_chain, similar_events, expected_moves,
+                 calibration_note, flash_note, analyst_note,
+                 key_points, risk_flags,
+                 low_confidence, prompt_version, latency_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 a.news_id, a.impact_score, a.confidence, a.event_category,
-                a.surprise_level, a.breadth, a.reasoning_chain, a.similar_events,
-                a.expected_moves, a.calibration_note, a.analyst_note,
+                a.surprise_level, a.breadth, a.urgency, a.sentiment, a.greed_index,
+                a.reasoning_chain, a.similar_events, a.expected_moves,
+                a.calibration_note, a.flash_note, a.analyst_note,
+                a.key_points, a.risk_flags,
                 int(a.low_confidence), a.prompt_version, a.latency_ms
             ))
             a.id = c.lastrowid

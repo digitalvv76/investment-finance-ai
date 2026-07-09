@@ -60,6 +60,11 @@ class EventLine:
     first_seen: datetime = field(default_factory=datetime.now)
     last_updated: datetime = field(default_factory=datetime.now)
     is_active: bool = True
+    escalation_state: str = "NONE"   # NONE|ALERTED|CONFIRMED|CLOSED
+    peak_impact: float = 0.0
+    dominant_category: str = ""
+    dominant_sentiment: str = ""
+    alerted_at: Optional[datetime] = None
 
 
 @dataclass
