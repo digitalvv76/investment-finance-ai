@@ -70,6 +70,7 @@ class NewsCluster:
                 status=seed.get("status", "pending"),
             )
             event_id = self._create_event(seed_item)   # news_ids=seed, count=1
+            self.db.update_news_status(seed["id"], seed.get("status", "pending"), event_line_id=event_id)
             self._add_to_event(item, event_id)          # adds new item, count=2
             return event_id
         return None
