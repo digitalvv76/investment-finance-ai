@@ -348,10 +348,18 @@ class NewsMonitor:
                 updated['_key_points'] = key_points
                 updated['_risk_flags'] = risk_flags
 
-            # ---- Alert dispatching ----
-            # Only should_push events (is_event && intensity>=3) notify. Everything
-            # else is stored + shown on the dashboard but NOT pushed (no silent spam).
-            if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT):
+            # ---- Alert dispatching (phone kept strict; Telegram widened) ----
+            #   intensity >= 3   → Pushover(phone) + Telegram   (CRITICAL/IMPORTANT)
+            #   is_event, 1-2    → Telegram silent only          (weak catalyst)
+            #   is_event = false → no push (stored + dashboard only)
+            # dispatch() routes phone vs silent-TG by the adapter urgency
+            # (FLASH/ALERT → phone+TG; WATCH/INFO → NORMAL → silent TG).
+            weak_catalyst = bool(
+                event_assessment is not None
+                and event_assessment.is_event
+                and not event_assessment.should_push
+            )
+            if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT) or weak_catalyst:
                 tg_push = self.alert_dispatcher.wrap_telegram_push(self.bot)
                 result = await self.alert_dispatcher.dispatch(
                     item=updated,
