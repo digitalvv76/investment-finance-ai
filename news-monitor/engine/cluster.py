@@ -59,8 +59,19 @@ class NewsCluster:
             self._add_to_event(item, best_match)
             return best_match
 
-        # No match — create a new event line if there are similar items
-        # (singletons don't get event lines until a second source confirms)
+        # No existing event line — check for a similar *singleton* to seed a new event.
+        seed = self._find_similar_singleton(item, recent)
+        if seed:
+            # Seed the event from the pre-existing singleton, then add the new item,
+            # so BOTH articles are attached (news_ids has both, source_count = 2).
+            seed_item = NewsItem(
+                id=seed["id"],
+                title=seed.get("title", ""),
+                status=seed.get("status", "pending"),
+            )
+            event_id = self._create_event(seed_item)   # news_ids=seed, count=1
+            self._add_to_event(item, event_id)          # adds new item, count=2
+            return event_id
         return None
 
     def merge_into_events(self, items: List[NewsItem]) -> List[EventLine]:
@@ -140,6 +151,22 @@ class NewsCluster:
                 best_event_id = event_id
 
         return best_event_id
+
+    def _find_similar_singleton(self, item: NewsItem, recent: List[dict]) -> Optional[dict]:
+        """Find a recent article with no event_line_id that is similar enough.
+
+        Returns the matching singleton row (dict), or None.
+        """
+        best_score, best = 0.0, None
+        for r in recent:
+            if r.get("event_line_id"):
+                continue
+            if r.get("id") == item.id:
+                continue
+            score = DedupManager.title_similarity(item.title, r.get("title", ""))
+            if score > best_score and score >= SIMILARITY_THRESHOLD:
+                best_score, best = score, r
+        return best
 
     def _add_to_event(self, item: NewsItem, event_id: int):
         """Add a news item to an existing event line."""
