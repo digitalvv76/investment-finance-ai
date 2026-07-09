@@ -42,6 +42,7 @@ from engine.trainer import Trainer
 from engine.alert_dispatcher import AlertDispatcher, AlertLevel
 from engine.strategic_detector import StrategicDetector
 from engine.impact_evaluator import ImpactEvaluator
+from engine.event_driven_evaluator import EventDrivenEvaluator
 from engine.impact_learner import ImpactLearner
 from engine.event_matcher import EventMatcher
 from engine.relevance import signal_score, get_portfolio_summary
@@ -142,12 +143,17 @@ class NewsMonitor:
         self._strategic = StrategicDetector()
 
         # ---- impact evaluator (LLM, async, isolated) --------
+        # Event-driven sentinel is now the PRIMARY evaluator (structured
+        # catalyst detection + intensity). The old free-form ImpactEvaluator
+        # and its learner/matcher are kept instantiated but dormant (no longer
+        # drives push decisions) for backward compat + dashboard history.
+        self.event_evaluator = EventDrivenEvaluator()
         self.impact_evaluator = ImpactEvaluator()
         self.impact_learner = ImpactLearner()
         self.event_matcher = EventMatcher()
         self.actionability_reviewer = ActionabilityReviewer()
-        logger.info("ImpactEvaluator initialized (threshold=%.2f, event_matcher=%d events)",
-                    ImpactEvaluator.THRESHOLD, self.event_matcher.event_count)
+        logger.info("EventDrivenEvaluator initialized (PRIMARY); ImpactEvaluator dormant (event_matcher=%d events)",
+                    self.event_matcher.event_count)
         logger.info("Portfolio/Relevance: %s", get_portfolio_summary())
 
         # ---- Telegram bot -------------------------------------------
@@ -239,29 +245,24 @@ class NewsMonitor:
             if item.priority_score >= 0.7 or 'STRATEGIC_' in (item.macro_tags or ''):
                 strategic_matches = self._strategic.detect(text)
 
-            # ---- NEW: ImpactEvaluator BEFORE push decision ----
+            # ---- Event-driven evaluation (PRIMARY) — runs on ALL screened items ----
+            # No prescreen gate: the event prompt's Step-1 relevance filter is the
+            # real gatekeeper. priority_score no longer decides whether the LLM runs.
+            event_assessment = None
             impact_assessment = None
-            prescreen = _impact_cfg.get("prescreen_threshold", 0.30)
-            if item.priority_score >= prescreen and self.impact_evaluator:
+            if self.event_evaluator:
                 async with _llm_sem:
                     try:
-                        calibration_hint = self.impact_learner.generate_calibration_hint(self.db)
-                        historical = self.event_matcher.get_examples(
-                            text, event_category="", top_k=3,
-                        )
-                        impact_assessment = await self.impact_evaluator.evaluate(
-                            item,
-                            market_context="",
-                            calibration_hint=calibration_hint,
-                            historical_examples=historical,
-                        )
-                        if impact_assessment:
-                            impact_assessment.news_id = item.id
-                            self.db.insert_assessment(impact_assessment)
-                    except asyncio.TimeoutError:
-                        logger.warning("ImpactEval timeout for news#%s, using legacy classification", item.id)
+                        event_assessment = await self.event_evaluator.evaluate(item)
                     except Exception as e:
-                        logger.error("ImpactEval failed for news#%s: %s, falling back to legacy", item.id, e)
+                        logger.error("EventDrivenEval failed for news#%s: %s", item.id, e)
+                if event_assessment is not None:
+                    impact_assessment = self._event_to_assessment(event_assessment, item)
+                    impact_assessment.news_id = item.id
+                    try:
+                        self.db.insert_assessment(impact_assessment)
+                    except Exception as e:
+                        logger.error("insert_assessment failed for #%s: %s", item.id, e)
 
             # ---- 4-dimension signal score ----
             sig = signal_score(
@@ -281,33 +282,34 @@ class NewsMonitor:
                 (item.title or "")[:60],
             )
 
-            # ---- Classify alert level (impact-first, legacy fallback) ----
+            # ---- Push decision ----
             has_tickers = bool(item.tickers_found and item.tickers_found.strip())
             is_macro = bool(item.macro_tags and item.macro_tags.strip())
-            level, reason = self.alert_dispatcher.classify(
-                item.priority_score, strategic_matches,
-                impact_assessment=impact_assessment,
-                rel_mult=rel_mult,
-                has_tickers=has_tickers,
-                is_macro=is_macro,
-                timeliness=sig.get("timeliness"),
-            )
-
-            # ---- LLM Actionability Review (borderline cases only) ----
-            if (self.actionability_reviewer.should_review(rel_mult)
-                    and level != AlertLevel.NORMAL):
-                review_result = await self.actionability_reviewer.review(
-                    item, sig, impact_assessment=impact_assessment,
-                )
-                if review_result == "NOT_ACTIONABLE":
-                    logger.info(
-                        "LLM review: downgrading %s -> NORMAL for #%s — %s",
-                        level.value, item.id, (item.title or "")[:60],
-                    )
+            if event_assessment is not None:
+                # Deterministic event rule: is_event && intensity>=3 → push.
+                # Bypasses watchlist/timeliness gates by design — catalysts on
+                # untracked small-caps are exactly the target of this model.
+                if event_assessment.should_push:
+                    level = (AlertLevel.CRITICAL if event_assessment.alert_level == "critical"
+                             else AlertLevel.IMPORTANT)
+                    reason = (f"event_driven intensity={event_assessment.intensity} "
+                              f"types={event_assessment.event_types}")
+                else:
                     level = AlertLevel.NORMAL
-                    reason = f"llm_review_not_actionable (was: {reason})"
+                    reason = ("event_driven no_push: "
+                              + (event_assessment.filter_reason
+                                 or f"intensity={event_assessment.intensity}"))
+            else:
+                # Fallback path (no LLM provider available): legacy classify.
+                level, reason = self.alert_dispatcher.classify(
+                    item.priority_score, strategic_matches,
+                    rel_mult=rel_mult,
+                    has_tickers=has_tickers,
+                    is_macro=is_macro,
+                    timeliness=sig.get("timeliness"),
+                )
 
-            # ---- Inject LLM assessment fields for push formatters ----
+            # ---- Inject assessment fields for push formatters ----
             analyst_note = ""
             flash_note = ""
             event_category = ""
@@ -329,6 +331,11 @@ class NewsMonitor:
                 greed_index = int(getattr(impact_assessment, 'greed_index', 50) or 50)
                 key_points = getattr(impact_assessment, 'key_points', '[]') or '[]'
                 risk_flags = getattr(impact_assessment, 'risk_flags', '[]') or '[]'
+                # Surface catalyst tickers the LLM found even if FastLane missed them
+                if event_assessment and event_assessment.ticker_hint:
+                    merged = set(filter(None, (updated.get('tickers_found') or '').split(',')))
+                    merged.update(event_assessment.ticker_hint)
+                    updated['tickers_found'] = ','.join(sorted(merged))
                 updated['analyst_note'] = analyst_note
                 updated['_analyst_note'] = analyst_note  # for alert_dispatcher
                 updated['_flash_note'] = flash_note
@@ -342,6 +349,8 @@ class NewsMonitor:
                 updated['_risk_flags'] = risk_flags
 
             # ---- Alert dispatching ----
+            # Only should_push events (is_event && intensity>=3) notify. Everything
+            # else is stored + shown on the dashboard but NOT pushed (no silent spam).
             if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT):
                 tg_push = self.alert_dispatcher.wrap_telegram_push(self.bot)
                 result = await self.alert_dispatcher.dispatch(
@@ -349,41 +358,84 @@ class NewsMonitor:
                     priority_score=item.priority_score,
                     strategic_matches=strategic_matches,
                     telegram_push_fn=tg_push,
-                    timeliness=sig.get("timeliness"),
+                    timeliness=None,  # event rule already decided; don't re-gate on timeliness
                     impact_assessment=impact_assessment,
                 )
                 logger.info(
                     "Alert dispatched: level=%s channels=%s reason=%s",
                     result.level.value, result.channels_used, result.reason,
                 )
-            elif self.bot:
-                # Skip push for LLM-evaluated low-impact news.
-                # Legacy items (no impact_assessment) still push as before.
-                min_push = _impact_cfg.get("min_impact_for_push", 30)
-                # Watchlist/portfolio tickers: lower the gate so product
-                # milestones & partnerships aren't killed by conservative LLM scoring.
-                if has_tickers and rel_mult > 0.5:
-                    min_push = 20
-                if impact_assessment and impact_score < min_push:
-                    logger.info(
-                        "Skipping low-impact push #%s (score=%d < %d) — %s",
-                        item.id, impact_score, min_push, (item.title or "")[:60],
-                    )
-                else:
-                    await self.bot.push_alert(
-                        updated, analyst_note=analyst_note,
-                        event_category=event_category,
-                        impact_score=impact_score,
-                        confidence=confidence,
-                    )
+            else:
+                logger.info("No push #%s (%s) — %s", item.id, reason, (item.title or "")[:60])
 
             # ---- Web dashboard broadcast (SSE real-time push) ---------
             if self.web_dashboard:
                 await self.web_dashboard.broadcast_alert(updated)
 
-            # Trigger deep lane for high-impact items (async, don't block)
-            if (impact_assessment and impact_assessment.impact_score >= 60) or item.priority_score >= 0.7:
+            # Trigger deep lane for pushed events (async, don't block)
+            if (event_assessment and event_assessment.should_push) or item.priority_score >= 0.7:
                 asyncio.create_task(self._run_deep_lane(item))
+
+    @staticmethod
+    def _event_to_assessment(ea, item):
+        """Adapt an EventAssessment into an ImpactAssessment for DB storage,
+        push formatters, and the dashboard — no schema migration required.
+
+        Mapping: intensity(1-5) → impact_score(×20) + urgency; headline_signal
+        → flash_note; risk_snapshot → risk_flags; sector_tags/ticker_hint/
+        event_types → key_points (Chinese display).
+        """
+        import json
+        from storage.models import ImpactAssessment
+
+        if ea.intensity >= 5:
+            urgency = "FLASH"
+        elif ea.intensity >= 3:
+            urgency = "ALERT"
+        elif ea.is_event:
+            urgency = "WATCH"
+        else:
+            urgency = "INFO"
+
+        if ea.is_event:
+            event_category = "catalyst:" + ",".join(str(t) for t in ea.event_types)
+            kp = []
+            if ea.sector_tags:
+                kp.append("板块: " + ", ".join(ea.sector_tags))
+            if ea.ticker_hint:
+                kp.append("关联代码: " + ", ".join(ea.ticker_hint))
+            kp.append(f"强度: {'★' * ea.intensity} ({ea.intensity}/5)")
+            if ea.event_types:
+                kp.append("催化剂类型: " + ",".join(str(t) for t in ea.event_types))
+            key_points = json.dumps(kp, ensure_ascii=False)
+            risk_flags = json.dumps([ea.risk_snapshot] if ea.risk_snapshot else [], ensure_ascii=False)
+        else:
+            event_category = "filtered"
+            key_points = "[]"
+            risk_flags = "[]"
+
+        return ImpactAssessment(
+            impact_score=float(ea.intensity * 20),
+            confidence=80.0,
+            event_category=event_category,
+            surprise_level="",
+            breadth="",
+            urgency=urgency,
+            sentiment="BULLISH" if ea.is_event else "",
+            greed_index=50,
+            reasoning_chain=json.dumps([ea.filter_reason] if ea.filter_reason else [], ensure_ascii=False),
+            similar_events="[]",
+            expected_moves=json.dumps(
+                {"sector_tags": ea.sector_tags, "ticker_hint": ea.ticker_hint}, ensure_ascii=False
+            ),
+            calibration_note="",
+            flash_note=ea.headline_signal,
+            analyst_note=ea.headline_signal,
+            key_points=key_points,
+            risk_flags=risk_flags,
+            prompt_version="event_driven",
+            latency_ms=0,
+        )
 
     async def _run_deep_lane(self, item):
         """Run deep lane analysis as a background task."""

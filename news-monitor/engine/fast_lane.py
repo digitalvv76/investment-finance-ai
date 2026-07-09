@@ -17,6 +17,13 @@ from engine.content_filter import geo_market_filter, content_quality_filter
 
 logger = logging.getLogger(__name__)
 
+# Fast-lane priority threshold. Widened 0.3 → 0.15 for the event-driven
+# evaluator: priority_score is a keyword/entity heuristic and would otherwise
+# starve the LLM sentinel of low-scoring catalyst news (e.g. an obscure small-cap
+# winning a DOE grant). Entity extraction + quality/geo filtering still run; only
+# the priority drop is loosened. The event prompt's Step-1 does the real relevance gate.
+FAST_LANE_THRESHOLD = 0.15
+
 
 class FastLane:
     """Rule-based engine that processes news items through fast-lane filters.
@@ -231,7 +238,7 @@ class FastLane:
                     (item.title or '')[:80],
                 )
 
-            if item.priority_score >= 0.3:  # Fast lane threshold
+            if item.priority_score >= FAST_LANE_THRESHOLD:  # Fast lane threshold (event-driven widened)
                 item.status = 'fast_pushed'
                 pushed.append(item)
 

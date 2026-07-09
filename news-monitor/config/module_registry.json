@@ -118,6 +118,11 @@
       "tests": ["tests/test_impact_evaluator.py", "tests/test_impact_push.py"],
       "related_scripts": ["scripts/acceptance_test.py"]
     },
+    "engine/event_driven_evaluator.py": {
+      "tests": ["tests/test_event_driven_evaluator.py"],
+      "related_scripts": [],
+      "_note": "PRIMARY evaluator (event-driven catalyst sentinel). Wired in main.py on_news_batch; is_event && intensity>=3 -> push."
+    },
     "engine/impact_learner.py": {
       "tests": [],
       "related_scripts": []
