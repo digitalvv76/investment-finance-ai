@@ -92,8 +92,10 @@ def _validate_output(assessment: ImpactAssessment) -> tuple[bool, list[str]]:
         chain = []
         issues.append("reasoning_chain not valid JSON")
 
-    if len(chain) != 5:
-        issues.append(f"reasoning_chain has {len(chain)} steps, expected 5")
+    # Prompt asks for a 5-step chain; tolerate 4-6 (LLMs occasionally merge
+    # or split a step). Flag only genuinely malformed chains.
+    if not (4 <= len(chain) <= 6):
+        issues.append(f"reasoning_chain has {len(chain)} steps, expected ~5")
     if any(not step for step in chain):
         issues.append("empty reasoning step")
 

@@ -32,10 +32,12 @@ class EvaluateStage:
         impact_evaluator: ImpactEvaluator,
         dispatcher: AlertDispatcher,
         actionability_reviewer: ActionabilityReviewer | None = None,
+        db=None,
     ) -> None:
         self._impact = impact_evaluator
         self._dispatcher = dispatcher
         self._reviewer = actionability_reviewer
+        self._db = db
 
     async def process(self, items: list[PipelineItem]) -> list[PipelineItem]:
         if not items:
@@ -53,6 +55,17 @@ class EvaluateStage:
     async def _evaluate_one(self, item: PipelineItem) -> None:
         # Step 1: Impact assessment with retry → fallback
         impact = await self._run_with_retry(item)
+
+        # Persist the detailed assessment for threshold calibration + audit
+        # trail. Guard on item.id so we never write a dangling FK for an
+        # unpersisted item (id=0).
+        if impact is not None and self._db is not None and item.id:
+            try:
+                impact.news_id = item.id
+                self._db.insert_assessment(impact)
+            except Exception:
+                logger.exception(
+                    "EVALUATE: failed to persist assessment for #%d", item.id)
 
         # Step 2: Compute signal score (relevance + timeliness for gates)
         rel_mult = 1.0

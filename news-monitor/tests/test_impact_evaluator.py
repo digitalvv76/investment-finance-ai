@@ -43,6 +43,28 @@ class TestExplainabilityGate:
         ok, issues = _validate_output(a)
         assert ok is True
 
+    def test_six_step_chain_tolerated(self):
+        """#3: 4-6 steps accepted (LLM occasionally returns 6) — no noise."""
+        a = ImpactAssessment(
+            impact_score=75, confidence=80, event_category="earnings",
+            surprise_level="major_surprise", breadth="broad_market",
+            reasoning_chain=json.dumps(["s1", "s2", "s3", "s4", "s5", "s6"]),
+        )
+        ok, issues = _validate_output(a)
+        assert ok is True
+        assert not any("steps" in i for i in issues)
+
+    def test_too_few_steps_still_flagged(self):
+        """Degenerate chains (< 4 steps) must still be flagged."""
+        a = ImpactAssessment(
+            impact_score=75, confidence=80, event_category="earnings",
+            surprise_level="major_surprise", breadth="broad_market",
+            reasoning_chain=json.dumps(["s1", "s2"]),
+        )
+        ok, issues = _validate_output(a)
+        assert ok is False
+        assert any("steps" in i for i in issues)
+
     def test_cross_asset_low_score_flags(self):
         a = ImpactAssessment(impact_score=15, breadth="cross_asset",
                             reasoning_chain='["1","2","3","4","5"]')

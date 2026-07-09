@@ -103,3 +103,64 @@ class TestEvaluateStage:
     async def test_empty_input(self, stage):
         result = await stage.process([])
         assert result == []
+
+
+class TestAssessmentPersistence:
+    """#1: EvaluateStage must persist the detailed impact assessment."""
+
+    @pytest.mark.asyncio
+    async def test_persists_assessment_when_db_provided(self, mock_impact, mock_dispatcher):
+        from storage.models import ImpactAssessment
+        db = MagicMock()
+        db.insert_assessment = MagicMock(return_value=42)
+        stage = EvaluateStage(
+            impact_evaluator=mock_impact, dispatcher=mock_dispatcher, db=db,
+        )
+        items = [
+            PipelineItem(id=7, title="FOMC", source="CNBC", url="http://x/1",
+                         priority_score=0.75, tickers_found="SPY", is_breaking=True)
+        ]
+        mock_impact.evaluate.return_value = ImpactAssessment(
+            impact_score=65, confidence=80, analyst_note="x", event_category="earnings",
+        )
+
+        await stage.process(items)
+
+        assert db.insert_assessment.called
+        saved = db.insert_assessment.call_args[0][0]
+        assert saved.news_id == 7  # FK bound to the persisted news row
+
+    @pytest.mark.asyncio
+    async def test_no_persist_when_id_zero(self, mock_impact, mock_dispatcher):
+        """Guard: don't write a dangling FK for unpersisted items (id=0)."""
+        from storage.models import ImpactAssessment
+        db = MagicMock()
+        db.insert_assessment = MagicMock(return_value=0)
+        stage = EvaluateStage(
+            impact_evaluator=mock_impact, dispatcher=mock_dispatcher, db=db,
+        )
+        items = [
+            PipelineItem(id=0, title="x", source="s", url="http://x/0",
+                         priority_score=0.75, tickers_found="SPY")
+        ]
+        mock_impact.evaluate.return_value = ImpactAssessment(
+            impact_score=65, confidence=80, event_category="earnings",
+        )
+
+        await stage.process(items)
+
+        assert not db.insert_assessment.called
+
+    @pytest.mark.asyncio
+    async def test_no_db_is_backward_compatible(self, stage, mock_impact):
+        """No db handle → no crash (legacy construction path)."""
+        from storage.models import ImpactAssessment
+        items = [
+            PipelineItem(id=1, title="x", source="s", url="http://x/1",
+                         priority_score=0.75, tickers_found="SPY")
+        ]
+        mock_impact.evaluate.return_value = ImpactAssessment(
+            impact_score=65, confidence=80, event_category="earnings",
+        )
+        result = await stage.process(items)
+        assert len(result) == 1

@@ -195,6 +195,7 @@ class NewsMonitor:
                 impact_evaluator=self.impact_evaluator,
                 dispatcher=self.alert_dispatcher,
                 actionability_reviewer=self.actionability_reviewer,
+                db=self.db,
             ),
             DispatchStage(channels=channels),
             DeepStage(deep_lane=self.deep_lane),

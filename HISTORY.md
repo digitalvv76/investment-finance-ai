@@ -101,6 +101,12 @@
 - 启动健康: 心跳 282 items, RSS 90/中文 98/scraper(CNBC15+Sina20+WSCN15), 去重 112/282
 - MarketWatch 修复实跑确认: 无 scraper 尝试、RSS 覆盖 10 条
 
+### 影子测试三大发现 — 深挖 + 修复
+- **#1 (真缺口, 已修)**: `insert_assessment()` 全项目零调用 → 评估结果从不持久化 → 校准脚本饿死。修复: EvaluateStage 加 `db` 参数, 评估后 `insert_assessment(impact)`, `item.id` 守护防悬空 FK; main.py 接线 `db=self.db`; 3 个 TDD 测试。**验证: 新跑 impact_assessments 15 行 (原 0), FK 0 悬空**
+- **#2 (非 bug, 设计正确)**: Deep lane 对 0.4–0.69「重要不紧急」项标记 on-demand (用户点击才深度分析)。16 条 fast_pushed 全在此区间, 行为正确。窗口内无 >0.69 紧急项故未见自动深度。不改
+- **#3 (软噪音, 已修)**: `_validate_output` reasoning_chain 步数校验 `==5` → `4–6` 区间, 消除 "6 steps" explainability 噪音; degenerate 链(<4)仍拦截; 2 个测试
+- 相关模块 67 tests 全绿, 无回退
+
 ---
 
 ## 2026-07-03 · 会话 — P0 数据源扩展：Twitter + 中国金融新闻
