@@ -11,9 +11,23 @@ logger = logging.getLogger(__name__)
 
 # Fallback tickers for when config is unavailable
 FALLBACK_TICKERS = {
+    # US equities — core
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
     "AMD", "INTC", "BA", "JPM", "GS", "WMT", "XOM", "CVX",
     "NFLX", "CRM", "ORCL", "ADBE", "PYPL", "DIS", "NKE",
+    # Watchlist — semiconductors / AI
+    "PLTR", "SOXX", "SOXL", "LRCX", "ARM", "MRVL",
+    "MRAAY", "CBRS",
+    # Watchlist — space / defense
+    "SPCX", "RKLB", "KTOS", "ASTS",
+    # Watchlist — quantum / nuclear / emerging tech
+    "RGTI", "OKLO", "SMR", "TEM", "NBIS",
+    # Watchlist — ETFs / other
+    "BOT", "ARKK",
+    # Crypto-exposed US equities (publicly traded stocks, NOT crypto tokens)
+    "COIN", "MSTR", "RIOT", "MARA", "CLSK", "HUT", "WULF",
+    # Fintech / payments (relevant to regulatory/licensing news)
+    "SQ", "AFRM", "SOFI", "HOOD",
 }
 
 
@@ -37,8 +51,39 @@ class EntityExtractor:
         # Lazy-load spaCy — only when first extract() is called
         self._nlp = None
 
-        # Compile ticker regex (matches $AAPL or bare uppercase 1-5 chars)
-        self._ticker_re = re.compile(r'\$?([A-Z]{1,5})\b')
+        # Compile ticker regex — matches $AAPL or bare uppercase 1-5 chars.
+        # Uses (?<![A-Z])…(?![A-Z]) instead of \b because Python 3 treats
+        # CJK characters as \w, breaking word-boundary detection for Chinese
+        # text like "批准XRP现货".
+        self._ticker_re = re.compile(r'(?<![A-Z])\$?([A-Z]{1,5})(?![A-Z])')
+        # Company-name → ticker map for crypto/fintech entities that often
+        # appear in news with their full name rather than the stock symbol.
+        self._company_to_ticker = {
+            # Major tech — names often appear in headlines instead of tickers
+            "nvidia": "NVDA", "apple": "AAPL", "microsoft": "MSFT",
+            "google": "GOOGL", "alphabet": "GOOGL", "amazon": "AMZN",
+            "meta": "META", "tesla": "TSLA", "palantir": "PLTR",
+            "intel": "INTC", "amd": "AMD", "broadcom": "AVGO",
+            "marvell": "MRVL", "lam research": "LRCX",
+            "arm holdings": "ARM", "arm": "ARM",
+            "rocket lab": "RKLB", "spacex": "SPCX",
+            # Crypto-exposed equities (publicly traded)
+            "coinbase": "COIN", "microstrategy": "MSTR",
+            "riot blockchain": "RIOT", "riot platforms": "RIOT",
+            "marathon digital": "MARA", "marathon": "MARA",
+            "cleanspark": "CLSK", "hut 8": "HUT",
+            # Fintech
+            "block": "SQ", "square": "SQ",
+            "affirm": "AFRM", "sofi": "SOFI",
+            "robinhood": "HOOD",
+            # Nuclear / energy
+            "oklo": "OKLO", "nuscale": "SMR",
+            # Space / defense
+            "kratos": "KTOS", "ast spacemobile": "ASTS",
+            "rigetti": "RGTI", "tempus": "TEM", "nebis": "NBIS",
+            # ETFs
+            "ark innovation": "ARKK",
+        }
 
         # Known entities from keywords config
         self._known_people: Set[str] = set(self.keywords.get('key_people', []))
@@ -132,12 +177,15 @@ class EntityExtractor:
     def _extract_tickers(self, text: str) -> Set[str]:
         """Extract uppercase ticker symbols from text.
 
-        Only returns tickers that appear in the known watchlist or
-        are preceded by a $ sign (strong ticker signal).
+        Three extraction strategies:
+        1. Regex: $AAPL or bare uppercase 1-5 chars (validated against watchlist/fallback)
+        2. Company-name → ticker mapping: "Ripple" → XRP, "Coinbase" → COIN
         """
         found: Set[str] = set()
         watchlist = self._load_watchlist()
+        text_lower = text.lower()
 
+        # 1. Regex-based extraction
         for match in self._ticker_re.finditer(text):
             ticker = match.group(1)
             # Accept if on watchlist or preceded by $
@@ -145,6 +193,11 @@ class EntityExtractor:
                 found.add(ticker)
             # Also accept if it's a well-known ticker
             elif ticker in FALLBACK_TICKERS:
+                found.add(ticker)
+
+        # 2. Company-name → ticker mapping (for crypto/fintech)
+        for company_name, ticker in self._company_to_ticker.items():
+            if company_name in text_lower and ticker in FALLBACK_TICKERS:
                 found.add(ticker)
 
         return found

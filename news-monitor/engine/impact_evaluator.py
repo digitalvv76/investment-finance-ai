@@ -66,7 +66,14 @@ class PromptVersionManager:
 def _validate_input(item: NewsItem) -> tuple[bool, str]:
     if not item.title or len(item.title.strip()) < 5:
         return False, "title_too_short"
-    if not item.content_snippet or len(item.content_snippet) < 50:
+    # Breaking news items (ZeroHedge/Twitter flashes) often have the full
+    # news value in the title with little or no body text.  Accept items
+    # where the title alone carries enough signal for analysis.
+    content_len = max(
+        len(item.content_snippet or ""),
+        len(item.title or ""),
+    )
+    if content_len < 50:
         return False, "content_too_short"
     if "\x00" in item.title:
         return False, "null_byte_in_title"
@@ -363,11 +370,17 @@ class ImpactEvaluator:
             event_category=str(data.get("event_category", "")),
             surprise_level=str(data.get("surprise_level", "")),
             breadth=str(data.get("breadth", "")),
+            urgency=str(data.get("urgency", "INFO")).upper(),
+            sentiment=str(data.get("sentiment", "")).upper(),
+            greed_index=int(data.get("greed_index", 50)),
             reasoning_chain=json.dumps(data.get("reasoning_chain", [])),
             similar_events=json.dumps(data.get("similar_historical_events", [])),
             expected_moves=json.dumps(data.get("expected_asset_moves", {})),
             calibration_note=str(data.get("calibration_note", "")),
+            flash_note=str(data.get("flash_note", "")),
             analyst_note=str(data.get("analyst_note", "")),
+            key_points=json.dumps(data.get("key_points", []), ensure_ascii=False),
+            risk_flags=json.dumps(data.get("risk_flags", []), ensure_ascii=False),
             prompt_version=prompt_version,
             latency_ms=latency_ms,
         )
