@@ -4,9 +4,10 @@
 
 ## ✅ 本次会话完成
 
-- **事件驱动催化剂哨兵上线 (V1 生产)** → 复用 V2 引擎搬到 V1，事件驱动为 PRIMARY 评估器，`is_event && intensity≥3` 推送。取消 prescreen + FastLane 阈值 0.3→0.15。零数据库迁移(适配进 ImpactAssessment)。旧 ImpactEvaluator 休眠。已部署 healthy，日志确认 PRIMARY 加载无报错
+- **事件驱动催化剂哨兵上线 (V1 生产)** → 复用 V2 引擎搬到 V1，事件驱动为 PRIMARY 评估器。取消 prescreen + FastLane 阈值 0.3→0.15。零数据库迁移。旧 ImpactEvaluator 休眠。已部署、日志证实逐条正确评估无报错
+- **三档推送模型 (`e02d3e6`)** → `intensity≥3`→手机+TG；`is_event 且 1-2`→仅 Telegram 静音；`is_event=false`→不推(只存库/仪表盘)。手机保持严格
 - **8080 公网裸奔修复** → Basic Auth 已强制 (`e0439cd`+`63b1c4e`)
-- **又一处孤儿漂移修复** → compose 卷路径 `./config`→`../config`
+- **孤儿漂移修复** → compose 卷路径 `./config`→`../config`
 - **deploy.sh** → FILES 加入 compose + event_driven 文件
 
 ## 📊 生产状态
