@@ -42,3 +42,28 @@ async def test_no_alert_below_threshold(esc):
     event = {"id": 11, "escalation_state": "NONE", "title": "x", "news_ids": "1,2", "source_count": 2}
     assert await esc.evaluate(event) is None
     esc.dispatcher.dispatch_event.assert_not_awaited()
+
+
+from datetime import datetime, timedelta
+
+
+@pytest.mark.asyncio
+async def test_market_confirm_bearish_down(esc):
+    esc.market.since = AsyncMock(return_value={"spx_pct": -0.45, "vix_pct": 16.6, "brent_pct": 5.9})
+    event = {"id": 10, "escalation_state": "ALERTED", "title": "US-Iran",
+             "alerted_at": (datetime.now()-timedelta(hours=1)).isoformat(),
+             "dominant_sentiment": "BEARISH", "dominant_category": "geopolitical"}
+    transition = await esc.evaluate(event)
+    assert transition == "ALERTED->CONFIRMED"
+    args, kwargs = esc.dispatcher.dispatch_event.call_args
+    assert args[1] == AlertLevel.CRITICAL
+
+
+@pytest.mark.asyncio
+async def test_market_confirm_wrong_direction_blocked(esc):
+    # bearish event but market went UP → not confirmed
+    esc.market.since = AsyncMock(return_value={"spx_pct": +0.8, "vix_pct": -3.0, "brent_pct": -1.0})
+    event = {"id": 10, "escalation_state": "ALERTED", "title": "x",
+             "alerted_at": (datetime.now()-timedelta(hours=1)).isoformat(),
+             "dominant_sentiment": "BEARISH", "dominant_category": "geopolitical"}
+    assert await esc.evaluate(event) is None

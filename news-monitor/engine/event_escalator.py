@@ -31,7 +31,8 @@ class EventEscalator:
         state = event.get("escalation_state", "NONE")
         if state == "NONE":
             return await self._maybe_alert(event)
-        # CONFIRMED / CLOSE handled in Task 7 / Task 8
+        if state == "ALERTED":
+            return await self._maybe_confirm(event)
         return None
 
     async def _maybe_alert(self, event: dict):
@@ -52,3 +53,39 @@ class EventEscalator:
                            event["id"], m["source_count"], int(m["peak_impact"]))
             return "NONE->ALERTED"
         return None
+
+    async def _maybe_confirm(self, event: dict):
+        confirmed, note = await self._market_confirmed(event)
+        if not confirmed:
+            return None
+        await self.dispatcher.dispatch_event(
+            {"title": event.get("title", ""), "source_count": event.get("source_count", 0),
+             "peak_impact": event.get("peak_impact", 0), "market_note": note},
+            AlertLevel.CRITICAL, telegram_push_fn=self._tg(),
+        )
+        self.db.update_event_escalation(event["id"], escalation_state="CONFIRMED")
+        logger.warning("Event #%s CONFIRMED by market (%s)", event["id"], note)
+        return "ALERTED->CONFIRMED"
+
+    async def _market_confirmed(self, event: dict) -> tuple[bool, str]:
+        alerted_at = event.get("alerted_at")
+        if not alerted_at:
+            return (False, "")
+        start = datetime.fromisoformat(alerted_at)
+        mc = self._cfg["market_confirm"]
+        snap = await self.market.since(start)
+        sent = (event.get("dominant_sentiment") or "").upper()
+        bearish = "BEAR" in sent  # BEARISH / CAUTIOUSLY_BEARISH
+        spx, vix, oil = snap.get("spx_pct"), snap.get("vix_pct"), snap.get("brent_pct")
+        # VIX up = risk-off, direction-agnostic to bull/bear
+        if vix is not None and vix >= mc["vix_pct"]:
+            return (True, f"VIX +{vix:.1f}%")
+        if spx is not None:
+            if bearish and spx <= -mc["spx_pct"]:
+                return (True, f"SPX {spx:.2f}%")
+            if not bearish and spx >= mc["spx_pct"]:
+                return (True, f"SPX +{spx:.2f}%")
+        if oil is not None and event.get("dominant_category") in mc["oil_relevant_categories"]:
+            if bearish and oil >= mc["brent_pct"]:  # supply-risk → oil up
+                return (True, f"Brent +{oil:.1f}%")
+        return (False, "")
