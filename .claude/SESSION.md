@@ -1,31 +1,37 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-09 ~23:30 CST (V1 窗口 / v1-stable)
+> 最后更新: 2026-07-10 ~01:05 CST (V1 窗口 / v1-stable)
 
 ## ✅ 本次会话完成
 
-- **8080 公网裸奔修复** → 应用层 Basic Auth 已强制 (`e0439cd`+`63b1c4e`)。根因=compose `${VAR:-}` 把 WEB_USERNAME 覆盖为空；验证 401/200 全过，手机深度分析链接不受影响
-- **又一处孤儿漂移修复** → compose 卷路径 `./config`→`../config`（部署时暴露，生产短暂 DOWN 后恢复）
-- **deploy.sh** → FILES 加入 docker-compose.yml（此前从不部署）
+- **事件驱动催化剂哨兵上线 (V1 生产)** → 复用 V2 引擎搬到 V1，事件驱动为 PRIMARY 评估器，`is_event && intensity≥3` 推送。取消 prescreen + FastLane 阈值 0.3→0.15。零数据库迁移(适配进 ImpactAssessment)。旧 ImpactEvaluator 休眠。已部署 healthy，日志确认 PRIMARY 加载无报错
+- **8080 公网裸奔修复** → Basic Auth 已强制 (`e0439cd`+`63b1c4e`)
+- **又一处孤儿漂移修复** → compose 卷路径 `./config`→`../config`
+- **deploy.sh** → FILES 加入 compose + event_driven 文件
 
 ## 📊 生产状态
 
 | 组件 | 状态 |
 |------|------|
 | ECS 容器 | 🟢 healthy |
+| 事件驱动评估 | 🟢 PRIMARY 已上线 (⏳ 待新鲜新闻现场确认一次真实评估) |
 | 8080 认证 | 🟢 Basic Auth 已强制 (无认证→401) |
-| Pushover | 🟢 正常 |
-| Telegram | 🟢 正常 |
-| EventEscalator | 🟢 就绪 (等 event_line) |
+| Pushover / Telegram | 🟢 正常 |
 | 华尔街见闻 | 🟢 17 条/轮 |
 | 新浪财经 API | ❌ 全 403 |
 
 ## 📋 下一步
 
-1. **(可选) cherry-pick 事件升级回 main** — 较大的多 commit 移植，风险高，未做
+1. **现场确认一次真实事件评估** — 等有新鲜合格新闻通过 dedup+fast_lane 时，查日志确认 event eval + 推送决策正确
 2. **新浪财经 API 403** — 需新端点或改用 web scraper
-3. **轮换 root 密码 + 凭证备份**（非紧急）
-4. **(可选) 8080 收回 127.0.0.1** — 需 nginx + Vercel 改指向，非必需（已有认证）
+3. **(可选) 8080 收回 127.0.0.1** — 需 nginx + Vercel 改指向，非必需（已有认证）
+4. **轮换 root 密码 + 凭证备份**（非紧急）
+
+## 🩹 本次踩坑
+
+- 事件哨兵在粗筛之后才跑 → 低分冷门催化剂被漏（V1/V2 通病，V1 已用 0.15 放宽缓解）
+- 稳态下 dedup 命中率极高(142/143) → 部署后短期抓不到真实评估属正常，非 bug
+- compose `environment: ${WEB_USERNAME:-}` 覆盖 env_file → 容器凭证变空 → 认证静默失效
 
 ## 🩹 本次踩坑
 

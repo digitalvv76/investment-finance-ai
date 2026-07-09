@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-10 · 会话 — 事件驱动催化剂哨兵上线 (替换 LLM 自由打分)
+
+### 需求
+用户提供三步事件驱动评估标准 (相关性初筛 → 5 类财富效应催化剂 → 强度 1-5 星)，temperature=0，结构化 JSON，`is_event && intensity≥3` → 推送。要求改在 **V1 生产**。
+
+### 关键发现：V2 已建同款
+V2/main 凌晨已提交 `122b7d0` 事件驱动引擎（用户同时把任务交给两个窗口）。决定**复用 V2 的 `event_driven_evaluator.py` + `event_driven_v1.txt` + 测试搬到 V1**（非另写），两边行为一致、合并零冲突。
+
+### 前置粗筛决策 (用户拍板：适度放宽)
+- 查明 V1 有两道粗筛：FastLane `≥0.3`(硬编码) + main.py prescreen `0.30`
+- 对照 V2 SCREEN `≥0.40`——**两边都存在"事件哨兵在粗筛之后才跑"的问题**，低分冷门催化剂进不了 LLM（如实告知用户 V2 并未为此修改）
+- 用户选"适度放宽"：删 prescreen + FastLane `0.3→0.15`（保留实体提取+质量/地域过滤）
+
+### 改动 (commit `<pending>`)
+- 搬入 `engine/event_driven_evaluator.py` + `config/prompts/event_driven_v1.txt` + test
+- `fast_lane.py`: 阈值常量 `FAST_LANE_THRESHOLD=0.15`
+- `main.py`: 事件驱动为 PRIMARY，取消 prescreen；`_event_to_assessment()` 把 EventAssessment 映射进 ImpactAssessment（intensity×20 / headline_signal→flash_note / risk_snapshot→risk_flags / sector+ticker→key_points，**零数据库迁移**）；推送走 `should_push`/`alert_level` 绕过 watchlist/timeliness 关卡；非合格项只存库+仪表盘不推；旧 ImpactEvaluator 休眠
+- `deploy.sh` FILES + `module_registry.json` 注册新模块
+
+### 测试 + 部署
+- 受影响模块 54 通过；预存失败 (scheduler×3 mock 漂移 + vector_store×6 ChromaDB Windows 锁) 经 stash 验证与本次无关
+- 部署 ECS 容器 healthy；日志确认 `EventDrivenEvaluator initialized (PRIMARY)`、无报错、采集→去重→fast_lane 正常；8080 认证仍 401
+- ⏳ **未现场抓到真实事件评估**（部署时 dedup 缓存热、无新鲜合格新闻）——待新新闻突破时自然触发确认
+
 ## 2026-07-09 · 会话 — 修复 8080 公网裸奔 (启用应用层 Basic Auth)
 
 ### 根因
