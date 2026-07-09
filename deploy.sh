@@ -85,6 +85,7 @@ FILES=(
     "news-monitor/config/settings.yaml"
     "news-monitor/config/keywords.yaml"
     "news-monitor/config/module_registry.json"
+    "news-monitor/docker/docker-compose.yml"
     "news-monitor/pipeline/item.py"
     "news-monitor/pipeline/ingest.py"
     "news-monitor/pipeline/screen.py"
