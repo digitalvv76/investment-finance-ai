@@ -3,13 +3,29 @@
 > 🔔 **[2026-07-09 来自 V1 窗口] ECS 灰度前必读交接 → [`.claude/V1-TO-V2-HANDOFF.md`](V1-TO-V2-HANDOFF.md)**
 > 含：今天的安全修复(`cab7d4f` 已在 main，含生死攸关的 `../config` 卷路径)、V2≠V1 提醒、灰度架构坑、**需先与用户确认 A/B 方案**。开工先读它。
 
-> 最后更新: 2026-07-10 (收工 — 事件驱动引擎 + 影子环境就绪)
+> 最后更新: 2026-07-10 (收工 — 事件驱动引擎 + 事件升级 + 影子环境全部就绪)
 
 ## ✅ 本次完成 (2026-07-10)
 
 ### 事件驱动评估引擎
-- 用户三步规则 → `event_driven_v1.txt` prompt + `EventDrivenEvaluator`
-- 决策: `is_event=true + intensity≥3` → push
+- 用户三步规则 (相关性初筛→五类催化剂→强度1-5星), temperature=0
+- SCREEN_THRESHOLD: 0.40→0.15 (平衡覆盖率与LLM成本)
+- 全中文输出: headline_signal / risk_snapshot
+
+### 事件升级 + 多源确认
+- 事件线 ≥3 源 → intensity +1 (cap 5)
+- headline_signal 自动追加「多源确认: N家报道」
+- 纯规则, 零 LLM 成本
+
+### 影子部署基础设施
+- DRY_RUN_PUSH 静音模式 + docker-compose.shadow.yml + deploy-shadow.sh
+
+### 测试
+- 392 passed / 0 failed
+
+## 📋 下一步
+
+- 🚀 `./deploy-shadow.sh` 部署影子到 ECS → 对比 V1 推送 1-2 天 → 切
 - SCREEN_THRESHOLD: 0.40→0.15（平衡覆盖率与成本）
 - 中文输出: headline_signal / risk_snapshot
 - 392 tests 绿
