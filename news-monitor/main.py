@@ -212,6 +212,7 @@ class NewsMonitor:
                 actionability_reviewer=self.actionability_reviewer,
                 db=self.db,
                 event_evaluator=self.event_evaluator,
+                cluster=self.cluster,
             ),
             DispatchStage(channels=channels),
             DeepStage(deep_lane=self.deep_lane),

@@ -37,12 +37,14 @@ class EvaluateStage:
         actionability_reviewer: ActionabilityReviewer | None = None,
         db=None,
         event_evaluator: EventDrivenEvaluator | None = None,
+        cluster=None,
     ) -> None:
         self._impact = impact_evaluator
         self._event_eval = event_evaluator
         self._dispatcher = dispatcher
         self._reviewer = actionability_reviewer
         self._db = db
+        self._cluster = cluster
 
     async def process(self, items: list[PipelineItem]) -> list[PipelineItem]:
         if not items:
@@ -196,35 +198,72 @@ class EvaluateStage:
     # ------------------------------------------------------------------
 
     def _apply_event_assessment(self, item: PipelineItem, ea) -> None:
-        """Apply event-driven assessment directly to item.decision."""
+        """Apply event-driven assessment directly to item.decision.
+
+        Multi-source escalation: if this item belongs to an event line with
+        ≥3 independent sources, intensity gets +1 (capped at 5).
+        """
         from engine.event_driven_evaluator import EventAssessment
 
+        intensity = ea.intensity
+        headline = ea.headline_signal
+        escalation_note = ""
+
+        # ── Event-line escalation: multi-source confirmation ──
+        source_count = self._get_event_source_count(item.id) if item.id else 0
+        if source_count >= 3 and intensity < 5:
+            intensity += 1
+            escalation_note = f" [多源确认: {source_count}家报道]"
+            headline = f"{ea.headline_signal}{escalation_note}"
+            logger.info(
+                "EVALUATE: event line #%d escalated — %d sources → intensity %d",
+                item.id, source_count, intensity,
+            )
+
         # Map intensity to alert level
-        if ea.intensity >= 5:
+        if intensity >= 5:
             level = AlertLevel.CRITICAL
-        elif ea.intensity >= 4:
+        elif intensity >= 4:
             level = AlertLevel.IMPORTANT
         else:
-            level = AlertLevel.IMPORTANT  # intensity 3, per user spec
+            level = AlertLevel.IMPORTANT  # intensity 3
 
-        reason = f"event_driven: catalyst_types={ea.event_types} intensity={ea.intensity}"
+        reason = f"event_driven: catalyst_types={ea.event_types} intensity={intensity}"
+        if escalation_note:
+            reason += f" escalated({source_count}sources)"
 
         item.decision = DispatchDecision(
             alert_level=level,
             alert_reason=reason,
             event_types=ea.event_types,
-            intensity=ea.intensity,
+            intensity=intensity,
             sector_tags=ea.sector_tags,
-            headline_signal=ea.headline_signal,
+            headline_signal=headline,
             ticker_hint=ea.ticker_hint,
             risk_snapshot=ea.risk_snapshot,
-            needs_deep=(ea.intensity >= 4),
-            urgency="FLASH" if ea.intensity >= 5 else "ALERT",
-            flash_note=ea.headline_signal,      # reuse for push formatter
-            analyst_note=ea.risk_snapshot,       # reuse for risk context
-            signal_score=ea.intensity / 5.0,     # normalize for downstream gates
-            impact_score=ea.intensity * 20,      # 1-5 → 20-100 for backward compat
+            needs_deep=(intensity >= 4),
+            urgency="FLASH" if intensity >= 5 else "ALERT",
+            flash_note=headline,
+            analyst_note=ea.risk_snapshot,
+            signal_score=intensity / 5.0,
+            impact_score=intensity * 20,
         )
+
+    def _get_event_source_count(self, news_id: int) -> int:
+        """Return source_count of the event line this item belongs to, or 0."""
+        if not self._db or not news_id:
+            return 0
+        try:
+            with self._db._get_conn() as conn:
+                row = conn.execute(
+                    """SELECT el.source_count FROM event_lines el
+                       JOIN news n ON n.event_line_id = el.id
+                       WHERE n.id = ? AND el.is_active = 1""",
+                    (news_id,),
+                ).fetchone()
+                return int(row["source_count"]) if row else 0
+        except Exception:
+            return 0
 
     @staticmethod
     def _to_news_item(item: PipelineItem):
