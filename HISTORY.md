@@ -1158,3 +1158,40 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - 矛盾点: .env 有 WEB_USERNAME 但运行容器未强制 Basic Auth(疑手改代码重建时未接入容器环境)→ 配置写着有密码, 实际裸奔
 - 不能直接关: 手机走 Vercel→直连 8080/api/*, 关安全组=断手机。nginx:80 有 htpasswd(401)但 Vercel 绕过
 - 修复方向(待规划): Vercel 改走 :80 认证+8080 收回 127.0.0.1; 或容器真启用 WEB_USERNAME 且 Vercel 带认证头。记入 memory ecs-server
+
+---
+
+## 2026-07-09T17:19+08:00 · 会话开始
+
+### 收尾：HISTORY.md 提交哈希补录
+
+事件升级推送 14 个功能 commit（已在上述条目详述），补录哈希引用：
+
+| Commit | 说明 |
+|--------|------|
+| `04aa5ed` | feat: event-escalation config + loader |
+| `8307652` | feat: EventLine escalation fields + migration + queries |
+| `e96bf57` | feat: AlertDispatcher.dispatch_event for event-level alerts |
+| `5a8d6b5` | feat: MarketSnapshot — delta since reference time (SPX/VIX/Brent) |
+| `67c3893` | fix: cluster forms event line on second corroborating article |
+| `858efa9` | feat: EventEscalator momentum + ALERT trigger |
+| `f9dbf88` | feat: EventEscalator market confirmation (time-aligned + direction gate) |
+| `7c99539` | feat: EventEscalator CLOSE + sweep loop with error isolation |
+| `5ea1731` | fix: set seed event_line_id back-pointer (Task 5 follow-up) |
+| `4ab8ac6` | fix: guard unparseable alerted_at + strengthen market-confirm tests (Task 7 follow-up) |
+| `6060228` | feat: wire clustering + escalator sweep into scheduler/main |
+| `d342964` | fix: event body reaches telegram/pushover render via _flash_note/_analyst_note (Task 3 follow-up) |
+| `4d44169` | test: US-Iran rolling event e2e — exactly 3 pushes, no spam |
+| `5e08c32` | feat: event-escalation migration/rollback script |
+
+推送安全 + 部署受阻 + 安全加固 5 个 commit：
+
+| Commit | 说明 |
+|--------|------|
+| `7e8f84b` | fix: dispatch_event tests must never send real Pushover |
+| `6d56089` | docs: session sync — event-escalation feature complete + push-safety incident |
+| `857af91` | docs: session start marker 2026-07-09T13:15 |
+| `314997f` | docs: session wrap-up — route88 audit, orphan rescue, ssh hardening, 8080 exposure |
+| `01ec40e` | docs: session shutdown — test failures noted, session closed |
+
+> 19 commits 全量补录完成。事件升级功能 14 commit READY，部署阻断于孤儿代码合并。
