@@ -89,6 +89,16 @@
       "tests": [],
       "related_scripts": [],
       "also_tests": []
+    },
+    "engine/event_escalator.py": {
+      "tests": ["tests/test_event_escalator.py"],
+      "related_scripts": ["scripts/migrate_event_escalation.py"],
+      "also_tests": ["tests/test_event_escalation_e2e.py"]
+    },
+    "engine/market_snapshot.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": ["tests/test_event_escalator.py"]
     }
   }
 }

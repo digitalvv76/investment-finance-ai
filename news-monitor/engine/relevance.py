@@ -107,6 +107,21 @@ _HIGH_IMPACT_CATEGORIES = {
     # China macro
     "china_stimulus":     0.85,
     "pboc":               0.80,
+    # Government strategic investment / critical supply chains
+    "gov_intervention":   0.95,
+    "critical_minerals":  0.90,
+    "rare_earth":         0.90,
+    "gov_funding":        0.90,
+    "gov_grant":          0.90,
+    "gov_equity":         0.95,
+    "gov_contract":       0.85,
+    "gov_subsidy":        0.85,
+    "supply_chain_security": 0.85,
+    "energy_security":    0.85,
+    "domestic_production": 0.80,
+    "reshoring":          0.80,
+    "defense_contract":   0.85,
+    "national_security":  0.85,
 }
 
 # Categories that are INHERENTLY LOW IMPACT — they should NOT trigger
@@ -142,7 +157,7 @@ _SECTOR_SIGNALS = {
     "fast-track": 0.75, "expedite": 0.70, "accelerate": 0.65,
     "nuclear reactor": 0.75, "SMR": 0.75, "small modular reactor": 0.75,
     "coal power": 0.70, "coal-fired": 0.70, "fossil fuel plant": 0.65,
-    "critical minerals": 0.70, "rare earth": 0.75, "rare earths": 0.75,
+    "critical minerals": 0.85, "rare earth": 0.85, "rare earths": 0.85,
     "infrastructure contract": 0.75, "defense contract": 0.80,
     "energy contract": 0.75, "power purchase agreement": 0.70,
     "national security": 0.70, "supply chain security": 0.70,
@@ -164,6 +179,26 @@ _SECTOR_SIGNALS = {
     "convertible preferred": 0.80, "equity stake": 0.80,
     "strategic investment": 0.75, "anchor investment": 0.75,
     "lead investor": 0.80, "co-invest": 0.75,
+    # US government funding / equity (broad — any form of gov financial involvement)
+    "government invests": 0.85, "government stake": 0.85, "government equity": 0.85,
+    "federal funding": 0.85, "federal grant": 0.85, "federal contract": 0.85,
+    "US government": 0.80, "US invests": 0.85, "US govt": 0.80,
+    "taxpayer fund": 0.80, "taxpayer stake": 0.80,
+    "bailout": 0.85, "bailouts": 0.85, "bailout package": 0.90,
+    "loan guarantee": 0.80, "debt guarantee": 0.80,
+    "government backstop": 0.85, "government backing": 0.85,
+    "implicit guarantee": 0.80, "too big to fail": 0.80,
+    "golden share": 0.90, "govt acquires": 0.85, "govt takes": 0.80,
+    "Treasury acquires": 0.90, "Treasury stake": 0.90,
+    "White House announces": 0.80, "Congress passes": 0.75,
+    "bipartisan support": 0.70, "national security review": 0.75,
+    "CFIUS": 0.80, "strategic industry": 0.75,
+    "appropriations bill": 0.75, "defense authorization": 0.80,
+    # DOE / DoD grant / contract signals (gov-backed strategic investment)
+    "DOE grant": 0.85, "DoE grant": 0.85, "Energy Department grant": 0.85,
+    "DOE fund": 0.85, "DOE award": 0.85, "DOE contract": 0.85,
+    "DoD grant": 0.85, "DoD contract": 0.85, "DoD award": 0.85,
+    "Defense Department grant": 0.85, "Pentagon contract": 0.85,
 }
 
 # Patterns that indicate RETROSPECTIVE / SUMMARY content — not actionable.

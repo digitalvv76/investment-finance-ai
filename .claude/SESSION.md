@@ -1,42 +1,37 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-09 (收工 — V2 事件升级移植完成 + 孤儿审计完成)
+> 最后更新: 2026-07-09 (收工 — 孤儿代码移植 P1+P3 完成)
 
 ## ✅ 本次完成 (2026-07-09 · 晚)
 
-### 1. V2 事件升级功能移植完成 (main, 7 Task 全绿)
-- 从 v1-stable 移植"连续事件升级推送"进 V2，Option A 补 dispatch_event
-- 提交: `b05a576`→`b4371f6` + `3be9ef6`(回归) + `f9cdebd`(计划文档)
-- **全量 377 passed / 0 failed / 0 errors**；影子跑零错误，实跑聚出 3 条 event line
-- 全程 main、未碰 ECS、未部署
+### 孤儿代码移植 P1 + P3 (main, 9 文件, 377 tests 绿)
 
-### 2. 孤儿代码独立审计完成 (只读, 未改代码)
-- 3 并行代理审 47 文件；核心发现: 孤儿主体=生产直建未入 git 的"政府干预/关键矿产"检测功能，V2 缺失
-- 完整清单见 HISTORY 2026-07-09T20:15 条目
+**用户选择方案 B：P1 + P3 一起，P2 单独定。**
 
-## 📋 下一步 (⚠️ 下次开场先处理这个)
+- **P1-a 去重 bug** (`dedup.py`): deque+set FIFO 替换 destructive clear()，breaking 前缀归一化，批内 Jaccard+语义去重
+- **P1-b 政府干预检测** (3 文件): `strategic_detector.py`(CFIUS/DOE/backstop 实体+评分) + `relevance.py`(12 新类别+DOE/DoD sector signals) + `keywords.yaml`(+47 触发词)
+- **P3 性能/加固** (5 文件): RSS 并发化(`asyncio.gather`)、Twitter 2 组并发、Docker `pids:200`、`deep_lane.py` 三阶段实时行情(日线→info→intraday)、`vector_store.pair_similarity()`
+- **Manifest 补注册**: event_escalator + market_snapshot + migrate_event_escalation
+- 全量 **377 passed / 0 failed / 0 errors**
 
-**🎯 待用户拍板: 孤儿代码移植范围三选一**
-- A) 先 P1 = 去重 bug + 政府干预检测(打包 4 文件)  ← 我倾向推荐
-- B) P1 + P3(性能/加固) 一起, P2 单独定
-- C) 只修去重 bug
+### 未移植 (P2，待用户定参数)
 
-**移植候选（按价值, 详见 HISTORY）:**
-- 🔴 P1-a 去重 bug `dedup.py`(缓存满 destructive clear → 重复推送洪水)
-- 🔴 P1-b 政府干预检测 `strategic_detector`+`relevance`+`keywords.yaml`(打包)
-- 🟡 P2-a 推送下限 `min_impact_for_push:30` — **改推送行为, 需用户先定参数**
-- 🟡 P2-b 全球市场压力路径 `content_filter.py`
-- 🟢 P3 rss/twitter 并发 + docker pids:200 + deep_lane 实时行情
+- P2-a 推送下限 `min_impact_for_push:30` — 改推送行为需先确认
+- P2-b 全球市场压力路径 `content_filter.py`
 
-**其它主线:**
-- 🏭 V2 灰度上 ECS: 部署 → Web SSE → Telegram → Pushover（建议先只开 Web SSE 观察 1-2 天）
+## 📋 下一步
+
+- 🏭 **V2 灰度上 ECS**: 部署 → Web SSE → Telegram → Pushover（建议先只开 Web SSE 观察 1-2 天）
   - ⚠️ 部署前必须先查"ECS 实际跑的代码 vs git"（孤儿漂移背景）
+- 🟡 **P2 推送下限**: 用户有空时讨论参数
 
 ## ⚠️ 上次踩坑
 
 - 大批文件审计: 单代理啃 47 文件会 600s 卡死 → 拆多个并行代理、限制用 --stat+定向 diff 不 dump 全量
 - 移植纯搬运用 `git show v1-stable:<path> > 目标` 逐字节, 避免手抄错
 - 隐藏依赖: dispatch_event 需 `_format_event_body`; loader 需补 `import json`; escalator 读 impact_assessments.sentiment(最高风险, 先补 DB)
+- rescue 分支的 vector_store 删了 `close()`（旧版没这个方法）→ V2 必须保留 close()，只加 `pair_similarity()`
+- rescue 分支 docker-compose 改了 WEB_DASHBOARD_URL/sources 路径 → ECS 特定漂移，不移植
 
 ## 📊 系统健康
 
@@ -44,6 +39,6 @@
 |------|------|
 | ECS 4C8G | ✅ 稳定 |
 | V1 生产 | ✅ healthy（跑旧代码, 未动） |
-| V2 (main) | ✅ 事件升级已并入, 377 测试绿, 未上线 |
-| 测试 | ✅ 377 passed |
-| 工作区 | ✅ 干净（收工前 push）|
+| V2 (main) | ✅ P1+P3 已并入, 377 测试绿, 未上线 |
+| 测试 | ✅ 377 passed / 0 failed / 0 errors |
+| 工作区 | ⚠️ 未提交 (P1+P3 变更) |

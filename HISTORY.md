@@ -1389,3 +1389,59 @@ in-session recording (Layer 2, deferred).
 **待用户决策 (下次会话开场先问)**: 移植范围三选一 — A) 先 P1(bug+政府干预检测); B) P1+P3 一起, P2 单独定; C) 只修去重 bug。P2 因改推送行为需用户先确认参数。
 
 
+
+## 2026-07-09T22:07+08:00 · 孤儿代码移植 P1+P3 完成 ✅
+
+> 用户选择方案 B。全程在 main、未碰 ECS、未部署。
+
+### P1-a: 去重 bug 修复 (`collector/dedup.py`)
+- deque(maxlen=N)+set 双轨 FIFO 替换旧 set+clear-all（缓存满时不再丢失全部去重记忆）
+- breaking/urgency 前缀归一化 (`_strip_prefix` + `_BREAKING_PREFIXES`): "BREAKING: X" 和 "X" 共享同一指纹
+- 批内去重 Tier 2.5: Jaccard 标题相似度 (≥0.65) → vector_store.pair_similarity (≥0.82) 双重检测
+- `_content_hash` 扩展到 300 字符 + 前缀剥离
+- 类常量: SEMANTIC_THRESHOLD=0.82, BATCH_JACCARD_THRESHOLD=0.65
+- max_cache_size 从 5000 → 10000
+
+### P1-b: 政府干预/关键矿产检测（打包 3 文件）
+- `strategic_detector.py`: 新增 CFIUS + government backstop/bailout/support/rescue/state-backed 实体; "provides"/"approves" 动作词; DOE/能源部 combo bonus; 通用 gov 实体分 0.10→0.15
+- `relevance.py`: 12 个新类别 (gov_intervention 0.95, critical_minerals 0.90, gov_equity 0.95 等); DOE/DoD grant/contract sector signals + CFIUS/bailout/golden share 信号; critical minerals/rare earth 0.70→0.85
+- `keywords.yaml`: +47 触发词 (rare earth/critical minerals/DOE grant/bailout/Treasury acquires/CFIUS 等)
+
+### P3: 性能/加固（5 文件）
+- `rss_fetcher.py`: fetch_all 从顺序 → asyncio.gather 并发 (~25s→~6s)，连接池 3→5
+- `twitter_fetcher.py`: fetch_all 从顺序 → 2 组并发 asyncio.gather (~72s→~36s)
+- `docker-compose.yml`: 新增 `pids: 200` 防 Chromium 进程泄漏
+- `deep_lane.py`: `_fetch_market_enrichment` 三阶段重写 — Phase 1 日线(MA+成交量基准) → Phase 2 Ticker.info(pre/regular/post-market 实时价) → Phase 3 intraday 5min(指数+加密); 市场阶段标签从 marketState 获取
+- `vector_store.py`: 新增 `pair_similarity()` — 批内语义去重用的两文本余弦相似度（不存储）
+
+### 补注册 (上轮遗漏)
+- `engine/__manifest__.json`: +event_escalator +market_snapshot
+- `scripts/__manifest__.json`: +migrate_event_escalation
+
+### 测试
+- **全量 377 passed / 0 failed / 0 errors** (7 Windows asyncio 警告, 已知无害)
+- 相关: dedup 11 绿, strategic_detector 26 绿, 零回归
+
+### P2 延后（需用户定参数）
+- P2-a 推送下限 `min_impact_for_push:30` — 改推送行为
+- P2-b 全球市场压力路径 `content_filter.py`
+
+### 踩坑
+- rescue 分支 vector_store 删了 `close()`（旧版没这个方法）→ V2 必须保留 close()，只加 pair_similarity()
+- rescue 分支 docker-compose 的 WEB_DASHBOARD_URL/sources 路径是 ECS 特定漂移 → 不移植
+
+
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 3be9ef6 · 2026-07-09T19:52 · [V2-escalation] 注册模块 + 全量回归绿 + 影子验证 + 历史同步 [skip-tests]
+
+---
+
+### f9cdebd · 2026-07-09T19:53 · docs: V2 事件升级移植实施计划归档 [skip-tests]
+
+---
+
+### e7a00ba · 2026-07-09T20:11 · docs: 孤儿代码审计结论 + 收工同步 SESSION/HISTORY [skip-tests]
+
+---

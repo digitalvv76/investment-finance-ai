@@ -258,13 +258,17 @@ class DeepLane:
     async def _fetch_market_enrichment(self, tickers_field: str) -> str:
         """Fetch real-time market data for the tickers mentioned in the news.
 
-        Returns a compact text block suitable for injection into the LLM
-        prompt, or an empty string if no data could be fetched within the
-        time budget.
+        Three-phase fetch:
+          1. Daily bars (90 days) → 20/50 MA and volume baseline.
+          2. Ticker.info per stock → real-time price (pre/regular/post-market).
+          3. Intraday 5-min bars → real-time for indices (^GSPC, ^VIX) and
+             crypto (BTC-USD, etc.) which don't have standard info fields.
 
-        Data collected (all via yfinance, free, no API key):
-          - Per-ticker: price, day change %, volume, vs 20/50 MA
-          - Macro: SPX change %, VIX level
+        Phase label comes from Ticker.info ``marketState`` (more accurate than
+        clock-based guessing): PRE → pre-market, REGULAR → today,
+        POST → after-hours, CLOSED → close.
+
+        Returns a compact text block for LLM prompt injection, or "" on failure.
         """
         tickers = [t.strip().upper() for t in tickers_field.split(",") if t.strip()]
         tickers = [t for t in tickers if t.isalpha() and 1 <= len(t) <= 5]
@@ -278,7 +282,6 @@ class DeepLane:
                 if wt in ("BTC", "ETH", "SOL"):
                     continue  # handled via crypto suffixes below
                 related.add(wt)
-            # Add top watchlist tickers (max 5 extra to avoid rate limiting)
             extra = list(related)[:5]
             for t in extra:
                 if t not in tickers:
@@ -286,22 +289,25 @@ class DeepLane:
         except Exception:
             pass
 
-        # Map crypto tickers to yfinance symbols
+        # Separate equity tickers from crypto (different price sources)
         crypto_map = {"BTC": "BTC-USD", "ETH": "ETH-USD", "SOL": "SOL-USD"}
-        symbols = []
-        for t in tickers:
-            symbols.append(crypto_map.get(t, t))
-        symbols += [_SPX_SYMBOL, _VIX_SYMBOL]
+        equity_tickers = [t for t in tickers if t not in crypto_map]
+        cryptos = [crypto_map[t] for t in tickers if t in crypto_map]
+
+        # All yfinance symbols for the daily download
+        daily_symbols = list(equity_tickers) + cryptos + [_SPX_SYMBOL, _VIX_SYMBOL]
 
         end = datetime.now() + timedelta(days=1)
-        start = datetime.now() - timedelta(days=90)  # enough for 20/50 MA
+        start = datetime.now() - timedelta(days=90)
 
+        loop = asyncio.get_event_loop()
+
+        # ---- Phase 1: daily bars for MAs + volume baseline ----
         try:
-            loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(
+            daily = await loop.run_in_executor(
                 None,
                 lambda: yf.download(
-                    symbols, start=start.strftime("%Y-%m-%d"),
+                    daily_symbols, start=start.strftime("%Y-%m-%d"),
                     end=end.strftime("%Y-%m-%d"),
                     progress=False, auto_adjust=True,
                 ),
@@ -309,78 +315,187 @@ class DeepLane:
         except Exception:
             return ""
 
-        if data is None or data.empty:
+        if daily is None or daily.empty:
             return ""
 
-        lines = ["[REAL-TIME MARKET DATA — use this to ground your analysis]"]
-        closes = data.get("Close")
+        # ---- Phase 2: Ticker.info per equity ticker (parallel, real-time) ----
+        # info dicts include: regularMarketPrice, preMarketPrice, postMarketPrice,
+        # regularMarketChangePercent, preMarketChangePercent, postMarketChangePercent,
+        # regularMarketVolume, marketState, previousClose
+        info_map: dict = {}   # ticker → info dict
+        phase = "latest"
+        if equity_tickers:
+            def _fetch_one_info(tkr: str):
+                try:
+                    return yf.Ticker(tkr).info
+                except Exception:
+                    return None
+            infos = await loop.run_in_executor(
+                None,
+                lambda: [_fetch_one_info(t) for t in equity_tickers],
+            )
+            for tkr, info in zip(equity_tickers, infos):
+                if info:
+                    info_map[tkr] = info
+            # Derive market phase from the first available info
+            for info in info_map.values():
+                state = info.get("marketState", "")
+                if state == "PRE":
+                    phase = "pre-market"
+                elif state == "REGULAR":
+                    phase = "today"
+                elif state == "POST":
+                    phase = "after-hours"
+                if phase != "latest":
+                    break
 
-        # Per-ticker snapshot — use yfinance symbol for column lookup
-        lookup = {t: crypto_map.get(t, t) for t in tickers}
+        # Fallback: clock-based phase if no info could determine it
+        if phase == "latest":
+            now = datetime.now()
+            is_weekday = now.weekday() < 5
+            hour = now.hour + now.minute / 60.0
+            if is_weekday and 4 <= hour < 9.5:
+                phase = "pre-market"
+            elif is_weekday and 9.5 <= hour < 16:
+                phase = "today"
+            elif is_weekday and 16 <= hour < 20:
+                phase = "after-hours"
+
+        # ---- Phase 3: intraday 5-min for indices + crypto (no Ticker.info) ----
+        intraday_needed = cryptos + [_SPX_SYMBOL, _VIX_SYMBOL]
+        intraday = None
+        if intraday_needed:
+            try:
+                intraday = await loop.run_in_executor(
+                    None,
+                    lambda: yf.download(
+                        intraday_needed, period="1d", interval="5m",
+                        progress=False, auto_adjust=True,
+                    ),
+                )
+            except Exception:
+                logger.debug("Intraday download failed — falling back to daily")
+
+        # ---- Assemble output ----
+        lines = ["[REAL-TIME MARKET DATA — use this to ground your analysis]"]
+        daily_closes = daily.get("Close")
+        daily_volumes = daily.get("Volume")
+        single_sym = len(daily_symbols) == 1
+
+        def _d_series(col: str):
+            """Extract clean daily Close series for a symbol."""
+            if daily_closes is None:
+                return None
+            if single_sym:
+                s = daily_closes.dropna()
+            else:
+                s = daily_closes[col].dropna() if col in daily_closes.columns else None
+            return s if (s is not None and not s.empty) else None
+
+        def _v_series(col: str):
+            """Extract clean daily Volume series for a symbol."""
+            if daily_volumes is None:
+                return None
+            if single_sym:
+                s = daily_volumes.dropna()
+            else:
+                s = daily_volumes[col].dropna() if col in daily_volumes.columns else None
+            return s if (s is not None and not s.empty) else None
+
+        def _intraday_price(col: str):
+            """Return current price from intraday data if it's from today, else None."""
+            if intraday is None or intraday.empty:
+                return None
+            ic = intraday.get("Close")
+            if ic is None:
+                return None
+            if single_sym:
+                i_s = ic.dropna()
+            else:
+                i_s = ic[col].dropna() if col in ic.columns else None
+            if i_s is None or i_s.empty:
+                return None
+            last_ts = i_s.index[-1]
+            last_date = last_ts.date() if hasattr(last_ts, "date") else last_ts
+            if last_date != datetime.now().date():
+                return None
+            return round(float(i_s.iloc[-1]), 2)
+
+        # ---- Per-ticker lines ----
         for ticker in tickers:
             try:
-                yf_sym = lookup[ticker]
-                if len(symbols) == 1:
-                    series = closes
+                if ticker in crypto_map:
+                    # Crypto: intraday → daily fallback
+                    col = crypto_map[ticker]
+                    d_s = _d_series(col)
+                    if d_s is None:
+                        continue
+                    price = _intraday_price(col) or round(float(d_s.iloc[-1]), 2)
+                    # Previous close = last daily close before today
+                    prev = float(d_s.iloc[-2]) if len(d_s) >= 2 else price
+                elif ticker in info_map:
+                    # Equity stock: use Ticker.info for real-time price
+                    info = info_map[ticker]
+                    d_s = _d_series(ticker)
+                    if d_s is None:
+                        continue
+                    state = info.get("marketState", "")
+                    price = None
+                    if state == "PRE":
+                        price = info.get("preMarketPrice")
+                    elif state == "POST":
+                        price = info.get("postMarketPrice")
+                    if price is None:
+                        price = info.get("regularMarketPrice")
+                    if price is None:
+                        price = round(float(d_s.iloc[-1]), 2)
+                    price = round(float(price), 2)
+                    prev = float(info.get("previousClose", d_s.iloc[-2] if len(d_s) >= 2 else price))
                 else:
-                    series = closes[yf_sym] if yf_sym in closes.columns else None
-                if series is None or series.dropna().empty:
-                    continue
-                series = series.dropna()
-                price = round(float(series.iloc[-1]), 2)
-                prev = float(series.iloc[-2]) if len(series) >= 2 else price
+                    # Equity stock without info (shouldn't happen) — daily fallback
+                    d_s = _d_series(ticker)
+                    if d_s is None:
+                        continue
+                    price = round(float(d_s.iloc[-1]), 2)
+                    prev = float(d_s.iloc[-2]) if len(d_s) >= 2 else price
+
                 chg_pct = round((price - prev) / prev * 100, 2) if prev != 0 else 0.0
 
-                # Moving averages
-                ma20 = round(float(series.rolling(20).mean().iloc[-1]), 2) if len(series) >= 20 else None
-                ma50 = round(float(series.rolling(50).mean().iloc[-1]), 2) if len(series) >= 50 else None
-                vs_ma20 = ""
-                if ma20 and ma20 != 0:
-                    vs_ma20 = f" ({'above' if price > ma20 else 'below'} 20MA {ma20})"
-                vs_ma50 = ""
-                if ma50 and ma50 != 0:
-                    vs_ma50 = f" ({'above' if price > ma50 else 'below'} 50MA {ma50})"
+                # MAs from daily data
+                d_s = _d_series(crypto_map.get(ticker, ticker))
+                ma20 = round(float(d_s.rolling(20).mean().iloc[-1]), 2) if d_s is not None and len(d_s) >= 20 else None
+                ma50 = round(float(d_s.rolling(50).mean().iloc[-1]), 2) if d_s is not None and len(d_s) >= 50 else None
+                vs_ma20 = f" ({'above' if price > ma20 else 'below'} 20MA {ma20})" if ma20 else ""
+                vs_ma50 = f" ({'above' if price > ma50 else 'below'} 50MA {ma50})" if ma50 else ""
 
                 # Volume spike
-                vol_ok = False
-                try:
-                    vol_series = data.get("Volume")
-                    if vol_series is not None:
-                        if len(symbols) == 1:
-                            vol = vol_series
-                        else:
-                            vol = vol_series[ticker] if ticker in vol_series.columns else None
-                        if vol is not None and not vol.dropna().empty:
-                            vol = vol.dropna()
-                            latest_vol = int(vol.iloc[-1])
-                            avg_vol = int(vol.rolling(20).mean().iloc[-1]) if len(vol) >= 20 else latest_vol
-                            vol_ratio = round(latest_vol / avg_vol, 1) if avg_vol > 0 else 1.0
-                            vol_str = f" | Vol {latest_vol:,} ({vol_ratio}x avg)"
-                            vol_ok = True
-                except Exception:
-                    pass
-                if not vol_ok:
-                    vol_str = ""
+                vol_str = ""
+                v_s = _v_series(crypto_map.get(ticker, ticker))
+                if v_s is not None:
+                    try:
+                        latest_vol = int(v_s.iloc[-1])
+                        avg_vol = int(v_s.rolling(20).mean().iloc[-1]) if len(v_s) >= 20 else latest_vol
+                        ratio = round(latest_vol / avg_vol, 1) if avg_vol > 0 else 1.0
+                        vol_str = f" | Vol {latest_vol:,} ({ratio}x avg)"
+                    except Exception:
+                        pass
 
                 lines.append(
-                    f"  {ticker}: ${price} ({chg_pct:+.2f}% today){vs_ma20}{vs_ma50}{vol_str}"
+                    f"  {ticker}: ${price} ({chg_pct:+.2f}% {phase}){vs_ma20}{vs_ma50}{vol_str}"
                 )
             except Exception:
                 continue
 
-        # Macro snapshot (SPX + VIX)
+        # ---- Macro snapshot (SPX + VIX) ----
         try:
             for sym, label in [(_SPX_SYMBOL, "SPX"), (_VIX_SYMBOL, "VIX")]:
-                if len(symbols) == 1:
-                    s = closes
-                else:
-                    s = closes[sym] if sym in closes.columns else None
-                if s is not None and not s.dropna().empty:
-                    s = s.dropna()
-                    val = round(float(s.iloc[-1]), 2)
-                    prev_val = float(s.iloc[-2]) if len(s) >= 2 else val
-                    chg = round((val - prev_val) / prev_val * 100, 2) if prev_val != 0 else 0.0
-                    lines.append(f"  {label}: {val} ({chg:+.2f}%)")
+                d_s = _d_series(sym)
+                if d_s is None:
+                    continue
+                price = _intraday_price(sym) or round(float(d_s.iloc[-1]), 2)
+                prev = float(d_s.iloc[-2]) if len(d_s) >= 2 else price
+                chg = round((price - prev) / prev * 100, 2) if prev != 0 else 0.0
+                lines.append(f"  {label}: {price} ({chg:+.2f}%)")
         except Exception:
             pass
 
