@@ -86,11 +86,17 @@ class ImpactAssessment:
     event_category: str = ""            # monetary|geopolitical|macro_data|corporate|regulatory|other
     surprise_level: str = ""            # expected|minor_surprise|major_surprise|shock
     breadth: str = ""                   # single_stock|sector|broad_market|cross_asset
+    urgency: str = "INFO"              # FLASH|ALERT|WATCH|INFO — LLM-determined push priority
+    sentiment: str = ""                # BULLISH|CAUTIOUSLY_BULLISH|NEUTRAL|CAUTIOUSLY_BEARISH|BEARISH
+    greed_index: int = 50              # 0-100, 0=extreme fear, 100=extreme greed
     reasoning_chain: str = ""           # JSON array of 5 strings
     similar_events: str = ""            # JSON array
     expected_moves: str = ""            # JSON dict
     calibration_note: str = ""
-    analyst_note: str = ""              # 2-4 sentence analyst-style narrative in Chinese
+    flash_note: str = ""               # 3-5 sentence push narrative (replaces analyst_note for push)
+    analyst_note: str = ""              # legacy, kept for backward compat
+    key_points: str = ""               # JSON array of 3-5 bullet points
+    risk_flags: str = ""               # JSON array of risk warnings
     low_confidence: bool = False
     prompt_version: str = "v1"
     latency_ms: int = 0

@@ -27,6 +27,40 @@ class NewsBot:
         self._app: Optional[Application] = None
         self._translator = get_translator()
 
+    async def _auto_detect_chat_id(self):
+        """Auto-detect and persist chat_id from recent Telegram conversations.
+
+        Called once on startup when no chat_id is saved yet.  This ensures
+        the bot can push messages even if the user hasn't explicitly sent
+        /start — any prior conversation with the bot will be discovered.
+        """
+        existing = self._get_chat_ids()
+        if existing:
+            logger.info("Telegram chat_ids: %s (from database + env)", existing)
+            return
+
+        logger.info("No chat_id saved — auto-detecting from Telegram API ...")
+        try:
+            resp = await self._app.bot.get_updates(limit=10, timeout=5)
+            seen: set[int] = set()
+            for update in resp:
+                chat = update.effective_chat
+                if chat and chat.id not in seen:
+                    seen.add(chat.id)
+            if seen:
+                # Use the most recently active chat
+                chat_id = max(seen)  # higher IDs = more recent
+                self.set_chat_id(chat_id)
+                logger.info("Auto-detected chat_id: %d (saved to database)", chat_id)
+            else:
+                logger.warning(
+                    "No chat_id found — Telegram pushes will fail until "
+                    "someone sends a message to the bot.  Open Telegram, "
+                    "search for the bot, and send any message."
+                )
+        except Exception as e:
+            logger.warning("chat_id auto-detection failed: %s", e)
+
     async def start(self):
         """Start the bot in polling mode."""
         self._app = Application.builder().token(self.token).build()
@@ -34,8 +68,11 @@ class NewsBot:
         # Register command and callback handlers
         register_handlers(self._app, self.db, self.deep_lane, self.learner, self.curator, self.trainer)
 
-        # Start polling
+        # Initialize and auto-detect chat_id BEFORE starting polling
         await self._app.initialize()
+        await self._auto_detect_chat_id()
+
+        # Start polling
         await self._app.start()
         await self._app.updater.start_polling()
         logger.info("Telegram bot started (polling mode)")
@@ -56,13 +93,15 @@ class NewsBot:
         The English message includes analyst note, ticker CN names, and
         sector ETFs.  The Chinese message is a translation of the title
         followed by the same analyst note and ETF line.
+
+        Pushes to ALL registered chat_ids (primary + TELEGRAM_CHAT_ID_2/3).
         """
         if not self._app:
             logger.warning("Bot not initialized, can't push")
             return
 
-        chat_id = self._get_chat_id()
-        if not chat_id:
+        chat_ids = self._get_chat_ids()
+        if not chat_ids:
             return
 
         title = item.get('title', '')
@@ -71,83 +110,90 @@ class NewsBot:
         tickers = item.get('tickers_found', '')
         macro = item.get('macro_tags', '')
 
-        # --- English alert (includes analyst note + impact + ETFs) ---
+        # --- Build message body ---
+        # format_fast_alert already produces a Chinese-friendly format.
+        # If we have a CN translation, append it inline so there is only
+        # ONE message per alert — not two separate notifications.
         en_text = format_fast_alert(item, analyst_note=analyst_note,
                                     event_category=event_category,
                                     impact_score=impact_score,
                                     confidence=confidence)
+
+        cn_title = None
+        if not self._is_chinese(title):
+            cn_title = await self._translator.translate(title)
+        if cn_title:
+            en_text += f"\n\n\U0001f1e8\U0001f1f3 {cn_title}"
+
         keyboard = build_feedback_keyboard(item['id'])
 
-        try:
-            await self._app.bot.send_message(
-                chat_id=chat_id,
-                text=en_text,
-                reply_markup=keyboard,
-                disable_web_page_preview=False,
-            )
-            logger.info(f"Alert pushed (EN): {title[:50]}...")
-        except Exception as e:
-            logger.error(f"Push failed (EN): {e}")
-            return  # Don't send CN if EN failed
-
-        # --- Chinese translation ---
-        cn_title = await self._translator.translate(title)
-        if cn_title:
-            cn_parts = [f"\U0001f1e8\U0001f1f3 {cn_title}"]
-
-            # Impact score + confidence
-            if impact_score > 0:
-                imp_line = f"\n💥 冲击: {impact_score}分"
-                if confidence > 0:
-                    imp_line += f" | 置信度: {confidence}%"
-                cn_parts.append(imp_line)
-
-            # Analyst note (same as EN version — already in Chinese)
-            note = analyst_note or item.get('analyst_note', '')
-            if note:
-                cn_parts.append(f"\n{note}")
-
-            # Related tickers + sector ETFs
-            from bot.formatters import _build_ticker_etf_line
-            etf_line = _build_ticker_etf_line(tickers, macro, event_category)
-            if etf_line:
-                cn_parts.append(f"\n{etf_line}")
-
-            if url:
-                cn_parts.append(f"\U0001f517 {url}")
-
+        for chat_id in chat_ids:
             try:
                 await self._app.bot.send_message(
                     chat_id=chat_id,
-                    text="\n".join(cn_parts),
+                    text=en_text,
+                    reply_markup=keyboard,
                     disable_web_page_preview=False,
                 )
+                logger.info(f"Alert pushed → chat {chat_id}: {title[:50]}...")
             except Exception as e:
-                logger.error(f"Push failed (CN): {e}")
+                logger.error(f"Push failed → chat {chat_id}: {e}")
+                continue  # Don't block other chat_ids
 
     async def push_deep_analysis(self, item: dict):
-        """Push deep analysis as a follow-up message."""
+        """Push deep analysis as a follow-up message to all chat_ids."""
         if not self._app:
             return
 
-        chat_id = self._get_chat_id()
-        if not chat_id:
+        chat_ids = self._get_chat_ids()
+        if not chat_ids:
             return
 
         text = format_deep_analysis(item)
-        try:
-            await self._app.bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                disable_web_page_preview=True,
-            )
-        except Exception as e:
-            logger.error(f"Deep analysis push failed: {e}")
+        for chat_id in chat_ids:
+            try:
+                await self._app.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    disable_web_page_preview=True,
+                )
+            except Exception as e:
+                logger.error(f"Deep analysis push failed → chat {chat_id}: {e}")
 
-    def _get_chat_id(self) -> Optional[int]:
-        """Get the authorized chat ID from preferences."""
+    def _get_chat_ids(self) -> list[int]:
+        """Get all authorized chat IDs (primary from DB + secondary/tertiary from env)."""
+        ids: list[int] = []
+        # Primary: auto-detected + stored in DB
         val = self.db.get_preference("telegram_chat_id")
-        return int(val) if val else None
+        if val:
+            ids.append(int(val))
+        # Secondary: explicitly set in .env
+        env2 = os.environ.get("TELEGRAM_CHAT_ID_2", "")
+        if env2:
+            try:
+                id2 = int(env2)
+                if id2 not in ids:
+                    ids.append(id2)
+            except ValueError:
+                logger.warning("Invalid TELEGRAM_CHAT_ID_2: %s", env2)
+        # Tertiary: third Telegram account
+        env3 = os.environ.get("TELEGRAM_CHAT_ID_3", "")
+        if env3:
+            try:
+                id3 = int(env3)
+                if id3 not in ids:
+                    ids.append(id3)
+            except ValueError:
+                logger.warning("Invalid TELEGRAM_CHAT_ID_3: %s", env3)
+        return ids
 
     def set_chat_id(self, chat_id: int):
         self.db.set_preference("telegram_chat_id", str(chat_id))
+
+    @staticmethod
+    def _is_chinese(text: str) -> bool:
+        """Return True if text is predominantly Chinese (CJK characters)."""
+        if not text:
+            return False
+        cjk = sum(1 for c in text if '一' <= c <= '鿿' or '㐀' <= c <= '䶿')
+        return cjk >= len(text) * 0.3  # 30%+ CJK → treat as Chinese

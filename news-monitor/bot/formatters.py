@@ -1,5 +1,6 @@
 """Message formatters for Telegram Bot output — all in Chinese."""
 
+import json
 import os
 from typing import Dict, List, Optional
 
@@ -9,6 +10,7 @@ from typing import Dict, List, Optional
 
 # Ticker → Chinese name
 _TICKER_CN: Dict[str, str] = {
+    # Core US equities
     "NVDA": "英伟达", "AMD": "超威半导体", "INTC": "英特尔",
     "AVGO": "博通", "TSM": "台积电", "AAPL": "苹果",
     "MSFT": "微软", "GOOGL": "谷歌", "META": "Meta",
@@ -17,10 +19,29 @@ _TICKER_CN: Dict[str, str] = {
     "C": "花旗", "XOM": "埃克森美孚", "CVX": "雪佛龙",
     "JNJ": "强生", "PFE": "辉瑞", "LLY": "礼来",
     "SPY": "标普500", "QQQ": "纳指100",
+    # Watchlist — 半导体/AI
+    "PLTR": "Palantir", "SOXX": "半导体ETF", "SOXL": "3倍半导体",
+    "LRCX": "拉姆研究", "ARM": "Arm控股", "MRVL": "Marvell",
+    "MRAAY": "村田制作所", "CBRS": "嘉宝集团",
+    # Watchlist — 航天/国防
+    "SPCX": "SpaceX", "RKLB": "Rocket Lab", "KTOS": "Kratos国防",
+    "ASTS": "AST太空移动",
+    # Watchlist — 量子/核能/新兴科技
+    "RGTI": "Rigetti量子", "OKLO": "Oklo核能", "SMR": "NuScale核能",
+    "TEM": "Tempus AI医疗", "NBIS": "Nebius云",
+    # Watchlist — ETF/其他
+    "BOT": "Botanix制药", "ARKK": "ARK创新ETF",
+    # Crypto-exposed equities
+    "COIN": "Coinbase", "MSTR": "MicroStrategy",
+    "RIOT": "Riot区块链", "MARA": "Marathon挖矿",
+    "CLSK": "CleanSpark", "HUT": "Hut 8挖矿", "WULF": "TeraWulf挖矿",
+    # Fintech
+    "SQ": "Block", "AFRM": "Affirm", "SOFI": "SoFi", "HOOD": "Robinhood",
 }
 
 # Ticker → related sector ETFs
 _TICKER_TO_ETF: Dict[str, List[str]] = {
+    # Core US equities
     "NVDA": ["SMH", "SOXX", "QQQ"], "AMD": ["SMH", "SOXX"],
     "INTC": ["SMH", "SOXX"], "AVGO": ["SMH", "SOXX", "QQQ"],
     "TSM": ["SMH", "SOXX"], "AAPL": ["QQQ", "XLK"],
@@ -30,6 +51,26 @@ _TICKER_TO_ETF: Dict[str, List[str]] = {
     "BAC": ["XLF"], "WFC": ["XLF"], "C": ["XLF"],
     "XOM": ["XLE"], "CVX": ["XLE"],
     "JNJ": ["XLV"], "PFE": ["XLV"], "LLY": ["XLV"],
+    # Watchlist — 半导体/AI
+    "PLTR": ["QQQ", "XLK", "SOXX"], "SOXX": ["SMH", "QQQ"], "SOXL": ["SOXX", "SMH"],
+    "LRCX": ["SMH", "SOXX"], "ARM": ["QQQ", "SOXX"], "MRVL": ["SMH", "SOXX", "QQQ"],
+    "MRAAY": ["SOXX"], "CBRS": ["QQQ"],
+    # Watchlist — 航天/国防
+    "SPCX": ["QQQ", "ITA"], "RKLB": ["ITA"], "KTOS": ["ITA", "PPA"],
+    "ASTS": ["QQQ"],
+    # Watchlist — 量子/核能/新兴科技
+    "RGTI": ["QQQ"], "OKLO": ["QQQ", "URA"], "SMR": ["QQQ", "URA"],
+    "TEM": ["QQQ", "XLV"], "NBIS": ["QQQ"],
+    # Watchlist — ETF/其他
+    "BOT": ["XLV", "IBB"], "ARKK": ["QQQ"],
+    # Crypto-exposed equities
+    "COIN": ["QQQ", "XLK", "IBIT", "MSTR"],
+    "MSTR": ["QQQ", "IBIT", "COIN"],
+    "RIOT": ["MARA", "COIN"],
+    "MARA": ["RIOT", "COIN"],
+    "CLSK": ["COIN"], "HUT": ["COIN"], "WULF": ["COIN"],
+    # Fintech
+    "SQ": ["QQQ", "XLK"], "AFRM": ["QQQ"], "SOFI": ["XLF"], "HOOD": ["QQQ", "XLF"],
 }
 
 # ETF → Chinese name
@@ -39,17 +80,25 @@ _ETF_CN: Dict[str, str] = {
     "XLE": "能源板块", "XLV": "医疗保健", "XLI": "工业板块",
     "TLT": "长期国债", "GLD": "黄金", "USO": "原油",
     "IWM": "罗素2000",
+    # Watchlist ETFs
+    "ITA": "航天国防", "PPA": "国防军工", "URA": "铀矿核能", "IBB": "生物医药",
+    # Crypto-exposed equities
+    "IBIT": "比特币ETF", "COIN": "Coinbase", "MSTR": "MicroStrategy",
 }
 
 # Event category → related ETFs (for macro/news-driven events)
 _EVENT_TO_ETF: Dict[str, List[str]] = {
     "monetary": ["TLT", "SPY", "GLD"],
-    "geopolitical": ["GLD", "USO", "XLE"],
+    "geopolitical": ["GLD", "USO", "XLE", "ITA", "PPA"],
     "macro_data": ["TLT", "SPY", "XLF"],
     "CHIPS": ["SMH", "SOXX"],
     "TARIFF": ["XLI", "XLE", "SPY"],
     "AI": ["SMH", "QQQ", "XLK"],
-    "ENERGY": ["XLE", "USO"],
+    "ENERGY": ["XLE", "USO", "URA"],
+    "REGULATORY": ["XLF", "SPY", "QQQ"],
+    "DEFENSE": ["ITA", "PPA", "KTOS"],
+    "NUCLEAR": ["URA", "OKLO", "SMR"],
+    "SPACE": ["ITA", "SPCX", "RKLB"],
 }
 
 
@@ -76,7 +125,8 @@ def _build_ticker_etf_line(tickers: str, macro_tags: str = "",
     macro_upper = macro_tags.upper() if macro_tags else ""
     cat_lower = (event_category or "").lower()
     for key, etfs in _EVENT_TO_ETF.items():
-        if key in macro_upper or key.lower() in cat_lower:
+        key_lower = key.lower()
+        if key in macro_upper or key_lower in cat_lower:
             for etf in etfs:
                 etf_set.add(etf)
 
@@ -143,16 +193,50 @@ def format_fast_alert(item: dict, analyst_note: str = "",
     # Build message body
     msg = f"{header}\n{title}"
 
-    # Impact score + confidence
+    # Urgency badge (LLM-determined)
+    urgency = item.get('_urgency', '')
+    urgency_badges = {
+        'FLASH': '⚡ FLASH',
+        'ALERT': '🔔 ALERT',
+        'WATCH': '👀 WATCH',
+    }
+    if urgency in urgency_badges:
+        msg += f"\n\n{urgency_badges[urgency]}"
+
+    # Impact score + confidence + greed index
     if impact_score > 0:
-        msg += f"\n\n💥 冲击: {impact_score}分"
+        msg += f"\n💥 冲击: {impact_score}分"
         if confidence > 0:
             msg += f" | 置信度: {confidence}%"
+        greed_index = int(item.get('_greed_index', 50) or 50)
+        msg += f" | 贪婪指数: {greed_index}"
 
-    # Analyst note (from ImpactEvaluator LLM)
-    note = analyst_note or item.get('analyst_note', '')
+    # Flash note (LLM push narrative) — primary, fallback to analyst_note
+    note = item.get('_flash_note', '') or analyst_note or item.get('analyst_note', '')
     if note:
         msg += f"\n\n{note}"
+
+    # Key points
+    key_points_raw = item.get('_key_points', '[]') or '[]'
+    try:
+        key_points = json.loads(key_points_raw) if isinstance(key_points_raw, str) else key_points_raw
+    except (json.JSONDecodeError, TypeError):
+        key_points = []
+    if key_points:
+        msg += "\n\n📌 要点"
+        for pt in key_points:
+            msg += f"\n• {pt}"
+
+    # Risk flags
+    risk_flags_raw = item.get('_risk_flags', '[]') or '[]'
+    try:
+        risk_flags = json.loads(risk_flags_raw) if isinstance(risk_flags_raw, str) else risk_flags_raw
+    except (json.JSONDecodeError, TypeError):
+        risk_flags = []
+    if risk_flags:
+        msg += "\n\n⚠️ 风险"
+        for rf in risk_flags:
+            msg += f"\n• {rf}"
 
     # Related tickers + sector ETFs
     etf_line = _build_ticker_etf_line(tickers, macro_tags, event_category)
@@ -261,6 +345,7 @@ _SOURCE_CN: Dict[str, str] = {
     "@newsquawk": "Newsquawk",
     "@zerohedge": "ZeroHedge推特",
     "@fxhedgers": "FxHedgers",
+    "@semianalysis": "SemiAnalysis",
 }
 
 

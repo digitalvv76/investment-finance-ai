@@ -176,6 +176,35 @@ class VectorStore:
             logger.error("Vector store max_similarity failed: %s", e)
             return 0.0
 
+    def pair_similarity(self, text1: str, text2: str) -> float:
+        """Compute cosine similarity between two arbitrary texts.
+
+        Used by DedupManager for within-batch semantic dedup — comparing
+        a new item against already-accepted items without storing either.
+
+        Returns 0.0 if embeddings are unavailable, or the cosine similarity
+        (0.0–1.0) between the two texts.
+        """
+        if not self.is_ready:
+            return 0.0
+        try:
+            import numpy as np
+            e1 = self._embed(text1[:2000])
+            e2 = self._embed(text2[:2000])
+            if e1 is None or e2 is None:
+                return 0.0
+            a = np.array(e1)
+            b = np.array(e2)
+            dot = float(np.dot(a, b))
+            norm_a = float(np.linalg.norm(a))
+            norm_b = float(np.linalg.norm(b))
+            if norm_a == 0 or norm_b == 0:
+                return 0.0
+            return round(dot / (norm_a * norm_b), 4)
+        except Exception as e:
+            logger.error("pair_similarity failed: %s", e)
+            return 0.0
+
     def is_semantic_duplicate(self, text: str, threshold: float = 0.90) -> bool:
         """Check if an article is a semantic duplicate of any stored article.
 

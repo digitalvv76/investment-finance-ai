@@ -259,10 +259,15 @@ class NewsMonitor:
             )
 
             # ---- Classify alert level (impact-first, legacy fallback) ----
+            has_tickers = bool(item.tickers_found and item.tickers_found.strip())
+            is_macro = bool(item.macro_tags and item.macro_tags.strip())
             level, reason = self.alert_dispatcher.classify(
                 item.priority_score, strategic_matches,
                 impact_assessment=impact_assessment,
                 rel_mult=rel_mult,
+                has_tickers=has_tickers,
+                is_macro=is_macro,
+                timeliness=sig.get("timeliness"),
             )
 
             # ---- LLM Actionability Review (borderline cases only) ----
@@ -279,21 +284,39 @@ class NewsMonitor:
                     level = AlertLevel.NORMAL
                     reason = f"llm_review_not_actionable (was: {reason})"
 
-            # ---- Inject analyst note + impact scores for push formatters ----
+            # ---- Inject LLM assessment fields for push formatters ----
             analyst_note = ""
+            flash_note = ""
             event_category = ""
             impact_score = 0
             confidence = 0
+            urgency = ""
+            sentiment = ""
+            greed_index = 50
+            key_points = "[]"
+            risk_flags = "[]"
             if impact_assessment:
                 analyst_note = getattr(impact_assessment, 'analyst_note', '') or ''
+                flash_note = getattr(impact_assessment, 'flash_note', '') or ''
                 event_category = getattr(impact_assessment, 'event_category', '') or ''
                 impact_score = int(getattr(impact_assessment, 'impact_score', 0) or 0)
                 confidence = int(getattr(impact_assessment, 'confidence', 0) or 0)
+                urgency = getattr(impact_assessment, 'urgency', '') or ''
+                sentiment = getattr(impact_assessment, 'sentiment', '') or ''
+                greed_index = int(getattr(impact_assessment, 'greed_index', 50) or 50)
+                key_points = getattr(impact_assessment, 'key_points', '[]') or '[]'
+                risk_flags = getattr(impact_assessment, 'risk_flags', '[]') or '[]'
                 updated['analyst_note'] = analyst_note
                 updated['_analyst_note'] = analyst_note  # for alert_dispatcher
+                updated['_flash_note'] = flash_note
                 updated['_event_category'] = event_category
                 updated['_impact_score'] = impact_score
                 updated['_confidence'] = confidence
+                updated['_urgency'] = urgency
+                updated['_sentiment'] = sentiment
+                updated['_greed_index'] = greed_index
+                updated['_key_points'] = key_points
+                updated['_risk_flags'] = risk_flags
 
             # ---- Alert dispatching ----
             if level in (AlertLevel.CRITICAL, AlertLevel.IMPORTANT):
@@ -303,18 +326,29 @@ class NewsMonitor:
                     priority_score=item.priority_score,
                     strategic_matches=strategic_matches,
                     telegram_push_fn=tg_push,
+                    timeliness=sig.get("timeliness"),
+                    impact_assessment=impact_assessment,
                 )
                 logger.info(
                     "Alert dispatched: level=%s channels=%s reason=%s",
                     result.level.value, result.channels_used, result.reason,
                 )
             elif self.bot:
-                await self.bot.push_alert(
-                    updated, analyst_note=analyst_note,
-                    event_category=event_category,
-                    impact_score=impact_score,
-                    confidence=confidence,
-                )
+                # Skip push for LLM-evaluated low-impact news.
+                # Legacy items (no impact_assessment) still push as before.
+                min_push = _impact_cfg.get("min_impact_for_push", 30)
+                if impact_assessment and impact_score < min_push:
+                    logger.info(
+                        "Skipping low-impact push #%s (score=%d < %d) — %s",
+                        item.id, impact_score, min_push, (item.title or "")[:60],
+                    )
+                else:
+                    await self.bot.push_alert(
+                        updated, analyst_note=analyst_note,
+                        event_category=event_category,
+                        impact_score=impact_score,
+                        confidence=confidence,
+                    )
 
             # ---- Web dashboard broadcast (SSE real-time push) ---------
             if self.web_dashboard:
