@@ -105,6 +105,7 @@ class NewsMonitor:
         db_path = settings["storage"]["sqlite_path"]
         self.db = Database(db_path)
         self.db.init_db()
+        self.db.migrate_event_escalation()
 
         # ---- vector store (semantic dedup + similarity) -------------
         self.vector_store = VectorStore(
@@ -172,6 +173,17 @@ class NewsMonitor:
         else:
             self.web_dashboard = None
 
+        # ---- event clustering + escalation --------------------------
+        from engine.cluster import NewsCluster
+        from engine.market_snapshot import MarketSnapshot
+        from engine.event_escalator import EventEscalator
+        self.cluster = NewsCluster(self.db, vector_store=self.vector_store)
+        self.market_snapshot = MarketSnapshot()
+        self.escalator = EventEscalator(
+            self.db, self.alert_dispatcher, self.market_snapshot, self.config,
+            telegram_push_provider=(lambda: self.alert_dispatcher.wrap_telegram_push(self.bot)) if self.bot else None,
+        )
+
         # ── Build Phase 3 Pipeline ──
         from pipeline import Pipeline
         from pipeline.ingest import IngestStage
@@ -189,7 +201,7 @@ class NewsMonitor:
             channels.append(WebSSEChannel(self._sse_manager))
 
         self._pipeline = Pipeline([
-            IngestStage(db=self.db, dedup=self.dedup, vector_store=self.vector_store),
+            IngestStage(db=self.db, dedup=self.dedup, vector_store=self.vector_store, cluster=self.cluster),
             ScreenStage(fast_lane=self.fast_lane),
             EvaluateStage(
                 impact_evaluator=self.impact_evaluator,
@@ -296,6 +308,17 @@ class NewsMonitor:
                 await self._collect_impact_outcomes("4h")
                 last_4h = now
 
+    async def _run_escalation_loop(self):
+        """Periodic event-line escalation sweep (interval from config)."""
+        cfg = self.config.load_event_escalation()
+        interval = int(cfg.get("sweep_interval_minutes", 5)) * 60
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await self.escalator.sweep()
+            except Exception:
+                logger.exception("EscalationLoop: sweep failed")
+
     # -----------------------------------------------------------------
     # Lifecycle
     # -----------------------------------------------------------------
@@ -319,6 +342,7 @@ class NewsMonitor:
 
         # Start impact collector loop (background, periodic)
         self._collector_task = asyncio.create_task(self._run_collector_loop())
+        self._escalator_task = asyncio.create_task(self._run_escalation_loop())
 
         logger.info("News Monitor running")
 
@@ -327,6 +351,8 @@ class NewsMonitor:
         await self.scheduler.stop()
         if hasattr(self, '_collector_task'):
             self._collector_task.cancel()
+        if hasattr(self, '_escalator_task'):
+            self._escalator_task.cancel()
         if self.web_dashboard:
             await self.web_dashboard.stop()
         if self.bot:

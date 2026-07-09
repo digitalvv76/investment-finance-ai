@@ -29,10 +29,12 @@ class IngestStage:
         db: Database,
         dedup: DedupManager,
         vector_store: VectorStore | None = None,
+        cluster=None,
     ) -> None:
         self._db = db
         self._dedup = dedup
         self._vector = vector_store
+        self._cluster = cluster
 
     async def process(self, items: list[PipelineItem]) -> list[PipelineItem]:
         """Process raw items: dedup → DB insert → vector index.
@@ -71,6 +73,13 @@ class IngestStage:
                            "published_at": str(news.published_at) if news.published_at else ""},
                 )
                 results.append(item)
+
+                if self._cluster is not None:
+                    try:
+                        news.id = news_id
+                        self._cluster.find_or_create_event(news)
+                    except Exception:
+                        logger.debug("INGEST: clustering failed for id=%d", news_id)
             except Exception:
                 logger.exception("INGEST: DB insert failed for %s", news.title[:60])
 
