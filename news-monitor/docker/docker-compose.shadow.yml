@@ -1,0 +1,63 @@
+# =============================================================================
+# Shadow deployment — V2 testing alongside V1 production
+# =============================================================================
+# Runs an ISOLATED copy of news-monitor (V2/main) that:
+#   - Listens on port 8081 (V1 uses 8080)
+#   - Uses separate data volumes (news_data_shadow, news_logs_shadow)
+#   - NEVER sends real push notifications (DRY_RUN_PUSH=true)
+#   - Has its own container name (news-monitor-shadow)
+#
+# Usage on ECS:
+#   docker compose -f docker-compose.yml -f docker-compose.shadow.yml up -d --build news-monitor-shadow
+#
+# V1 (production) is NOT affected by this file — it uses docker-compose.yml alone.
+# =============================================================================
+
+services:
+  news-monitor-shadow:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: news-monitor-shadow
+    restart: unless-stopped
+
+    ports:
+      - "8081:8081"
+
+    # Secrets from the same .env — but push tokens are overridden below
+    env_file:
+      - ../../.env
+
+    environment:
+      # Shadow-specific overrides
+      - WEB_PORT=8081
+      - DRY_RUN_PUSH=true
+      - TZ=America/New_York
+      # Kill all push channels (override .env values)
+      - PUSHOVER_APP_TOKEN=
+      - PUSHOVER_USER_KEY=
+      - PUSHOVER_USER_KEY_2=
+      - TELEGRAM_BOT_TOKEN=
+      - TELEGRAM_CHAT_ID=
+      - TELEGRAM_CHAT_ID_2=
+      # ECS has direct internet — override dev proxy from .env
+      - HTTPS_PROXY=
+      - HTTP_PROXY=
+
+    # ---- Isolated volumes (do NOT share with V1 production) ----
+    volumes:
+      - news_data_shadow:/app/data
+      - news_logs_shadow:/app/logs
+
+    # ---- Resource Limits ----
+    deploy:
+      resources:
+        limits:
+          pids: 150
+          memory: 2G
+        reservations:
+          memory: 384M
+
+volumes:
+  news_data_shadow:
+  news_logs_shadow:
