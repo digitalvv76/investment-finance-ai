@@ -360,6 +360,10 @@ class NewsMonitor:
                 # Skip push for LLM-evaluated low-impact news.
                 # Legacy items (no impact_assessment) still push as before.
                 min_push = _impact_cfg.get("min_impact_for_push", 30)
+                # Watchlist/portfolio tickers: lower the gate so product
+                # milestones & partnerships aren't killed by conservative LLM scoring.
+                if has_tickers and rel_mult > 0.5:
+                    min_push = 20
                 if impact_assessment and impact_score < min_push:
                     logger.info(
                         "Skipping low-impact push #%s (score=%d < %d) — %s",
