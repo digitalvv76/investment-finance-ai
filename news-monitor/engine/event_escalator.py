@@ -32,7 +32,10 @@ class EventEscalator:
         if state == "NONE":
             return await self._maybe_alert(event)
         if state == "ALERTED":
-            return await self._maybe_confirm(event)
+            closed = await self._maybe_close(event)
+            return closed or await self._maybe_confirm(event)
+        if state == "CONFIRMED":
+            return await self._maybe_close(event)
         return None
 
     async def _maybe_alert(self, event: dict):
@@ -89,3 +92,36 @@ class EventEscalator:
             if bearish and oil >= mc["brent_pct"]:  # supply-risk → oil up
                 return (True, f"Brent +{oil:.1f}%")
         return (False, "")
+
+    async def _maybe_close(self, event: dict):
+        last = event.get("last_updated")
+        if not last:
+            return None
+        silence_h = self._cfg["close"]["silence_hours"]
+        age = (datetime.now() - datetime.fromisoformat(str(last))).total_seconds() / 3600
+        if age >= silence_h:
+            await self.dispatcher.dispatch_event(
+                {"title": f"事件收尾 — {event.get('title','')}",
+                 "source_count": event.get("source_count", 0),
+                 "peak_impact": event.get("peak_impact", 0),
+                 "market_note": f"静默{int(age)}h，事件降温"},
+                AlertLevel.NORMAL, telegram_push_fn=self._tg(),
+            )
+            prev = event.get("escalation_state", "")
+            self.db.update_event_escalation(event["id"], escalation_state="CLOSED", is_active=0)
+            logger.info("Event #%s CLOSED (silence %.1fh)", event["id"], age)
+            return f"{prev}->CLOSED"
+        return None
+
+    async def sweep(self) -> None:
+        try:
+            window = self._cfg["alert_trigger"]["active_window_hours"]
+            events = self.db.get_active_event_lines(active_window_hours=window)
+        except Exception as e:
+            logger.error("EventEscalator.sweep list failed: %s", e)
+            return
+        for ev in events:
+            try:
+                await self.evaluate(ev)
+            except Exception as e:
+                logger.error("EventEscalator evaluate failed for #%s: %s", ev.get("id"), e)

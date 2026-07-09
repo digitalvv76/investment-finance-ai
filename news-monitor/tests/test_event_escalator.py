@@ -67,3 +67,27 @@ async def test_market_confirm_wrong_direction_blocked(esc):
              "alerted_at": (datetime.now()-timedelta(hours=1)).isoformat(),
              "dominant_sentiment": "BEARISH", "dominant_category": "geopolitical"}
     assert await esc.evaluate(event) is None
+
+
+@pytest.mark.asyncio
+async def test_close_on_silence(esc):
+    old = (datetime.now()-timedelta(hours=7)).isoformat()
+    event = {"id": 10, "escalation_state": "CONFIRMED", "title": "x",
+             "last_updated": old, "source_count": 4, "peak_impact": 95}
+    transition = await esc.evaluate(event)
+    assert transition and transition.endswith("->CLOSED")
+    args, kwargs = esc.dispatcher.dispatch_event.call_args
+    assert args[1] == AlertLevel.NORMAL  # telegram only
+
+
+@pytest.mark.asyncio
+async def test_sweep_isolates_errors(esc):
+    esc.db.get_active_event_lines.return_value = [
+        {"id": 1, "escalation_state": "NONE", "news_ids": "1", "source_count": 1, "title": "a"},
+        {"id": 2, "escalation_state": "NONE", "news_ids": "2", "source_count": 1, "title": "b"},
+    ]
+    async def boom(ev):
+        raise RuntimeError("bad event")
+    esc.evaluate = boom  # both raise
+    await esc.sweep()  # must not raise
+    assert True
