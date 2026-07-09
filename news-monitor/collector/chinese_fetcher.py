@@ -45,6 +45,56 @@ def _clean_html(text: str) -> str:
     return _HTML_RE.sub("", text).strip()
 
 
+# Chinese company name → US ticker mapping.
+# WallstreetCN and Sina rarely tag US tickers in their symbol fields.
+_CN_TICKER_MAP: dict[str, str] = {
+    # Tech / Semiconductors
+    "特斯拉": "TSLA", "英伟达": "NVDA", "辉达": "NVDA", "NVIDIA": "NVDA",
+    "苹果": "AAPL", "Apple": "AAPL",
+    "微软": "MSFT", "Microsoft": "MSFT",
+    "谷歌": "GOOGL", "Google": "GOOGL", "Alphabet": "GOOGL",
+    "亚马逊": "AMZN", "Amazon": "AMZN",
+    "Meta": "META", "脸书": "META", "Facebook": "META",
+    "博通": "AVGO", "Broadcom": "AVGO",
+    "AMD": "AMD", "超微": "AMD",
+    "英特尔": "INTC", "Intel": "INTC",
+    "高通": "QCOM", "Qualcomm": "QCOM",
+    "台积电": "TSM", "TSMC": "TSM",
+    "美光": "MU", "Micron": "MU",
+    "ARM": "ARM", "安谋": "ARM",
+    "Marvell": "MRVL",
+    "Palantir": "PLTR",
+    "SOXX": "SOXX", "SOXL": "SOXL",
+    # Crypto / Fintech
+    "比特币": "BTC", "Bitcoin": "BTC", "以太坊": "ETH", "Ethereum": "ETH",
+    "Solana": "SOL",
+    # Auto / Space
+    "Rivian": "RIVN", "Lucid": "LCID",
+    "Rocket Lab": "RKLB", "SpaceX": "SPCX",
+    # Nuclear
+    "Oklo": "OKLO", "NuScale": "SMR",
+    # Others
+    "Palantir": "PLTR", "Kratos": "KTOS",
+    "AST": "ASTS", "AST SpaceMobile": "ASTS",
+    "Tempus": "TEM", "Rigetti": "RGTI",
+    "Lam Research": "LRCX", "拉姆研究": "LRCX",
+    "Nebius": "NBIS",
+    "ARKK": "ARKK",
+}
+
+
+def _detect_tickers_from_text(title: str, content: str = "") -> str:
+    """Scan Chinese/English text for known company names and return tickers."""
+    text = f"{title or ''} {content or ''}"
+    found = []
+    seen = set()
+    for name, ticker in _CN_TICKER_MAP.items():
+        if name in text and ticker not in seen:
+            found.append(ticker)
+            seen.add(ticker)
+    return ",".join(found[:10])
+
+
 def _ts_to_datetime(ts: int) -> datetime:
     """Convert Unix timestamp (int seconds) to datetime."""
     try:
@@ -194,6 +244,7 @@ class ChineseNewsFetcher:
                 content_snippet=intro[:500] if intro else title,
                 published_at=pub_dt,
                 captured_at=datetime.now(),
+                tickers_found=_detect_tickers_from_text(title, intro),
             ))
 
         if items:
@@ -283,6 +334,11 @@ class ChineseNewsFetcher:
                     elif isinstance(s, str):
                         ticker_list.append(s)
                 tickers = ",".join(ticker_list[:10])
+
+            # Fallback: detect tickers from Chinese company names in title/content.
+            # WallstreetCN rarely tags US tickers in symbols[] for Chinese articles.
+            if not tickers:
+                tickers = _detect_tickers_from_text(title, content_text)
 
             items.append(NewsItem(
                 title=title,
