@@ -27,3 +27,20 @@ async def test_dispatch_event_normal_is_silent(monkeypatch):
         AlertLevel.NORMAL, telegram_push_fn=fake_push,
     )
     assert sent == [True]  # silent
+
+@pytest.mark.asyncio
+async def test_dispatch_event_body_reaches_render(monkeypatch):
+    from engine.alert_dispatcher import AlertDispatcher, AlertLevel
+    d = AlertDispatcher()
+    captured = []
+    async def fake_push(item, disable_notification=True):
+        captured.append(item)
+    await d.dispatch_event(
+        {"title": "美伊冲突升级", "source_count": 4, "peak_impact": 95, "market_note": "VIX +17%"},
+        AlertLevel.IMPORTANT, telegram_push_fn=fake_push,
+    )
+    assert captured, "telegram push should have been called"
+    note = captured[0].get("_flash_note", "")
+    assert "4" in note        # source count present
+    assert "95" in note       # peak impact present
+    assert "VIX +17%" in note # market note present

@@ -366,6 +366,8 @@ class AlertDispatcher:
             "source": f"事件聚合({event.get('source_count', 0)}源)",
             "url": event.get("url", ""),
             "_event_body": body,
+            "_flash_note": body,      # telegram: format_fast_alert renders _flash_note
+            "_analyst_note": body,    # pushover: _pushover renders _analyst_note
         }
         if level == AlertLevel.CRITICAL:
             logger.warning("EVENT CRITICAL: %s | %s", item["title"][:80], body)
