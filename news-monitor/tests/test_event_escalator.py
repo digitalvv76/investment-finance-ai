@@ -49,7 +49,7 @@ from datetime import datetime, timedelta
 
 @pytest.mark.asyncio
 async def test_market_confirm_bearish_down(esc):
-    esc.market.since = AsyncMock(return_value={"spx_pct": -0.45, "vix_pct": 16.6, "brent_pct": 5.9})
+    esc.market.since = AsyncMock(return_value={"spx_pct": -0.45, "vix_pct": 2.0, "brent_pct": 1.0})
     event = {"id": 10, "escalation_state": "ALERTED", "title": "US-Iran",
              "alerted_at": (datetime.now()-timedelta(hours=1)).isoformat(),
              "dominant_sentiment": "BEARISH", "dominant_category": "geopolitical"}
@@ -57,6 +57,17 @@ async def test_market_confirm_bearish_down(esc):
     assert transition == "ALERTED->CONFIRMED"
     args, kwargs = esc.dispatcher.dispatch_event.call_args
     assert args[1] == AlertLevel.CRITICAL
+
+
+@pytest.mark.asyncio
+async def test_market_confirm_vix_spike(esc):
+    esc.market.since = AsyncMock(return_value={"spx_pct": -0.05, "vix_pct": 6.5, "brent_pct": 0.1})
+    event = {"id": 10, "escalation_state": "ALERTED", "title": "VIX panic",
+             "alerted_at": (datetime.now()-timedelta(hours=1)).isoformat(),
+             "dominant_sentiment": "BULLISH", "dominant_category": "macro_data"}
+    transition = await esc.evaluate(event)
+    assert transition == "ALERTED->CONFIRMED"
+    # VIX is direction-agnostic — should confirm even for BULLISH
 
 
 @pytest.mark.asyncio

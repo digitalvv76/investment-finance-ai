@@ -74,7 +74,10 @@ class EventEscalator:
         alerted_at = event.get("alerted_at")
         if not alerted_at:
             return (False, "")
-        start = datetime.fromisoformat(alerted_at)
+        try:
+            start = datetime.fromisoformat(alerted_at)
+        except (ValueError, TypeError):
+            return (False, "")
         mc = self._cfg["market_confirm"]
         snap = await self.market.since(start)
         sent = (event.get("dominant_sentiment") or "").upper()
