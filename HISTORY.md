@@ -1347,3 +1347,27 @@ in-session recording (Layer 2, deferred).
 ---
 
 ## 2026-07-09T17:16+08:00 · 会话开始
+
+---
+
+## 2026-07-09T19:50 · ✅ V2 事件升级功能移植完成 (main)
+
+> **背景**: v1-stable 上已验证的"连续事件升级推送"功能移植进 V2。孤儿代码不整体合（用户拍板范围=只移植功能），独立审计另作。全程在 main、**未碰 ECS、未部署**。
+
+**架构决策**: 事件升级是事件线级（对聚合事件推送），与 V2 逐条流水线正交 → 聚类挂 IngestStage，EventEscalator 作 main.py 独立 5min sweep 循环，复用 AlertDispatcher（**Option A**: 补 dispatch_event，不塞进流水线）。计划文档: `docs/superpowers/plans/2026-07-09-v2-event-escalation-port.md`。
+
+**7 个 Task 提交**:
+- `b05a576` T1 DB schema — impact_assessments 缺列(sentiment 等 6 列，最高风险)+event_lines 升级列(5)+EventLine 模型+4 查询方法+insert 扩展。test_event_escalation_db 4绿
+- `09cd1fe` T2 配置 — event-escalation.json + ConfigLoader.load_event_escalation（补 import json）。config 1绿
+- `2753a3e` T3 推送出口 — AlertDispatcher.dispatch_event + _format_event_body（其余辅助 V2 已有）。dispatch_event 3绿
+- `6019a47` T4 聚类种子 — cluster _find_similar_singleton + find_or_create_event 分支（事件可攒到 2 源）。cluster 9绿
+- `4ac9c6c` T5 引擎搬运 — event_escalator.py + market_snapshot.py 纯搬运。escalator 7绿
+- `b4371f6` T6 接线 — IngestStage 接 cluster + main.py 实例化/migrate/sweep 循环 + 迁移脚本。e2e+相关 25绿；import main OK
+- T7 全量回归 — **377 passed / 0 failed / 0 errors**（基线 360 + 17 新增；v1-stable 的 6 个 vector_store 错误在 V2 不复现，close() 已修）+ module_registry 注册 event_escalator/market_snapshot
+
+**影子验证 (run_v2_local, 70s bounded)**: 零错误零异常；实跑中 `engine.cluster: Created event line 1/2/3` — 聚类接线真实工作；v2_test.db 的 event_lines 5 升级列齐全、impact_assessments 含 sentiment。红线遵守: 测试库隔离、推送通道全禁、未碰生产。
+
+**丢弃项**（V2 已由 EvaluateStage/DispatchDecision 覆盖）: v1 的 scheduler 注入 + push-formatter/low-impact-skip hunk。
+
+**后续**: (1) 灰度上 ECS: Web SSE → Telegram → Pushover; (2) 孤儿代码独立审计收尾（首次后台跑 600s 卡死，partial: strategic_detector 缺 CFIUS/救助调优=候选; web_scraper/impact_evaluator V2 反而领先）。
+

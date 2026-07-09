@@ -1,44 +1,40 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-09 (收工)
+> 最后更新: 2026-07-09 (V2 事件升级移植完成)
 
-## ✅ 本次完成 (2026-07-09 · 下午)
+## ✅ 本次完成 (2026-07-09 · 晚)
 
-### 1. 清理预存测试债 (`4c21bd3`) — 4 failed + 6 errors → 全量 360 绿
-- `test_impact_push` ×3: reason 断言更新为新格式; moderate 用例重选 stub 取值保 IMPORTANT 档覆盖
-- `test_scheduler` ×1: 默认 watchlist 断言 AAPL→TSLA
-- `test_vector_store` ×6 errors: 加 `VectorStore.close()` 根治 Windows 文件锁 (非环境性掩盖)
-- **全量 360 passed / 0 failed / 0 errors**
-
-### 2. 生产孤儿代码归档进 git (`rescue/ecs-prod-drift-20260708`) — 风险清零
-- 30 文件真实改动 + 15 新文件从本地备份还原 → 分 7 个主题提交入库 GitHub
-- 换行坑: autocrlf=false LF 检出后干净 apply; 14 纯 EOL 文件 `-w` 验证零内容丢失后剔除
-- 服务器工作副本**原封未动**, 容器 healthy, 未部署, 未碰生产
-
-### 3. 服务器安全加固
-- 密码登录 ✅ 已由用户关闭 (SSH `passwordauthentication no` 运行时已生效)
-
-### 4. 流程纪律固化 (仓库外, 跨分支/跨窗口生效)
-- 记忆 `no-direct-server-edits`: 铁律——绝不在生产服务器直改/试跑代码
-- `shutdown-checklist` 第 6 步: 会话结束自动核查服务器纪律
+### V2 事件升级功能移植完成 (main, 7 Task 全绿)
+- 从 v1-stable 移植"连续事件升级推送"进 V2，适配流水线架构（Option A: 补 dispatch_event）
+- 提交: `b05a576`(DB) `09cd1fe`(config) `2753a3e`(dispatch) `6019a47`(cluster) `4ac9c6c`(引擎) `b4371f6`(接线) + T7 回归
+- **全量 377 passed / 0 failed / 0 errors**（基线 360 + 17 新增）
+- 影子验证: run_v2_local 零错误，实跑聚出 3 条 event line，迁移列齐全
+- 计划文档: `docs/superpowers/plans/2026-07-09-v2-event-escalation-port.md`
+- **红线遵守**: 全程 main、未碰 ECS、未部署
 
 ## 📋 下一步
 
-1. 🎯 **V2 灰度切换** (主线): Web SSE → Telegram → Pushover
-2. 🏭 **归档分支 ↔ v1-stable 事件升级合并+测试** (独立任务, 从容排期)
-3. Layer 2 (transcript 合成), v1-stable MarketWatch 死方法清理 (可选)
+1. 🎯 **V2 灰度切换** (主线): 部署 V2 上 ECS → 分级开通知 Web SSE → Telegram → Pushover
+   - 建议: 先只部署+开 Web SSE 观察 1-2 天（手机静默），稳了再开 TG/Pushover
+   - **前置**: 部署前须确认"ECS 上实际跑的代码 vs git"（孤儿漂移背景）
+2. 🏭 **孤儿代码独立审计收尾** (独立任务): 首次后台跑 600s 卡死仅部分完成
+   - partial: `strategic_detector` 缺 CFIUS/救助/政府兜底调优 = 候选热修
+   - `web_scraper`(退役坏 MarketWatch) / `impact_evaluator`(字段解析) V2 反而领先，孤儿收严=回归
+   - 待重跑出完整分类报告供决策
 
-## 🩹 上次踩坑
+## ⚠️ 上次踩坑
 
-- 归档补丁 apply 换行坑: 补丁 LF / 本地 autocrlf=true 致工作树 CRLF 不匹配 → autocrlf=false LF 检出 + `git add -u` 归一化剔除 14 纯 EOL 文件
-- 生产孤儿代码根因: 绕过 git 流程在服务器直改代码。已固化纪律 `no-direct-server-edits`
+- 移植纯搬运用 `git show v1-stable:<path> > 目标` 逐字节取，避免手抄错
+- V2 loader.py 缺 `import json`（v1-stable 有），移 load_event_escalation 时须补
+- dispatch_event 依赖 `_format_event_body` 是隐藏依赖，V2 缺，需一并移入
+- impact_assessments 的 sentiment 列是最高风险隐藏依赖（escalator 读它），必须先补 DB 层
 
 ## 📊 系统健康
 
 | 组件 | 状态 |
 |------|------|
 | ECS 4C8G | ✅ 稳定 |
-| V1 生产 | ✅ healthy，密码登录已关 |
-| V2 (main) | ✅ 未上线，代码合规 |
-| 测试 | ✅ 360 passed |
-| 工作区 | ✅ 干净 |
+| V1 生产 | ✅ healthy（跑旧代码，未动） |
+| V2 (main) | ✅ 事件升级已并入，377 测试绿，未上线 |
+| 测试 | ✅ 377 passed |
+| 工作区 | 待提交 T7 文档 |

@@ -84,6 +84,15 @@
       "tests": ["tests/test_cluster.py"],
       "related_scripts": []
     },
+    "engine/event_escalator.py": {
+      "tests": ["tests/test_event_escalator.py", "tests/test_event_escalation_e2e.py", "tests/test_event_escalation_db.py", "tests/test_event_escalation_config.py"],
+      "related_scripts": ["scripts/migrate_event_escalation.py"],
+      "also_tests": ["tests/test_cluster.py", "tests/test_dispatch_event.py"]
+    },
+    "engine/market_snapshot.py": {
+      "tests": ["tests/test_event_escalator.py"],
+      "related_scripts": []
+    },
     "engine/content_filter.py": {
       "tests": ["tests/test_content_filter.py"],
       "related_scripts": []
