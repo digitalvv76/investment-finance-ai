@@ -59,7 +59,7 @@ services:
     volumes:
       - news_data:/app/data
       - news_logs:/app/logs
-      - ./config/sources.yaml:/app/config/sources.yaml
+      - ../config/sources.yaml:/app/config/sources.yaml
       - ../../.claude/memory:/app/.claude/memory
 
     # ---- Resource Limits ----
