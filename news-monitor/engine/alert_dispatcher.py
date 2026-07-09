@@ -345,6 +345,46 @@ class AlertDispatcher:
         return DispatchResult(level=level, channels_used=channels, reason=reason)
 
     # ------------------------------------------------------------------
+    # Event-level dispatch
+    # ------------------------------------------------------------------
+
+    def _format_event_body(self, event: dict) -> str:
+        parts = [
+            f"📊 事件级警报 · {event.get('source_count', 0)} 家来源印证",
+            f"峰值影响 {int(event.get('peak_impact', 0))}",
+        ]
+        if event.get("market_note"):
+            parts.append(event["market_note"])
+        return " | ".join(parts)
+
+    async def dispatch_event(self, event: dict, level, telegram_push_fn=None):
+        from engine.alert_dispatcher import AlertLevel, DispatchResult  # local to avoid cycle
+        channels: list[str] = []
+        body = self._format_event_body(event)
+        item = {
+            "title": event.get("title", ""),
+            "source": f"事件聚合({event.get('source_count', 0)}源)",
+            "url": event.get("url", ""),
+            "_event_body": body,
+        }
+        if level == AlertLevel.CRITICAL:
+            logger.warning("EVENT CRITICAL: %s | %s", item["title"][:80], body)
+            if self.pushover_available:
+                await self._pushover_emergency(item); channels.append("pushover_emergency")
+            if telegram_push_fn:
+                await self._telegram_triple(item, telegram_push_fn); channels.append("telegram_triple")
+        elif level == AlertLevel.IMPORTANT:
+            logger.info("EVENT IMPORTANT: %s | %s", item["title"][:80], body)
+            if self.pushover_available:
+                await self._pushover_high(item); channels.append("pushover_high")
+            if telegram_push_fn:
+                await telegram_push_fn(item, disable_notification=False); channels.append("telegram_alert")
+        else:  # NORMAL — close/de-escalation, telegram only, silent
+            if telegram_push_fn:
+                await telegram_push_fn(item, disable_notification=True); channels.append("telegram_alert")
+        return DispatchResult(level=level, channels_used=channels, reason=body)
+
+    # ------------------------------------------------------------------
     # Pushover channel
     # ------------------------------------------------------------------
 
