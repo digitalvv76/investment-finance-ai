@@ -1,32 +1,20 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-09 (关机)
+> 最后更新: 2026-07-09 (测试债清零)
 
-## ✅ 本次完成 (2026-07-09)
+## ✅ 本次完成 (2026-07-09 · 下午)
 
-### 补债 + 修复
-- HISTORY 补录 10 提交、manifest 注册 run_v2_local、未跟踪文件三分类 (提交/ignore/不动)
-- **MarketWatch scraper 退役** (`6cf390a`): 首页受 DataDome 反爬 (headless 401+零链接)，走 RSS 覆盖
-- **V2 影子测试首跑**: 全链路健康，266 items，16 fast_pushed，隔离到位不误推
-
-### 影子测试三发现
-- **#1 已修** (`fe9d481`): impact_assessments 从不持久化 → EvaluateStage 接 db，验证 15 行落库
-- **#2 不改**: Deep lane on-demand 是设计正确
-- **#3 已修**: explainability 步数校验 ==5 → 4-6 放宽
-
-### 记忆持久化 (根治"重启丢记忆")
-- **SessionEnd 自动补账 hook** (`b60c379`): 按 commit hash 自动补录 HISTORY，幂等有界
-- 约定: HISTORY 条目引用 hash + commit body 写实
+### 清理预存测试债 (`4c21bd3`) — 4 failed + 6 errors → 0
+- `test_impact_push` ×3: reason 断言更新为新格式 `composite=X (impact conf)`；moderate 用例 stub 重选 impact=50/conf=50 落回 IMPORTANT 档 (原 58.5 漂过 CRITICAL 阈值 55)
+- `test_scheduler` ×1: 默认 watchlist 断言 AAPL → TSLA (新默认无 AAPL)
+- `test_vector_store` ×6 errors: 加 `VectorStore.close()` 释放 ChromaDB 文件句柄 (清 shared-system 缓存 + gc)，Windows 文件锁根治
+- **全量 360 passed / 0 failed / 0 errors**
 
 ## 📋 下一步
 
-1. **V2 灰度切换** (主线): Web SSE → Telegram → Pushover — 涉及推送手机，需用户验收
-2. ⚠️ **预存测试债 (07-08 遗留，非本次引入)**: 4 failed + 6 errors
-   - `test_impact_push.py` ×3: `6bcb018` 重写 alert_dispatcher reason 格式 (`composite=.. (impact=.. conf=..)`), 测试仍断言旧的 `low_impact` 子串 → 更新测试
-   - `test_scheduler.py::test_load_watchlist_default` ×1: watchlist 默认值变了, 断言过时
-   - `test_vector_store.py` ×6 errors: Windows ChromaDB teardown PermissionError (环境性, 文件锁)
-3. Layer 2 (transcript 合成无 commit 决策) — 未做，可选
-4. v1-stable MarketWatch 死方法清理 — 可选，需 V1 窗口手工 Edit (勿 cherry-pick)
+1. 🎯 **V2 灰度切换** (主线): Web SSE → Telegram → Pushover — 涉及推送手机，需用户验收
+2. Layer 2 (transcript 合成无 commit 决策) — 未做，可选
+3. v1-stable MarketWatch 死方法清理 — 可选，需 V1 窗口手工 Edit (勿 cherry-pick)
 
 ## 🩹 上次踩坑
 
