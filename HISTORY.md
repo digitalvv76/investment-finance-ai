@@ -1355,3 +1355,9 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
   - `module_registry.json` 注册 + `deploy.sh` FILES 加 watchdog.py
 - **报警路由**：STALLED→手机警笛(P2)；DEGRADED→手机高优(P1)；日报→静音(P-1)。仅 Pushover，不碰新闻 TG。
 - registry-mapped 74 测试全绿；main+web import 冒烟通过。
+
+### 🐛 修复：看门狗误报 STALLED（时区 + 分隔符 bug）
+- **现场发现**：部署后 watchdog 立即报 STALLED，`ingest_1h=0` 但 `assessments_1h=2`（矛盾）。若不修，下次检查会误发手机警笛。
+- **根因(systematic-debugging)**：`news.captured_at` 存本地时间(ET)，但 `get_recent_news` 用 UTC `datetime('now')` 比较 → 容器 ET(UTC-4) 下 1h 窗口永远空。叠加 Python3.12 isoformat 适配器把 datetime 存成 `T` 分隔符，与 SQLite `datetime()` 的空格分隔串比较时 `'T'>' '` 恒真 → 窗口彻底失效。
+- **修复**：`get_recent_news` 改为 `WHERE datetime(captured_at) > datetime('now','localtime',?)` —— `datetime()` 包裹兼容 `T`/空格两种分隔符 + localtime 修时区。TDD：先写失败测试(插 now 和 now-2h，断言 1h 窗口只返回 now)，toggle 证 RED→GREEN。
+- 残留(未修，无害)：retention DELETE(line 543) 仍 UTC，7天窗口下早删 4h 可忽略。event_lines 已由并行编辑加 localtime。

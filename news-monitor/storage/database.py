@@ -198,7 +198,7 @@ class Database:
         with self._get_conn() as conn:
             rows = conn.execute(
                 "SELECT * FROM event_lines WHERE is_active = 1 "
-                "AND last_updated > datetime('now', ?) "
+                "AND last_updated > datetime('now', 'localtime', ?) "
                 "ORDER BY last_updated DESC",
                 (f"-{active_window_hours} hours",),
             ).fetchall()
@@ -316,7 +316,12 @@ class Database:
     def get_recent_news(self, hours: int = 24, limit: int = 500) -> List[dict]:
         with self._get_conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM news WHERE captured_at > datetime('now', ?) ORDER BY captured_at DESC LIMIT ?",
+                # captured_at is stored in local time; wrap it in datetime() so
+                # SQLite parses both 'T' and space separators to a canonical form,
+                # and compare against a *localtime* boundary — a plain UTC
+                # datetime('now') under-counts on non-UTC hosts (watchdog bug).
+                "SELECT * FROM news WHERE datetime(captured_at) > datetime('now', 'localtime', ?) "
+                "ORDER BY captured_at DESC LIMIT ?",
                 (f'-{hours} hours', limit)
             ).fetchall()
             return [dict(r) for r in rows]
