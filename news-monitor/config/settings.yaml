@@ -7,6 +7,15 @@ frequencies:
 
 weekend_multiplier: 3    # multiply frequencies by 3 on weekends/holidays
 
+watchdog:
+  check_interval_seconds: 1800      # run the health check every 30 min
+  ingest_floor_per_hour: 3          # weekday baseline; below this per hour → suspect
+  weekend_floor_multiplier: 0.34    # markets closed → lower the floor, avoid false alarms
+  consecutive_bad_threshold: 2      # require 2 bad checks in a row before siren (anti-flap)
+  alert_cooldown_seconds: 3600      # min gap between repeat fault alerts (1h)
+  heartbeat_hour: 21                # 21 US-Eastern = 09:00 北京, daily silent "still alive"
+  startup_grace_seconds: 300        # warmup before first check (cold-start empty DB ≠ stall)
+
 fast_lane:
   multi_source_count: 3        # sources reporting same event
   multi_source_window: 300     # seconds window for "same time"

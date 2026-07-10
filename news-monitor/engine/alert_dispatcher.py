@@ -474,6 +474,56 @@ class AlertDispatcher:
         """High-priority Pushover: one-time with loud sound."""
         return await self._pushover(item, priority=1, sound="persistent")
 
+    async def send_system_alert(
+        self, title: str, message: str, *, emergency: bool = False, quiet: bool = False,
+    ) -> bool:
+        """Send an operational/system alert directly via Pushover.
+
+        Unlike news alerts this is NOT tied to a news item — no translation,
+        no formatting. Used by the Watchdog for pipeline-fault sirens and the
+        daily "still alive" heartbeat.
+
+            emergency=True  → siren, repeats until acknowledged (P2)
+            quiet=True      → silent low-priority (heartbeat) (P-1)
+            otherwise       → high priority, loud (P1)
+        """
+        if not self.pushover_available:
+            logger.warning("send_system_alert: Pushover unavailable, dropping: %s", title)
+            return False
+
+        if quiet:
+            priority, sound = -1, "none"
+        elif emergency:
+            priority, sound = 2, "siren"
+        else:
+            priority, sound = 1, "persistent"
+
+        success = 0
+        for user_key in self._pushover_users:
+            payload = {
+                "token": self._pushover_token,
+                "user": user_key,
+                "title": title,
+                "message": message,
+                "priority": priority,
+                "sound": sound,
+            }
+            if priority == 2:
+                payload["retry"] = 30
+                payload["expire"] = 3600
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(PUSHOVER_API, json=payload, timeout=10) as resp:
+                        if resp.status == 200:
+                            logger.info("System alert sent [p=%d]: %s", priority, title)
+                            success += 1
+                        else:
+                            logger.error("System alert failed [%d]: %s",
+                                         resp.status, (await resp.text())[:200])
+            except Exception as e:
+                logger.error("System alert error: %s", e)
+        return success > 0
+
     # ------------------------------------------------------------------
     # Telegram enhanced channel
     # ------------------------------------------------------------------

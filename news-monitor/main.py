@@ -43,6 +43,7 @@ from engine.alert_dispatcher import AlertDispatcher, AlertLevel
 from engine.strategic_detector import StrategicDetector
 from engine.impact_evaluator import ImpactEvaluator
 from engine.event_driven_evaluator import EventDrivenEvaluator, watchlist_safety_net
+from engine.watchdog import Watchdog
 from engine.impact_learner import ImpactLearner
 from engine.event_matcher import EventMatcher
 from engine.relevance import signal_score, get_portfolio_summary, get_tracked_tickers
@@ -156,6 +157,11 @@ class NewsMonitor:
                     self.event_matcher.event_count)
         logger.info("Portfolio/Relevance: %s", get_portfolio_summary())
 
+        # ---- liveness watchdog (independent task; disambiguates "silence") ----
+        # Runs on its OWN asyncio task (see start()), NOT inside the scheduler —
+        # if the scheduler loop hangs, a watchdog living inside it would hang too.
+        self.watchdog = Watchdog(self.db, self.alert_dispatcher, self.config.load_settings())
+
         # ---- Telegram bot -------------------------------------------
         token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
         if not token:
@@ -192,6 +198,8 @@ class NewsMonitor:
             )
             # Make evaluator available for /api/impact/health endpoint
             self.web_dashboard.impact_evaluator = self.impact_evaluator
+            # Expose watchdog for /health/watchdog(.json)
+            self.web_dashboard.watchdog = self.watchdog
             logger.info("Web dashboard enabled on port %d", web_port)
         else:
             self.web_dashboard = None
@@ -536,6 +544,9 @@ class NewsMonitor:
         # Start impact collector loop (background, periodic)
         self._collector_task = asyncio.create_task(self._run_collector_loop())
 
+        # Start liveness watchdog on its own independent task
+        self._watchdog_task = asyncio.create_task(self.watchdog.run_loop())
+
         logger.info("News Monitor running")
 
     async def stop(self) -> None:
@@ -543,6 +554,9 @@ class NewsMonitor:
         await self.scheduler.stop()
         if hasattr(self, '_collector_task'):
             self._collector_task.cancel()
+        if hasattr(self, '_watchdog_task'):
+            self.watchdog.stop()
+            self._watchdog_task.cancel()
         if self.web_dashboard:
             await self.web_dashboard.stop()
         if self.bot:

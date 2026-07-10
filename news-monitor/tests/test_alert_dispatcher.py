@@ -329,3 +329,88 @@ def test_end_to_end_classification_with_real_detector(strategic):
     matches2 = strategic.detect(text2)
     level2, reason2 = dispatcher.classify(0.38, matches2)
     assert level2 == AlertLevel.IMPORTANT
+
+
+# ---------------------------------------------------------------------------
+# send_system_alert — watchdog/operational alerts (direct Pushover, no news item)
+# ---------------------------------------------------------------------------
+
+
+class _FakeResp:
+    def __init__(self, captured):
+        self._captured = captured
+        self.status = 200
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def text(self):
+        return "ok"
+
+
+class _FakeSession:
+    """Stubs aiohttp.ClientSession so send_system_alert never hits the network."""
+    def __init__(self, captured):
+        self._captured = captured
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    def post(self, url, json=None, timeout=None):
+        self._captured.append(json)
+        return _FakeResp(self._captured)
+
+
+def _wire_fake_pushover(monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        "engine.alert_dispatcher.aiohttp.ClientSession",
+        lambda *a, **k: _FakeSession(captured),
+    )
+    d = AlertDispatcher()
+    d._pushover_token = "tok"
+    d._pushover_users = ["u1"]
+    return d, captured
+
+
+@pytest.mark.asyncio
+async def test_send_system_alert_emergency_is_siren(monkeypatch):
+    d, captured = _wire_fake_pushover(monkeypatch)
+    ok = await d.send_system_alert("停摆", "零采集", emergency=True)
+    assert ok is True
+    assert captured[0]["priority"] == 2
+    assert captured[0]["sound"] == "siren"
+    assert captured[0]["retry"] == 30 and captured[0]["expire"] == 3600
+
+
+@pytest.mark.asyncio
+async def test_send_system_alert_quiet_is_silent(monkeypatch):
+    d, captured = _wire_fake_pushover(monkeypatch)
+    ok = await d.send_system_alert("日报", "系统正常", quiet=True)
+    assert ok is True
+    assert captured[0]["priority"] == -1
+    assert captured[0]["sound"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_send_system_alert_default_is_high(monkeypatch):
+    d, captured = _wire_fake_pushover(monkeypatch)
+    ok = await d.send_system_alert("降级", "成功率下降")
+    assert ok is True
+    assert captured[0]["priority"] == 1
+    assert captured[0]["sound"] == "persistent"
+
+
+@pytest.mark.asyncio
+async def test_send_system_alert_unavailable_returns_false():
+    d = AlertDispatcher()
+    d._pushover_token = ""
+    d._pushover_users = []
+    ok = await d.send_system_alert("x", "y", emergency=True)
+    assert ok is False

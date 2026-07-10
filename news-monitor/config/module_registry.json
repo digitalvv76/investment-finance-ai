@@ -76,7 +76,8 @@
     },
     "engine/alert_dispatcher.py": {
       "tests": ["tests/test_alert_dispatcher.py", "tests/test_impact_push.py"],
-      "related_scripts": ["scripts/test_phone_alert.py", "scripts/test_signal.py"]
+      "related_scripts": ["scripts/test_phone_alert.py", "scripts/test_signal.py"],
+      "also_tests": ["tests/test_watchdog.py"]
     },
     "engine/cluster.py": {
       "tests": ["tests/test_cluster.py"],
@@ -157,10 +158,16 @@
       "related_scripts": []
     },
 
+    "engine/watchdog.py": {
+      "tests": ["tests/test_watchdog.py"],
+      "related_scripts": [],
+      "_note": "Liveness watchdog — disambiguates silence (HEALTHY/QUIET_OK/STALLED/DEGRADED). Independent asyncio task in main.py; alerts via alert_dispatcher.send_system_alert."
+    },
+
     "main.py": {
       "tests": [],
       "related_scripts": ["scripts/acceptance_test.py", "scripts/accept_watchlist_safety_net.py"],
-      "also_tests": ["tests/test_fast_lane.py", "tests/test_deep_lane.py", "tests/test_alert_dispatcher.py", "tests/test_watchlist_safety_net.py"],
+      "also_tests": ["tests/test_fast_lane.py", "tests/test_deep_lane.py", "tests/test_alert_dispatcher.py", "tests/test_watchlist_safety_net.py", "tests/test_watchdog.py"],
       "_note": "Orchestrator — changes affect the full pipeline"
     },
 

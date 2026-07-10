@@ -63,6 +63,7 @@ FILES=(
     "news-monitor/engine/deep_lane.py"
     "news-monitor/engine/fast_lane.py"
     "news-monitor/engine/event_driven_evaluator.py"
+    "news-monitor/engine/watchdog.py"
     "news-monitor/engine/priority.py"
     "news-monitor/engine/relevance.py"
     "news-monitor/engine/strategic_detector.py"

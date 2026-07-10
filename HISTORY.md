@@ -1343,3 +1343,15 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - 用 tradingview_quote 核实 CRWV/GLXY/NNE/NVTS/SERV/BTDR 等真实存在
 - 容器经 volume 挂载 `../../.claude/memory` 读此文件 → `deploy.sh` FILES 加入 watchlist/portfolio-state.md，部署需重启容器清 `_watchlist` 缓存
 - 本地解析验证：74 tickers 无误标
+
+### 移植 V2 看门狗（liveness watchdog）到 V1
+- **动机**：今天"零推送"分不清是坏了还是市场平静，只能 SSH 查日志。V2 有 watchdog 解决此"沉默歧义"，V1 没有。
+- **移植**（TDD，V1 窗口内做）：
+  - `engine/watchdog.py` + `tests/test_watchdog.py` 从 V2 verbatim 搬（17 测试绿）。独立 asyncio 任务，测上游存活(采集率/错误率)判 HEALTHY/QUIET_OK/STALLED/DEGRADED
+  - `alert_dispatcher.py` 加 `send_system_alert`（直发 Pushover，绕开新闻翻译器）+ 4 个 TDD 测试
+  - `main.py`：起 `self._watchdog_task` 独立任务 + stop 清理 + 挂 web
+  - `settings.yaml`：watchdog 块，`heartbeat_hour=21`(美东)=北京09:00 静音日报
+  - `web/routes.py`+`server.py`：`/health/watchdog`(页面) + `/health/watchdog.json`(接口)，嵌入 /health，走 /health 前缀免认证
+  - `module_registry.json` 注册 + `deploy.sh` FILES 加 watchdog.py
+- **报警路由**：STALLED→手机警笛(P2)；DEGRADED→手机高优(P1)；日报→静音(P-1)。仅 Pushover，不碰新闻 TG。
+- registry-mapped 74 测试全绿；main+web import 冒烟通过。
