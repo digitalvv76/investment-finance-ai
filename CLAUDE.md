@@ -94,6 +94,16 @@ python news-monitor/scripts/dev_checklist.py
 检查清单：Git 干净 → 测试通过 → HISTORY.md 已更新 → 凭证完整 → 远程已同步
 然后 `git push origin main`。
 
+## 🛡️ 质量把关 (轻量风险闸门)
+
+用户不看代码,靠 AI 自己把关。**高风险改动** — 碰**推送逻辑 / 数据库·schema / 部署上线 / 安全凭证认证 / 跨模块** — 部署前必须过这道闸,琐碎改动(文案/typo/单行无风险)跳过。设计全文见 `docs/superpowers/specs/2026-07-10-multi-agent-dev-pipeline-design.md`。
+
+1. **对抗式核实**:派一次独立子 agent,指令必须**点名具体核实**——「追踪这个变量/标志在代码里到底干什么(如 `disable` 是静音还是跳过)、别从名字臆断、找出让它出错的场景」。可借 `/code-review` + `/security-review` 两视角,但走对抗框架不走过场。**高危/安全项先报人,不自动改。**
+2. **地面真值优先**:高风险改动**必须有覆盖该行为的测试**(测试/可观测行为 > agent 共识);看门狗监控存活;部署前 `docker tag` 回滚镜像(用 `./deploy-main.sh` 已内置)。
+3. **自动修复上限 2 轮**,模糊的直接报人。
+
+> 铁律:同模型 agent 共享盲点(今天 `disable/silent` 语义错 V1+V2 双双栽)。真杠杆是**对着代码/测试证伪**,不是堆角色 agent。升级到 4-agent 全套需有「测试+看门狗+回滚兜不住的真实事故」证据。
+
 ## 项目结构
 
 ```
