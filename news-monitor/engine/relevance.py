@@ -23,14 +23,17 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Path offsets differ: Windows needs parents[2] (D:/class1), Docker needs
-# parents[1] (/app). Try both — use the one that has .claude/memory/.
+# Project root layout differs across environments (Windows dev vs Docker).
+# Probe candidate parent depths for the one that actually holds .claude/memory;
+# fall back to parents[1] without crashing if none match (e.g. memory dir not
+# mounted — relevance scoring just runs without portfolio context).
 _module_file = Path(__file__).resolve()
-_PROJECT_ROOT = _module_file.parents[2]  # Windows: D:/class1
-if not (_PROJECT_ROOT / ".claude" / "memory").is_dir():
-    _PROJECT_ROOT = _module_file.parents[1]  # Docker: /app
-if not (_PROJECT_ROOT / ".claude" / "memory").is_dir():
-    _PROJECT_ROOT = _module_file.parents[3]  # Windows alt
+_PROJECT_ROOT = _module_file.parents[1]
+for _depth in (2, 1, 3):
+    if _depth < len(_module_file.parents) and \
+            (_module_file.parents[_depth] / ".claude" / "memory").is_dir():
+        _PROJECT_ROOT = _module_file.parents[_depth]
+        break
 _PORTFOLIO_PATH = _PROJECT_ROOT / ".claude" / "memory" / "portfolio-state.md"
 _WATCHLIST_PATH = _PROJECT_ROOT / ".claude" / "memory" / "watchlist-state.md"
 

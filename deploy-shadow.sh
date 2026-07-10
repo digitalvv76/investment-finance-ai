@@ -71,6 +71,7 @@ FILES=(
     "news-monitor/engine/event_escalator.py"
     "news-monitor/engine/market_snapshot.py"
     "news-monitor/engine/event_driven_evaluator.py"
+    "news-monitor/engine/watchdog.py"
     "news-monitor/engine/entity_extractor.py"
     "news-monitor/engine/content_filter.py"
     "news-monitor/engine/actionability_review.py"

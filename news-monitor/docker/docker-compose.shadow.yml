@@ -51,6 +51,9 @@ services:
     volumes:
       - news_data_shadow:/app/data
       - news_logs_shadow:/app/logs
+      # Shared read-only: relevance scoring needs the same portfolio/watchlist
+      # as V1 for a fair comparison. :ro so the shadow can never mutate it.
+      - ../../.claude/memory:/app/.claude/memory:ro
 
     # ---- Resource Limits ----
     deploy:
