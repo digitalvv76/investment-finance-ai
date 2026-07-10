@@ -1,41 +1,41 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-10 ~08:00 CST (V1 窗口 / v1-stable)
+> 最后更新: 2026-07-10 ~11:10 CST (V1 窗口 / v1-stable)
 
 ## ✅ 本次会话完成
 
-- **诊断"哨兵上线后零推送"** → ECS healthy 无宕机。6h 内 66 条评估全部 `is_event=false → no_push`（连静音 TG 都没）。哨兵正确拦噪音，但也**误杀关注股真实异动**（TSLA UBS 上调目标价、MRVL 飙升）。根因：事件哨兵是很窄的**硬门禁**，非 5 类硬催化剂就整条丢 → 从"推太多"矫枉过正成"零推送"
-- **关注股/持仓安全网 (`fb0d350`)** → `is_event=false 且 LLM 判 notable 实质动作 且 命中关注股/持仓` → 静音 Telegram。手机保持严格（intensity≥3 才响）。**匹配用 LLM 的 ticker_hint，不用坏掉的 tickers_found**
-- **已部署 V1 生产** → 容器 healthy，部署容器内真实 LLM 端到端验收：TSLA PT hike→fire、El Nino→不 fire（旧 ARM 假阳性消失）
+- **诊断"哨兵上线后零推送"** → 事件哨兵硬门禁误杀关注股异动。加**关注股安全网**(`fb0d350`)：is_event=false 但 LLM 判 notable + 命中关注股 → 静音 TG，手机严格。
+- **关注列表 21→74 只**(`25059ba`) → 用户真实关注池整理成可追踪美股，容器实测 74 生效。
+- **移植 V2 看门狗到 V1**(`78325e5`) → 独立任务测上游存活，判 HEALTHY/QUIET_OK/STALLED/DEGRADED；STALLED→手机警笛，DEGRADED→手机高优，每日 09:00(北京)静音心跳。`send_system_alert` + web `/health/watchdog(.json)`。
+- **修看门狗误报 STALLED**(`2768e90`) → `get_recent_news` UTC vs 本地 captured_at + `T`/空格分隔符双 bug → `datetime(captured_at) > datetime('now','localtime',?)`。生产实测 ingest_1h 0→8，verdict healthy。
 
 ## 📊 生产状态
 
 | 组件 | 状态 |
 |------|------|
-| ECS 容器 | 🟢 healthy (deploy fb0d350) |
-| 事件驱动评估 | 🟢 PRIMARY |
-| 关注股安全网 | 🟢 已上线 (⏳ 待组织性真实新闻现场确认一次静音 TG) |
+| ECS 容器 | 🟢 healthy (deploy 2768e90) |
+| 事件驱动评估 + 关注股安全网 | 🟢 已上线 (74 关注股) |
+| **看门狗** | 🟢 已上线，state=healthy，ingest_1h=8，无误报 |
 | 8080 认证 | 🟢 Basic Auth |
 | Pushover / Telegram | 🟢 正常 |
-| 华尔街见闻 | 🟢 16 条/轮 |
 | 新浪财经 API | ❌ 全 403 |
+| news-monitor-shadow (V2 金丝雀) | 🟠 unhealthy 但不推送，归 V2 窗口 |
 
 ## 📋 下一步
 
-1. **现场确认一次组织性安全网触发** — 等 fresh 关注股实质动作新闻穿过 dedup+fast_lane 时，查日志 `Watchlist safety net → silent TG` + 确认手机静默、TG 到达
-2. **(可选) 修 `tickers_found` 子串误匹配** — entity_extractor "elarm"→ARM 等假阳性；当前安全网已绕过它，非紧急
-3. **新浪财经 API 403** — 需新端点或改 web scraper
-4. **无关小 bug** — `Retention/cleanup failed: name 'logger' is not defined`（清理任务，不影响推送）
+1. **观察看门狗首次真实 check**（部署后 5min grace 过后跑第一次；预期 healthy/quiet_ok）
+2. **(可选)** retention DELETE(database.py:543) 仍 UTC，早删 4h，无害可后补
+3. **cherry-pick 到 main** → V2 窗口把 watchdog/安全网/关注列表相关 commit 同步（fb0d350/25059ba/78325e5/2768e90）
+4. **新浪财经 403** — 需新端点或 web scraper
 5. **轮换 root 密码 + 凭证备份**（非紧急）
 
 ## 🩹 本次踩坑
 
-- `tickers_found` 字段不可信：子串匹配把 "el**arm**"/Teva 误标为 ARM，又漏 Applied Materials → **禁止拿它做推送门禁**，改用 LLM ticker_hint
-- `is_event=false` 时旧 prompt 不返回 ticker_hint → 必须扩展 prompt 才能拿到可靠选股
-- 稳态 dedup 命中率极高 → 部署后短期抓不到组织性真实触发属正常，用部署容器内直跑真实 LLM 验收代替
+- `captured_at` 存本地时间但 `get_recent_news` 用 UTC 比较 → ET 容器 1h 窗口永远空 → 看门狗误报 STALLED。叠加 Py3.12 isoformat `T` 分隔符破坏字符串比较。修法：`datetime()` 包裹 + localtime。
+- 看门狗必须现场验证真实 DB 信号，不能只看单测（单测用 FakeDB 不含时区/分隔符真相）。
+- V2 send_system_alert 只走 Pushover，绕开新闻翻译器（直发 PUSHOVER_API）。
 
 ## 🧪 测试状态
 
-- registry-mapped: 70 passed（event_driven_evaluator + watchlist_safety_net + impact_push + fast_lane + deep_lane + alert_dispatcher）
-- 真实 LLM 验收 `scripts/accept_watchlist_safety_net.py`: 5/5 PASS
-- 全量套件 Windows 本地仍受 ChromaDB 文件锁 + GBK 子进程 flake 影响（非本次改动）
+- watchdog 17 + send_system_alert 4 + db(含 TZ 回归) + registry-mapped：全绿
+- 部署容器端到端：healthy 路径 + STALLED 故障注入 均验证（假 dispatcher 不真发）
