@@ -16,7 +16,7 @@
       "also_tests": []
     },
     "pipeline/evaluate.py": {
-      "tests": ["tests/test_pipeline_evaluate.py"],
+      "tests": ["tests/test_pipeline_evaluate.py", "tests/test_stale_event_downgrade.py"],
       "related_scripts": [],
       "also_tests": ["tests/test_alert_dispatcher.py"]
     },

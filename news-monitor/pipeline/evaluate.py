@@ -18,6 +18,29 @@ logger = logging.getLogger(__name__)
 
 RETRY_DELAYS = [1, 2, 4]  # seconds between LLM retries
 
+# ── Stale-event downgrade ──
+STALE_EVENT_MINUTES = 60  # 事件公开 > 1h → 已 price in，手机降静音TG
+
+
+def _downgrade_if_stale(
+    level: AlertLevel,
+    age_minutes: float | None,
+    multi_source: bool = False,
+) -> AlertLevel:
+    """IMPORTANT 且事件线年龄 > STALE_EVENT_MINUTES → NOTABLE（静音TG，不响手机）。
+    CRITICAL 豁免；age 未知(None)→保持；**多源确认(≥3家)豁免**。纯函数，无副作用。
+
+    多源豁免理由：source_count≥3 = 持续发酵的真事件，first_seen 只记首次出现，
+    会把滚动更新的大事件误判为旧闻。多源确认本是"值得更响"的信号，不该被静音。
+    单源旧催化剂(如美光$250B旧闻)无此豁免，照常降级。
+    """
+    if (level == AlertLevel.IMPORTANT
+            and not multi_source
+            and age_minutes is not None
+            and age_minutes > STALE_EVENT_MINUTES):
+        return AlertLevel.NOTABLE
+    return level
+
 
 class EvaluateStage:
     """Pipeline stage 2: evaluate impact and classify alert level.
@@ -244,6 +267,18 @@ class EvaluateStage:
         if escalation_note:
             reason += f" escalated({source_count}sources)"
 
+        # ── Stale-event downgrade: old IMPORTANT → NOTABLE (silent TG) ──
+        # 复用上面已查到的 source_count；多源确认(≥3)豁免降级(方案B)。
+        age_min = self._event_line_age_minutes(item.id) if item.id else None
+        new_level = _downgrade_if_stale(level, age_min, multi_source=(source_count >= 3))
+        if new_level != level:
+            logger.info(
+                "EVALUATE: stale event #%d (age=%.0fmin>%d) IMPORTANT→NOTABLE 静音TG: %s",
+                item.id, age_min or 0, STALE_EVENT_MINUTES, (item.title or "")[:60],
+            )
+            reason += f" | stale_downgrade(age={age_min:.0f}min)"
+            level = new_level
+
         item.decision = DispatchDecision(
             alert_level=level,
             alert_reason=reason,
@@ -276,6 +311,31 @@ class EvaluateStage:
                 return int(row["source_count"]) if row else 0
         except Exception:
             return 0
+
+    def _event_line_age_minutes(self, news_id: int) -> float | None:
+        """Return age of the event line this item belongs to, in minutes.
+
+        Age = minutes from event_lines.first_seen to now (local time).
+        Returns None if not in an event line, DB unavailable, or query fails.
+        Uses julianday('now','localtime') to avoid timezone skew
+        (first_seen is stored as local naive datetime, same trap as watchdog).
+        """
+        if not self._db or not news_id:
+            return None
+        try:
+            with self._db._get_conn() as conn:
+                row = conn.execute(
+                    """SELECT (julianday('now','localtime')
+                               - julianday(datetime(el.first_seen))) * 1440.0 AS age_min
+                       FROM event_lines el JOIN news n ON n.event_line_id = el.id
+                       WHERE n.id = ? AND el.is_active = 1""",
+                    (news_id,),
+                ).fetchone()
+                if row and row["age_min"] is not None:
+                    return max(float(row["age_min"]), 0.0)
+                return None
+        except Exception:
+            return None
 
     @staticmethod
     def _to_news_item(item: PipelineItem):

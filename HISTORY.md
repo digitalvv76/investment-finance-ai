@@ -4,6 +4,50 @@
 
 ---
 
+## 2026-07-10T19:10+08:00 · 🎯 过期事件降级实现 (V1出规格→V2/main实现)
+
+### 背景
+- V1 窗口出规格 (commit `29ac42b` on v1-stable): 美光$250B旧催化剂几小时后仍满级震手机
+- 根因: 事件驱动路径只升级(多源+1)不因过期降级，绕过 legacy timeliness 门禁
+
+### 实现 (`pipeline/evaluate.py`)
+- 纯函数 `_downgrade_if_stale(level, age_min, multi_source)`: IMPORTANT + age>60min → NOTABLE 静音TG；CRITICAL/None/多源豁免
+- DB 查询 `_event_line_age_minutes(news_id)`: julianday('now','localtime') - datetime(first_seen)，同看门狗时区修法
+- 接线: intensity→level 后调用，复用已查 source_count
+
+### 🛡️ 质量把关 — 对抗式核实抓到设计矛盾
+- 子agent 证伪: first_seen 只记事件线**首次出现**，持续发酵的多源大事件会被误判"旧闻"静音 (漏推重大新闻，方向与"推送偏少"相反)
+- 真实 SQLite 验证时区: 本地时间 first_seen 正确(90min)，UTC CURRENT_TIMESTAMP 会多算480min → 补真实 SQLite 时区回归测试(填补 mock 字符串盲区)
+- **用户决策方案B**: 多源确认(≥3家)豁免降级 — 改动最小，堵住误伤，单源旧闻照常降级
+
+### 测试
+- `tests/test_stale_event_downgrade.py`: 30 tests (纯函数9+DB6+集成6+真实SQLite时区5+多源4)
+- registry 注册进 `pipeline/__manifest__.json`
+- 全量 **456 passed / 0 failed**
+
+### 待部署
+- 本地绿 → deploy-main.sh (内置回滚tag) → 影子对比可选
+
+---
+
+## 2026-07-10T18:35+08:00 · 🔧 Vercel /health/* 代理 404 修复 + GitHub 自动部署
+
+### 问题
+- `https://class1-cyan.vercel.app/health/decisions` 和 `/health/watchdog` 返回 404
+- ECS 直连 (`http://47.76.50.77:8080/health/*`) 正常 200
+- 根因: Vercel 最新部署是 4 天前的，不包含 `/health/:path*` 代理规则 (commit `565b54f`)
+
+### 修复
+- 手动 `vercel --prod --yes` 部署最新代码 → `/health/*` 立即 200
+- `vercel git connect https://github.com/digitalvv76/investment-finance-ai` → 以后 `git push main` 自动部署
+
+### 验证
+- `/health/decisions` → 200 ✅ (决策面板 HTML 正常渲染)
+- `/health/watchdog` → 200 ✅
+- `/datetime` → 200 ✅
+
+---
+
 ## 2026-07-10T00:45+08:00 · 🎭 影子部署基础设施就绪
 
 ### DRY_RUN_PUSH 静音模式 (`f8620d1`)
@@ -1672,3 +1716,23 @@ C. deploy-main.sh: git部署V1生产, 内置回滚tag+健康验证, 保留ECS co
 ---
 
 ## 2026-07-10T16:37+08:00 · 会话开始
+
+---
+
+## 2026-07-10T18:34+08:00 · 会话开始
+
+---
+
+## 2026-07-10T18:34+08:00 · 会话开始
+
+## 2026-07-10T18:35 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 872621e · 2026-07-10T18:19 · fix(telegram): 锁定主号 TELEGRAM_CHAT_ID 防覆盖 + 中文推送加固（原文链接按钮 + 去英文）
+
+---
+
+---
+
+## 2026-07-10T18:35+08:00 · 会话开始
