@@ -1367,3 +1367,14 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - **修复**：改用 `zhibo.sina.com.cn/api/zhibo/feed?zhibo_id=152&tag_id=0`（财经全球直播，ECS 实测 200）。重写 `fetch_sina_channel` 解析 `result.data.feed.list[]`：`rich_text`→`_split_zhibo_richtext` 取【标题】+正文，`create_time`→published_at，`docurl`→url。复用 `_is_noise_title`/`_detect_tickers`。
 - `fetch_all` 从 4 个 roll 频道改为 1 次 zhibo 综合 feed（tag_id=0 已覆盖全类目，避免 4x 重复）。
 - TDD：`_parse_zhibo_feed` 解析测试（含【】提取 + 噪音过滤）+ 空/畸形。**真实 live 抓取实测 9 条**（中国电信入股/聆思融资等），标题解析正确。
+
+---
+
+## 2026-07-10T17:45+08:00 · 会话开始
+
+### 诊断：一条不够格的手机推送（美光 $250B）+ 出交接单给 V2
+- **用户反馈**：手机收到"美光2500亿美元押注推动芯片复苏，但百事李维斯仍遭惩罚"，觉得不够格上手机。
+- **诊断（systematic-debugging）**：手机门禁 = 事件驱动 LLM 判 `is_event & intensity≥3` → IMPORTANT/CRITICAL 才响。查生产 `/health/decisions.json`：`id=3340, level=important, intensity=4, catalyst=[1]` → 确实响了手机（非 TG）。核实原文（Micron 7/9 官方，$6.1B CHIPS 拨款，MU +7-9%）→ **LLM 判断站得住，非误评**。
+- **真根因（用户抓的点）**：事件驱动路径 `_apply_event_assessment` 只因多源"升级"、**从不因"过期"降级**，完全不看时效性 → 几小时前已公开、市场消化完的旧催化剂照样满级震手机。
+- **方案（用户定阈值=1h）**：事件线 `first_seen` 年龄 > 60min 且 level=IMPORTANT → 降级 NOTABLE（静音TG、手机不响）；CRITICAL 豁免；年龄未知不降。排雷：`first_seen` 由 `cluster.py` `datetime.now()` 写=本地时间+T分隔符（同看门狗坑），SQL 用 `julianday('now','localtime')` + `datetime()` 包裹。
+- **分工（§6 触发）**：改动动 main 流水线 = V2 地盘、非紧急热修不走 v1-stable。用户选 ① → V1 出规格。产出 `SPEC-stale-event-downgrade.md`（意图+契约+实现骨架+时区注意+6条测试用例+部署回滚），实现/测试/部署归 V2/main。

@@ -21,6 +21,7 @@
 | 决策面板 `/health/decisions` | 🟢 V2 已加 |
 
 ## 📋 下一步 / 待办
+0. **🆕 V2 待办（新）**：实现 `SPEC-stale-event-downgrade.md` —— 事件驱动推送加"过期降级"闸（事件线 first_seen>1h 且 IMPORTANT → 降 NOTABLE 静音TG；CRITICAL 豁免）。诊断+设计+时区排雷 V1 已做完，V2 照 SPEC 在 main 实现+TDD+影子+部署。触发场景：美光 $250B 旧催化剂误响手机（id=3340）。
 1. **V2 待办**：把两份活文档拷进 main —— `COLLAB-PROTOCOL.md` + 多 agent 瘦身版 spec（见 `HANDOFF-copy-living-docs-to-main.md`）
 2. 多 agent 质量把关：已定**瘦身版**（高风险改动 + 一道对抗式核实 + 测试/看门狗/回滚）；全套 4-agent 降级为"用证据换的未来升级"
 3. **推送偏少 — 待调参（归 V2/main，用户待定方向）**：诊断确认生产健康、非故障。原因=少而精+隔夜淡+屏门槛严。现规则：手机=硬催化剂(强度≥3)、关注股notable=静音TG、其余不推、前置屏门槛0.3。近12h手机0推(无硬催化剂,正常)，关注股notable有在推(如RKLB,但**静音**用户没注意到)。用户觉偏少，待定方向：A手机多响(降强度门槛)/B关注股别静音改成能提醒/C降屏门槛0.3→0.2多抓。**改在 main，可先影子容器试跑再上。**
