@@ -1600,3 +1600,15 @@ _log_event_source_count: JOIN news→event_lines 查源数
 ---
 
 ## 2026-07-10T06:48+08:00 · 会话开始
+
+### 🔀 v1-stable → main 搬运 3 个修复(交接单)+ 批判性剔除 1 个
+
+按 `HANDOFF-to-main.md` 搬 v1-stable 修复。**批判性核实后调整了交接单**:
+
+- ✅ `6757281` 关注列表 21→74。核实当前 main 经 `_get_watchlist()`→signal_score 读它, **74只真生效**。
+- ✅ `ba448c4`+`cf027c9` **Sina zhibo 修复**(roll/get 全403)。冲突较大: HEAD 串行fetch_all+旧roll频道 vs 99b588b并发+zhibo单次, git只标一半冲突留坏混合→手术式整体换99b588b版。去掉未定义 `_detect_tickers_from_text`(缺依赖+[[tickers-found-unreliable]])。**实网验证: zhibo真抓10条正常新闻**。
+- ✅ `116f470` `get_recent_news` localtime+分隔符健壮(补时区遗留尾巴)。
+- ❌ **`fb0d350` 安全网 剔除不搬**。基于旧内联push架构(`weak_catalyst`), 当前main是流水线架构(决策在`item.decision`), 无`weak_catalyst`。**需流水线Evaluate阶段重新实现, 设计任务非搬运**。
+- 全量 **414 passed**。
+
+**待用户定**: (1) 部署这3个到生产(Sina 403 live, 建议尽快); (2) 安全网要不要在流水线重新实现。
