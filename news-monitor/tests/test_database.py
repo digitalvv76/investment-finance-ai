@@ -114,3 +114,24 @@ def test_health_stats_excludes_watchdog_records(db):
     stats = db.get_health_stats(hours=24)
     # Only the real llm_timeout counts as an error, not the 2 watchdog_ records.
     assert stats["health_events_1h"] == 1
+
+
+def test_get_recent_news_window_matches_local_captured_at(db):
+    """captured_at is stored in local time; the recent-news window must compare
+    in local time AND parse the stored separator ('T' or space). Regression for
+    the watchdog false-STALLED bug: a UTC window under-counted on non-UTC hosts,
+    and an isoformat 'T' separator broke string comparison against space-format
+    datetime(). Uses real datetime objects (the actual insert path).
+    """
+    from datetime import timedelta
+    now = datetime.now()
+    recent = NewsItem(title="recent", url="https://ex/recent", source="t",
+                      captured_at=now)
+    old = NewsItem(title="old", url="https://ex/old", source="t",
+                   captured_at=now - timedelta(hours=2))
+    db.insert_news(recent)
+    db.insert_news(old)
+
+    titles = {r["title"] for r in db.get_recent_news(hours=1)}
+    assert "recent" in titles          # within the 1h window
+    assert "old" not in titles         # 2h-old must be excluded
