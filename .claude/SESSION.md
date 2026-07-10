@@ -1,24 +1,28 @@
 # 当前工作状态
 
-> 🔔 **[2026-07-09 来自 V1 窗口] ECS 灰度前必读交接 → [`.claude/V1-TO-V2-HANDOFF.md`](V1-TO-V2-HANDOFF.md)**
-> 含：今天的安全修复(`cab7d4f` 已在 main，含生死攸关的 `../config` 卷路径)、V2≠V1 提醒、灰度架构坑、**需先与用户确认 A/B 方案**。开工先读它。
+> 最后更新: 2026-07-10 收工。生产=clean main、健康。双窗口保留(受 COLLAB-PROTOCOL 约束)。
 
-> 最后更新: 2026-07-10 (系统存活看门狗完成 — 解决沉默歧义)
+## ✅ 本次会话交付(2026-07-10,超长)
+- **系统存活看门狗** 上线(解决沉默歧义);影子部署→抓到并修 **dedup O(N²) 采集卡死**(48min→5.4s)
+- **生产事故**(--down 误删 V1)→ 恢复+修脚本;V1 换 clean main;修看门狗 **3个时区/自污染假象**
+- 从 v1-stable 搬 3 修复(**Sina 403 恢复**、关注列表74、TZ);配置漂移对齐进 main
+- **流水线版关注股安全网 + 决策面板** 上线(is_event=false 默认不推=修firehose;notable+关注股→静音TG NOTABLE档;真LLM+Playwright双验收)
+- **COLLAB-PROTOCOL 定稿**(双窗口保留、受约束);**轻量质量把关** 采纳(CLAUDE.md+[[quality-gate-lightweight]]);**`deploy-main.sh`** 一键安全部署(内置回滚tag,已验证)
 
-## 📋 下一步 (需用户拍板部署方式)
+## 📋 下一步
+- 🟡 **Vercel 面板链接还没通**(`/health/*` 代理规则已推但 Vercel 未自动部署,仍 404)→ 确认 Vercel 是否连 GitHub 自动部署,否则手动 Redeploy。链接: `https://class1-cyan.vercel.app/health/decisions`
+- 📊 **观察 V1 真实推送 1-2 天**:验证安全网「少而精」效果 + 看门狗报平安/故障
+- 🟡 **待用户定**: sources.yaml request_delay(ECS 3.0/1.5 vs main 1.0/0.3,方向不明,未合并)
+- ⚠️ **遗留时区隐患**: captured_at/created_at 本地存储 vs 查询 UTC 不一致([[db-captured-at-timezone]]),已修看门狗路径,**digest/api 等其他查询待排查**
 
-- ⚠️ **影子暂已撤下** (2026-07-10 事故后)。V1 生产已恢复健康、跑旧代码、数据完好。
-- ✅ **「影子采集卡死」已修** (systematic-debugging): 根因 dedup Tier 2.5 批内语义去重 O(N²) 重复encode(156条≈48min阻塞事件循环)。修法 embed_batch预编码+缓存cosine, O(N²)→O(N), 真容器156条 48min→5.4s。410 tests绿。见 [[dedup-silent-stall-on2]]
-- ✅ **方案A 已执行**: V1 换成 clean main(git checkout源码, 保留ECS compose/.env), 重建。修看门狗3个时区/自污染假象(count_recent_news/get_health_stats localtime + 排除watchdog_)。V1实测 state=healthy/ingest15/success100%, 411 tests绿。回滚镜像 docker-news-monitor:rollback-20260710。
-- 📊 **下一步: 用户观察 V1 真实推送 1-2 天**做验证(方案A的验证环节)。看门狗在线会报平安/故障。
-- ⚠️ 遗留系统性隐患: captured_at/created_at 本地存储 vs 查询时区不一致([[db-captured-at-timezone]]), 已修看门狗路径, 其他查询(如digest/api)待排查。
-- ✅ **配置对齐**: main settings.yaml 已纳入 ECS 调优(heartbeat 60→30, heartbeat_hour 8→21), 不再漂移。
-- 🟡 **待用户定**: sources.yaml 的 request_delay(ECS 3.0/1.5 保守 vs main 1.0/0.3 并发优化)方向不明——是 ECS 撞403后的新调优, 还是并发改造前的旧值? 未合并。死配置 min_impact_for_push(仅ECS, 代码不读)+ 游离文件暂留(无害, 生产删文件有风险)。
-- ✅ **v1-stable 搬运+部署完成**: 3修复入main并上生产(6757281关注列表74, ba448c4+cf027c9 Sina zhibo, 116f470 get_recent_news时区)。**Sina 403已修复: 新浪财经[7x24]:20 items fetched**。回滚镜像 rollback-pre-sina。
-- ✅ **流水线版关注股安全网 + 决策面板 已部署生产**: is_event=false默认不推(修firehose), notable+关注股→静音TG(NOTABLE档)。`/health/decisions`面板浏览器可见。真LLM+Playwright双验收。回滚镜像 rollback-pre-safetynet。
-- ⚠️ **纠错记录**: 之前误以为main"is_event=false完全不推", 实际是"静音发TG"(disable=静音非跳过)。已在实现中修正+回执V1。
-- ✅ 已修的部署阻断(可复用): pids 150→512、watchdog.py入清单、relevance路径硬化、shadow挂memory:ro、--down只撤影子
-- 看门狗代码本身完成且验证通过, 随修复后重部署即可
+## ⚠️ 上次踩坑(关键教训)
+- **`disable/silent` 语义错 V1+V2 双双栽**:同模型 agent 共享盲点,必须对着代码证伪(→ 质量把关铁律)
+- **--down 误删 V1 生产**:`docker compose down` 拆整个 project([[shadow-down-kills-v1]]);回滚镜像救命
+- 时区连环坑(ingest/health_stats/get_recent_news);dedup O(N²) 静默卡死([[dedup-silent-stall-on2]])
+
+---
+<details><summary>历史下一步(已完成,存档)</summary>
+
 
 ## ✅ 本次完成 (2026-07-10 · 看门狗)
 
