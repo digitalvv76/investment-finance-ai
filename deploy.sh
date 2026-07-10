@@ -102,6 +102,8 @@ FILES=(
     "news-monitor/storage/models.py"
     "news-monitor/storage/vector_store.py"
     "news-monitor/requirements.txt"
+    ".claude/memory/watchlist-state.md"
+    ".claude/memory/portfolio-state.md"
 )
 
 COPIED=0; SKIPPED=0
