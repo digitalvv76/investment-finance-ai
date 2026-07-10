@@ -1415,3 +1415,7 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - 用户过 §8:D1=A少样本+C阈值校准(B暂缓)/D4=采用建议值80-90-75-70/留出集=V1初稿+用户抽核(先80条金标)/噪音例=生产库"评过没推"。
 - 用户新增记忆 holdout-blind-eval(盲测藏答案、few-shot样本必须排除防泄露)→写进 REQ R5/A2/RK:路线A下 few-shot 与测试集零重叠是硬约束,V2落地要去重校验。
 - REQ 更新:§3决策结论、R5/A2盲测+防泄露、§8多数已定+排期/owner建议。仍待定:正式owner与排期。下一步 V1 写②产品/设计文档。
+
+### 请 V2 评估 REQ + 出外部第三方评估版
+- 出 `REQ-training-eval-external.md`(去黑话+补背景+第10节列6个待评问题)→桌面 md+docx 给用户发独立第三方。
+- 出 `HANDOFF-review-REQ-training-eval.md` 请 V2 评估:聚焦可落地性/工作量/实现坑(与第三方看方法学互补),6条评审清单(路线token代价/ticker_hint是否落库/噪音例能否从库捞/验收指标生产怎么量/防泄露去重放哪层/排期)。产出请写 REVIEW-*.md 回仓库。
