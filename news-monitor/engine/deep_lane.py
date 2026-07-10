@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -67,6 +68,205 @@ Confidence: High/Medium/Low"""
 
 # User-customizable analysis framework (stored in DB preferences)
 DEFAULT_ANALYSIS_FRAMEWORK = "default"
+
+# ---------------------------------------------------------------------------
+# Anti-fabrication (SPEC-deep-analysis-stale-data.md)
+# ---------------------------------------------------------------------------
+# When real-time market data is unavailable (timeout / fetch failure), the LLM
+# was inventing specific prices, percentages, and trade calls that matched the
+# NEWS TONE rather than reality (e.g. "short META -7.64%" when META was +4.70%).
+# The soft prompt constraint failed to stop this. These enforce it at code level.
+
+# Banner shown at the top of a card when we have no real-time quotes.
+NO_DATA_BANNER = "⚠️ 行情数据缺失 — 本条仅做定性事件解读，无实时价位/涨跌幅/买卖建议"
+
+# Prompt used when NO market data is available — forbids any concrete numbers
+# or trade recommendations. Qualitative event interpretation only.
+NO_DATA_PROMPT = """You are a buy-side analyst writing a flash note for a portfolio manager. Be CONCISE. Be ACTIONABLE where possible.
+
+Title: {title}
+Source: {source}
+Tickers: {tickers}
+Macro indicators: {macro_tags}
+Sentiment: {sentiment} (score: {sentiment_score:.2f})
+
+{extra_context}
+
+⚠️ NO REAL-TIME MARKET DATA IS AVAILABLE FOR THIS ITEM.
+
+Write a short flash note in Chinese with exactly these 2 sections. 100-180 words total.
+
+ABSOLUTE RULES (violating these is a critical error):
+- DO NOT output ANY specific price (e.g. $649), percentage change (e.g. -7.64%), moving average, target price, or stop-loss.
+- DO NOT give a buy/sell/long/short recommendation — you have no price data to justify it.
+- ONLY provide qualitative event interpretation: what happened and the likely DIRECTION of impact (bullish/bearish/neutral) with reasoning.
+- ONLY mention tickers listed in the news tickers or watchlist. Do not invent stocks.
+
+1. What happened (2-3 sentences)
+
+2. Qualitative impact & what to watch (2-3 sentences, direction only, NO numbers)
+
+Confidence: Low (no live data)"""
+
+# Regex for concrete market numbers. Must catch REAL Chinese LLM output, not
+# just English half-width formats (adversarial review found 美元/％/百分之/裸点位
+# all bypassed the naive $/% patterns — same-model blind spot).
+#   prices:   $649.2 | $1,234 | 649.2美元 | 649元 | 目标580 | 止损600
+#   percents: -7.64% | +4.70% | 7.64％ (full-width) | 7.64个百分点 | 百分之七
+_PRICE_DOLLAR_RE = re.compile(r"\$\s?\d[\d,]*(?:\.\d+)?")
+_PRICE_CNY_RE = re.compile(r"\d[\d,]*(?:\.\d+)?\s?(?:美元|元)")
+# Bare number attached to a trade-level keyword (target / stop / position price)
+_PRICE_KEYWORD_RE = re.compile(
+    r"(?:目标价?|止损|止盈|支撑位?|阻力位?|点位|建仓|买入价|卖出价)\s*[:：]?\s*\d[\d,]*(?:\.\d+)?"
+)
+_PCT_RE = re.compile(r"[+-]?\d+(?:\.\d+)?\s?(?:%|％|个百分点)")
+# Any concrete number token (used only to decide if a sentence carries a claim)
+_ANY_PRICE_RE = re.compile(
+    r"\$\s?\d[\d,]*(?:\.\d+)?|\d[\d,]*(?:\.\d+)?\s?(?:美元|元)"
+)
+
+# Trade-action keywords — pure-text calls (no number) still get stripped in
+# no-data mode, because a directional call with zero price data is exactly the
+# fabrication the soft prompt failed to stop.
+_TRADE_KEYWORDS = (
+    "做多", "做空", "买入", "卖出", "加仓", "减仓", "抄底", "止损", "止盈",
+    "建仓", "清仓", "空头", "多头", "逢高", "逢低",
+    "short ", "long ", "buy ", "sell ", "short the", "buy the",
+)
+
+# Sentence splitter for Chinese + English punctuation (include full-width comma
+# and semicolon so a long comma-joined sentence still gets split).
+_SENT_SPLIT_RE = re.compile(r"(?<=[。！？!?；;\n])")
+
+
+def _has_valid_market_data(enrichment: str | None) -> bool:
+    """True iff the enrichment block contains at least one real price/quote row.
+
+    A block with only the header line (or empty/whitespace) means the fetch
+    produced nothing usable → the hard gate must engage.
+    """
+    if not enrichment or not enrichment.strip():
+        return False
+    for line in enrichment.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("["):
+            continue  # skip header / bracketed lines
+        # A genuine data row carries a price ($) or a percentage.
+        if _PRICE_DOLLAR_RE.search(stripped) or _PCT_RE.search(stripped):
+            return True
+    return False
+
+
+def _has_ticker_data(enrichment: str | None, tickers_field: str) -> bool:
+    """True iff enrichment has a data row for at least one of the news tickers.
+
+    Guards the middle-state bug: enrichment may carry only SPX/VIX macro rows
+    (→ _has_valid_market_data True) while every individual stock is missing.
+    In that state per-stock numbers would still be fabricated, so we treat the
+    item as no-data for gating purposes.
+    """
+    if not enrichment:
+        return False
+    tickers = [t.strip().upper() for t in (tickers_field or "").split(",") if t.strip()]
+    if not tickers:
+        # No specific tickers → macro-level data is acceptable grounding.
+        return _has_valid_market_data(enrichment)
+    for line in enrichment.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("["):
+            continue
+        for t in tickers:
+            # Row format: "  META: $654.7 (...)". Match the leading label.
+            if re.match(rf"{re.escape(t)}\s*[:：]", stripped):
+                if _PRICE_DOLLAR_RE.search(stripped) or _PCT_RE.search(stripped):
+                    return True
+    return False
+
+
+def _has_trade_recommendation(text: str) -> bool:
+    """True iff the text contains a directional trade action keyword."""
+    if not text:
+        return False
+    low = text.lower()
+    for kw in _TRADE_KEYWORDS:
+        if kw.strip() and (kw in text or kw in low):
+            return True
+    return False
+
+
+def _extract_grounded_numbers(enrichment: str) -> set[str]:
+    """Collect the numeric tokens that legitimately appear as PRICES/PERCENTS.
+
+    Only pull numbers that are themselves prices ($/美元/元) or percentages
+    (%/％/个百分点). Deliberately do NOT harvest bare numbers like MA periods
+    ("20MA") or volumes — those would launder fabricated "-20%" claims
+    (adversarial review found 20% washed by 20MA).
+    """
+    grounded: set[str] = set()
+    if not enrichment:
+        return grounded
+    for m in _PRICE_DOLLAR_RE.finditer(enrichment):
+        grounded.add(m.group().lstrip("$").replace(",", "").strip())
+    for m in _PRICE_CNY_RE.finditer(enrichment):
+        grounded.add(re.sub(r"(?:美元|元)", "", m.group()).replace(",", "").strip())
+    for m in _PCT_RE.finditer(enrichment):
+        grounded.add(re.sub(r"(?:%|％|个百分点)", "", m.group()).lstrip("+-").strip())
+    # MA levels are real prices too — pull the number after "MA".
+    for m in re.finditer(r"\d+MA\s+(\d[\d,]*(?:\.\d+)?)", enrichment):
+        grounded.add(m.group(1).replace(",", ""))
+    return grounded
+
+
+def _sentence_numbers(sentence: str) -> list[str]:
+    """Extract normalized price/percent tokens from a sentence."""
+    nums: list[str] = []
+    for m in _PRICE_DOLLAR_RE.finditer(sentence):
+        nums.append(m.group().lstrip("$").replace(",", "").strip())
+    for m in _PRICE_CNY_RE.finditer(sentence):
+        nums.append(re.sub(r"(?:美元|元)", "", m.group()).replace(",", "").strip())
+    for m in _PRICE_KEYWORD_RE.finditer(sentence):
+        num = re.search(r"\d[\d,]*(?:\.\d+)?", m.group())
+        if num:
+            nums.append(num.group().replace(",", ""))
+    for m in _PCT_RE.finditer(sentence):
+        nums.append(re.sub(r"(?:%|％|个百分点)", "", m.group()).lstrip("+-").strip())
+    return nums
+
+
+def _strip_fabricated_numbers(
+    llm_text: str, enrichment: str, no_data: bool = False,
+) -> tuple[str, list[str]]:
+    """Remove sentences whose prices/percents are NOT grounded in enrichment.
+
+    Last line of defence: any concrete number the LLM produced that can't be
+    matched to the real market block is treated as fabricated and its sentence
+    is dropped. Handles Chinese/full-width formats (美元/元/％/个百分点) and
+    bare target/stop prices.
+
+    When ``no_data`` is True, sentences carrying a directional trade call
+    (做空/买入/...) are ALSO stripped even without a number — a trade
+    recommendation with zero price data is unjustifiable.
+
+    Returns (cleaned_text, flagged_fragments).
+    """
+    grounded = _extract_grounded_numbers(enrichment)
+    kept: list[str] = []
+    flagged: list[str] = []
+
+    for sentence in _SENT_SPLIT_RE.split(llm_text):
+        if not sentence.strip():
+            continue
+        nums = _sentence_numbers(sentence)
+
+        if nums and any(n not in grounded for n in nums):
+            flagged.append(sentence.strip())
+            continue  # drop the whole sentence — ungrounded number
+        if no_data and _has_trade_recommendation(sentence):
+            flagged.append(sentence.strip())
+            continue  # no data → no directional call allowed
+        kept.append(sentence)
+
+    return "".join(kept), flagged
 
 
 class DeepLane:
@@ -565,6 +765,7 @@ class DeepLane:
 
         # 2. Real-time market enrichment (with hard timeout)
         tickers = item.tickers_found or ""
+        enrichment = ""
         try:
             enrichment = await asyncio.wait_for(
                 self._fetch_market_enrichment(tickers),
@@ -573,14 +774,36 @@ class DeepLane:
             if enrichment:
                 extra_parts.append(enrichment)
         except asyncio.TimeoutError:
-            logger.debug("Market enrichment timed out — proceeding without it")
+            # WARNING (not debug) — this is the trigger for the fabrication bug,
+            # must be visible in production logs. (SPEC §4④)
+            logger.warning(
+                "Market enrichment TIMED OUT after %.1fs for #%s — "
+                "engaging no-data hard gate (no numbers allowed)",
+                _ENRICH_TIMEOUT, getattr(item, "id", "?"),
+            )
         except Exception as e:
-            logger.debug("Market enrichment failed: %s — proceeding without it", e)
+            logger.warning(
+                "Market enrichment FAILED for #%s: %s — engaging no-data hard gate",
+                getattr(item, "id", "?"), e,
+            )
 
         extra_context = "\n\n".join(extra_parts) if extra_parts else ""
 
-        # Use custom framework or default
-        template = custom_framework if custom_framework else ANALYSIS_PROMPT
+        # ── ① HARD GATE: no valid ticker data → forbid concrete numbers ──
+        # Use per-ticker check (not just macro rows) to close the middle-state
+        # gap where only SPX/VIX are present but every stock is missing.
+        has_data = _has_ticker_data(enrichment, tickers)
+
+        # Use custom framework or default. When no data, custom frameworks are
+        # bypassed in favour of the no-data prompt (safety over customization).
+        if not has_data:
+            template = NO_DATA_PROMPT
+            logger.info(
+                "Deep lane: #%s has NO ticker market data → qualitative-only prompt",
+                getattr(item, "id", "?"),
+            )
+        else:
+            template = custom_framework if custom_framework else ANALYSIS_PROMPT
 
         prompt = template.format(
             title=item.title or '(no title)',
@@ -593,9 +816,34 @@ class DeepLane:
         )
 
         if provider_name == "DEEPSEEK_API_KEY":
-            return await self._call_deepseek(prompt)
+            analysis = await self._call_deepseek(prompt)
         else:
-            return await self._call_anthropic(prompt)
+            analysis = await self._call_anthropic(prompt)
+
+        # ── ② OUTPUT VALIDATION: strip ungrounded price/percent + (no-data)
+        #     pure-text trade calls ──
+        cleaned, flagged = _strip_fabricated_numbers(
+            analysis, enrichment, no_data=not has_data,
+        )
+        if flagged:
+            logger.warning(
+                "Deep lane: #%s LLM produced %d ungrounded/unjustified fragment(s) "
+                "— stripped: %s",
+                getattr(item, "id", "?"), len(flagged),
+                " | ".join(f[:50] for f in flagged),
+            )
+            analysis = cleaned
+
+        # Prepend the missing-data banner so the card is visibly qualitative-only.
+        if not has_data:
+            if not analysis.strip():
+                # Everything the LLM said was fabricated and got stripped —
+                # don't return an empty card; state the situation plainly.
+                analysis = "本条暂无可靠分析（实时行情缺失，已过滤未经证实的数据）。"
+            if NO_DATA_BANNER not in analysis:
+                analysis = f"{NO_DATA_BANNER}\n\n{analysis}"
+
+        return analysis
 
     # ------------------------------------------------------------------
     # Analysis framework management
