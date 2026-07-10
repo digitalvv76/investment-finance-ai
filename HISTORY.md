@@ -1361,3 +1361,9 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - **根因(systematic-debugging)**：`news.captured_at` 存本地时间(ET)，但 `get_recent_news` 用 UTC `datetime('now')` 比较 → 容器 ET(UTC-4) 下 1h 窗口永远空。叠加 Python3.12 isoformat 适配器把 datetime 存成 `T` 分隔符，与 SQLite `datetime()` 的空格分隔串比较时 `'T'>' '` 恒真 → 窗口彻底失效。
 - **修复**：`get_recent_news` 改为 `WHERE datetime(captured_at) > datetime('now','localtime',?)` —— `datetime()` 包裹兼容 `T`/空格两种分隔符 + localtime 修时区。TDD：先写失败测试(插 now 和 now-2h，断言 1h 窗口只返回 now)，toggle 证 RED→GREEN。
 - 残留(未修，无害)：retention DELETE(line 543) 仍 UTC，7天窗口下早删 4h 可忽略。event_lines 已由并行编辑加 localtime。
+
+### 修新浪财经全 403 → 切 zhibo 直播 feed
+- **根因**：`feed.mix.sina.com.cn/api/roll/get` 从 ECS IP 全 403（IP 级封禁，空 body，去 UA/去 referer 都 403）。
+- **修复**：改用 `zhibo.sina.com.cn/api/zhibo/feed?zhibo_id=152&tag_id=0`（财经全球直播，ECS 实测 200）。重写 `fetch_sina_channel` 解析 `result.data.feed.list[]`：`rich_text`→`_split_zhibo_richtext` 取【标题】+正文，`create_time`→published_at，`docurl`→url。复用 `_is_noise_title`/`_detect_tickers`。
+- `fetch_all` 从 4 个 roll 频道改为 1 次 zhibo 综合 feed（tag_id=0 已覆盖全类目，避免 4x 重复）。
+- TDD：`_parse_zhibo_feed` 解析测试（含【】提取 + 噪音过滤）+ 空/畸形。**真实 live 抓取实测 9 条**（中国电信入股/聆思融资等），标题解析正确。

@@ -136,3 +136,30 @@ async def test_fetch_all_empty_config():
     fetcher = ChineseNewsFetcher({})
     items = await fetcher.fetch_all()
     assert items == []
+
+
+def test_parse_zhibo_feed_extracts_headline_and_url():
+    """New Sina 7x24 zhibo feed: rich_text -> title(from 【】)+content, docurl -> url."""
+    fetcher = ChineseNewsFetcher({"max_items_per_source": 5})
+    data = {"result": {"status": {"code": 0}, "data": {"feed": {"list": [
+        {"rich_text": "【英伟达公布自研AI芯片进展 盘后涨5%】英伟达在财报电话会上宣布新一代自研AI芯片。",
+         "create_time": "2026-07-10 11:09:33",
+         "docurl": "https://finance.sina.cn/7x24/2026-07-10/detail-a.d.html"},
+        {"rich_text": "白银连续主力合约日内涨4%，现报14805.00元。",
+         "create_time": "2026-07-10 11:09:09",
+         "docurl": "https://finance.sina.cn/7x24/2026-07-10/detail-b.d.html"},
+    ]}}}}
+    items = fetcher._parse_zhibo_feed(data, "7x24")
+    assert len(items) == 2
+    assert items[0].title == "英伟达公布自研AI芯片进展 盘后涨5%"          # from 【】
+    assert "财报电话会" in items[0].content_snippet
+    assert items[0].url.startswith("https://finance.sina.cn/7x24")
+    assert items[0].source == "新浪财经·7x24"
+    assert isinstance(items[0].published_at, datetime)
+    assert items[1].title.startswith("白银连续主力合约")               # no bracket → text itself
+
+
+def test_parse_zhibo_feed_empty_and_malformed():
+    fetcher = ChineseNewsFetcher({"max_items_per_source": 5})
+    assert fetcher._parse_zhibo_feed({}, "x") == []
+    assert fetcher._parse_zhibo_feed({"result": {"data": {"feed": {"list": []}}}}, "x") == []
