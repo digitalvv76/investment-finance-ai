@@ -1573,6 +1573,16 @@ _log_event_source_count: JOIN news→event_lines 查源数
 
 **下一步**: 带此修复重部署影子(建议先 WATCHDOG_ALERTS_ENABLED=false 观察入库正常再开报警)。
 
+### 🩹 意外发现 V1 已跑 V2 + 给 V1 打去重补丁
+
+**发现**: 用户手机收到「新闻监控日报」(看门狗心跳, V2专属) + 「SA市场展望」(新闻推送)。查证两条都是 **V1** 发的 → V1 容器 `Created=02:43 UTC` 被重建过, 现跑 **V2 代码**(main.py import watchdog, send_system_alert 存在)。根源: 之前 --down 事故恢复 V1 时从 scp 上去的 V2 源码重建了 → **V2 意外成了生产**。且 V1 的 dedup 是**旧 O(N²) 版**(无 embed_batch)。
+
+**给 V1 打补丁**(用户批准): scp 修复后 dedup.py+vector_store.py → `docker compose -f docker-compose.yml up -d --build news-monitor` 重建。验证: V1 healthy, 运行容器含 embed_batch, 数据完好(2839), 看门狗起, **冷启动 141条批 23s 处理完无卡死**。
+
+**诚实修正**: V1 实际风险比先前所说低 — V1 的库是**热的**(持久卷 2839 条), 进来的新闻多为 URL 重复 → Tier1/2 快速拦截 → 很少走到 O(N²) 语义。48分钟挂死需要**空库冷启动**(如影子)或**一次涌入大量真新条目**(高峰突发)。故修复是真实防护(尤其突发/新库), 但不宜断言它就是用户日常"静默"的元凶。
+
+**当前**: V1 生产 = 修复后的 V2 代码, 健康运行, 看门狗上线(真心跳+故障警笛)。影子已撤。待议: V1 跑 V2 是否为期望终态。
+
 ---
 
 ## 2026-07-10T06:48+08:00 · 会话开始
