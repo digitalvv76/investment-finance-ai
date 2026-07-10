@@ -5,6 +5,16 @@
 
 > 最后更新: 2026-07-10 (系统存活看门狗完成 — 解决沉默歧义)
 
+## 📋 下一步 (需用户拍板部署方式)
+
+- ⚠️ **影子暂已撤下** (2026-07-10 事故后)。V1 生产已恢复健康、跑旧代码、数据完好。
+- 🔴 **重部署影子前必须先修「影子采集卡死」bug**:
+  - 现象: 采集器抓到156条 → `Heartbeat: 156 items` 聚合成功 → 但 `on_news_batch` 回调无任何管道日志、零入库、零报错 → `_pipeline.run()` 在某阶段卡死(最疑 IngestStage 的 ChromaDB/向量库语义去重查询挂起, 或 LLM 调用)
+  - 已确认非回调未注册(start() 跑完了 `News Monitor running`)
+  - 排查方向: 影子环境 ChromaDB/嵌入模型初始化、向量库 is_ready/is_semantic_duplicate 是否挂起
+- ✅ 已修的部署阻断(可复用): pids 150→512、watchdog.py入清单、relevance路径硬化、shadow挂memory:ro、--down只撤影子
+- 看门狗代码本身完成且验证通过, 随修复后重部署即可
+
 ## ✅ 本次完成 (2026-07-10 · 看门狗)
 
 ### 系统存活看门狗 (Watchdog)

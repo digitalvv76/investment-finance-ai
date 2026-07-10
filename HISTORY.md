@@ -1542,6 +1542,22 @@ _log_event_source_count: JOIN news→event_lines 查源数
 
 **待用户定**: 部署方式(V1 现在 / 随 V2 切换 / 影子期看门狗真报警)——见会话末。
 
+### 🚀 影子部署实况 (方案C) + 一次生产事故
+
+**用户选方案C**: 影子新闻推送静音对比V1, 但看门狗故障真报警(WATCHDOG_ALERTS_ENABLED)。
+
+部署过程逐个踩坑并修复:
+- 部署阻断1: 清单漏 `engine/watchdog.py` 本身 → 影子崩溃循环。补入清单。
+- 部署阻断2: `relevance.py` parents[3] 在容器越界(shadow没挂memory) → 路径解析改带边界的循环 + shadow挂 `.claude/memory:ro`。
+- 部署阻断3: 影子采集卡死, 0入库。根因 Chromium 逼近 `pids:150`(111/150)fork卡死, 阻塞整个 heartbeat gather。pids→512 修复, Playwright 恢复。
+- **深层bug未修**: pids修复后 `Heartbeat: 156 items` 聚合成功, 但 `on_news_batch` 回调零管道日志/零入库/零报错 → `_pipeline.run()` 疑在 IngestStage 向量库语义去重挂起。**这是重部署前的阻断项**(详见 SESSION.md 下一步)。
+
+**⚠️ 生产事故 + 恢复**: 跑 `deploy-shadow.sh --down` 撤影子时, `docker compose ... down`(不带服务名)拆掉整个project, **把V1生产也删了(中断~1-2min)**。立即用 `docker compose -f docker-compose.yml up -d news-monitor`(不--build复用旧镜像)恢复。V1恢复健康、跑旧代码(watchdog import=0)、数据卷持久(2817条完好)、web正常。
+- 已修 `--down` → `rm -sf news-monitor-shadow` 只撤影子。
+- 记忆 [[shadow-down-kills-v1]] 防重演。
+
+**当前状态**: V1生产健康运行(旧代码)。影子已撤下。看门狗代码完成+验证通过, 待修采集卡死后重部署。
+
 ---
 
 ## 2026-07-10T06:48+08:00 · 会话开始
