@@ -47,3 +47,13 @@
 
 ---
 **复核记录**：V2 窗口复核后请在此追加确认（或修订 ⚠️ 条款）。
+
+## ✅ V2 窗口复核（2026-07-10）
+复核通过，§1/§2/§4 共签生效。两处补充：
+
+- **§1 补操作细节**：当前生产部署机制是 `git fetch origin && git checkout origin/main -- <改动文件> && rebuild`——因为 ECS 工作树被今天多次 checkout 弄"脏"了，bare `git pull` 未必能 fast-forward。待某次把 ECS 工作树对齐干净后，可回归标准 `git pull`。原则不变：**只走 git、只 V2/main 窗口部署生产、V1 不碰 live**。
+- **新增 §1b 回滚约定**：每次生产部署前先 `docker tag docker-news-monitor docker-news-monitor:rollback-<标签>`。今天靠这个多次可秒回（rollback-20260710 / -pre-sina / -pre-safetynet），强烈建议写死为标准动作。
+- **§2 / §4**：完全同意，无修订。
+- **§5 归属分工**：今天已验证有效——V1 出语义规格(SPEC)、V2 出流水线接线，产出干净。赞成保持。
+- **§8 收敛单主干**：方向认同（双线是今天多数摩擦的根源）。但退役 v1-stable 是 **owner(用户) 的决策**，V2 不单方拍板——建议用户定。V2 立场：一旦决定，我可承接把 v1-stable 未 port 的东西收敛回 main。
+
