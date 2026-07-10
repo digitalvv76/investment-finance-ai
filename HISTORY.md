@@ -28,6 +28,11 @@
 ### 待部署
 - 本地绿 → deploy-main.sh (内置回滚tag) → 影子对比可选
 
+### ✅ 已部署生产 (19:15)
+- `deploy-main.sh` 一键上 V1 生产: 回滚tag `rollback-20260710-191517` → git checkout → 重建 → healthy
+- 生产容器验证: `_downgrade_if_stale`/`STALE_EVENT_MINUTES` 6处匹配 (新代码在跑)
+- 健康端点(经Vercel HTTPS): 系统ok/DB ok/看门狗healthy(33条/时)
+
 ---
 
 ## 2026-07-10T18:35+08:00 · 🔧 Vercel /health/* 代理 404 修复 + GitHub 自动部署

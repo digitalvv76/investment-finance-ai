@@ -1,8 +1,28 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-10 收工。生产=clean main、健康。双窗口保留(受 COLLAB-PROTOCOL 约束)。
+> 最后更新: 2026-07-10 (续会话)。生产=clean main+过期降级已上、健康。双窗口保留(受 COLLAB-PROTOCOL 约束)。
 
-## ✅ 本次会话交付(2026-07-10,超长)
+## ✅ 本次续会话交付(2026-07-10)
+- **Vercel /health/* 代理 404 修复**: 根因=未连GitHub自动部署(旧部署4天前无代理规则)→ 手动 `vercel --prod` + `vercel git connect` 接GitHub自动部署。决策/看门狗面板现可HTTPS访问
+- **过期事件降级上线**(V1出规格29ac42b→V2/main实现`d2f067f`): 单源旧催化剂(美光$250B)IMPORTANT+事件线>60min→NOTABLE静音TG；CRITICAL/None/多源(≥3)豁免
+  - 🛡️ 对抗核实抓到设计矛盾(first_seen误判持续发酵大事件)→用户定方案B多源豁免；真实SQLite验证时区补回归测试
+  - 30新测试/456全绿；deploy-main.sh已上生产(回滚tag`rollback-20260710-191517`)，容器healthy+代码验证在跑
+
+## 📋 下一步
+- 📊 **观察生产 1-2 天**: 验证过期降级只命中单源旧闻(看日志 `stale_downgrade`)、多源大事件不误伤 + 安全网「少而精」+ 看门狗报平安
+- 🟡 **待用户定**: sources.yaml request_delay(ECS 3.0/1.5 vs main 1.0/0.3,方向不明,未合并)
+- ⚠️ **遗留时区隐患**: captured_at/created_at 本地存储 vs 查询 UTC 不一致([[db-captured-at-timezone]]),已修看门狗+过期降级路径,**digest/api 等其他查询待排查**
+- 🟡 **降级精修(可选)**: 核实提到降级只改level,intensity/urgency/needs_deep未同步下调(卡片正文仍显ALERT+浪费深度LLM)。当前不影响静音正确性,低优
+
+## ⚠️ 上次踩坑(关键教训)
+- **同模型 agent 共享盲点**: `disable/silent` 语义错V1+V2双栽;本次对抗核实又证价值(抓到first_seen设计矛盾)→ 必须对着代码/真实DB证伪
+- **--down 误删 V1 生产**:`docker compose down` 拆整个 project([[shadow-down-kills-v1]]);回滚镜像救命
+- 时区连环坑(ingest/health_stats/get_recent_news/event_lines.first_seen);dedup O(N²) 静默卡死([[dedup-silent-stall-on2]])
+
+---
+<details><summary>历史下一步(已完成,存档)</summary>
+
+## ✅ 上上次会话交付(2026-07-10,超长)
 - **系统存活看门狗** 上线(解决沉默歧义);影子部署→抓到并修 **dedup O(N²) 采集卡死**(48min→5.4s)
 - **生产事故**(--down 误删 V1)→ 恢复+修脚本;V1 换 clean main;修看门狗 **3个时区/自污染假象**
 - 从 v1-stable 搬 3 修复(**Sina 403 恢复**、关注列表74、TZ);配置漂移对齐进 main
