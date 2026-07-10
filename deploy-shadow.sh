@@ -33,8 +33,11 @@ done
 
 # ── Just down? ───────────────────────────────────────────────────────────
 if $DOWN; then
-    info "Stopping shadow container..."
-    ssh "$ECS_HOST" "cd ${DOCKER_DIR} && docker compose -f docker-compose.yml -f docker-compose.shadow.yml down"
+    info "Stopping shadow container ONLY (never V1)..."
+    # CRITICAL: `docker compose down` tears down the WHOLE project (V1 too!).
+    # Use `rm -sf <service>` to stop+remove ONLY the shadow container and
+    # leave V1 (news-monitor) and the shared network untouched.
+    ssh "$ECS_HOST" "cd ${DOCKER_DIR} && docker compose -f docker-compose.yml -f docker-compose.shadow.yml rm -sf news-monitor-shadow"
     info "Shadow container removed. V1 is unaffected."
     exit 0
 fi
