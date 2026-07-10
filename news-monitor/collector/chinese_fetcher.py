@@ -53,6 +53,21 @@ def _ts_to_datetime(ts: int) -> datetime:
         return datetime.now()
 
 
+_ZHIBO_HEADLINE_RE = re.compile(r"^【([^】]+)】(.*)$", re.DOTALL)
+
+
+def _split_zhibo_richtext(rich: str) -> tuple:
+    """Split a zhibo rich_text into (title, content).
+
+    Sina 7x24 items usually lead with a 【headline】; use it as the title and
+    keep the full text as content. Fall back to a truncated prefix otherwise.
+    """
+    m = _ZHIBO_HEADLINE_RE.match(rich)
+    if m:
+        return m.group(1).strip(), rich
+    return rich[:80], rich
+
+
 class ChineseNewsFetcher:
     """Fetch Chinese financial news from JSON API endpoints.
 
@@ -124,35 +139,36 @@ class ChineseNewsFetcher:
     # 新浪财经 7x24 快讯
     # ------------------------------------------------------------------
 
-    SINA_FEED_URL = "https://feed.mix.sina.com.cn/api/roll/get"
+    # 新浪财经 7x24 快讯 (zhibo live feed — roll/get 端点已被 IP 级 403 封禁)
+    SINA_ZHIBO_URL = "https://zhibo.sina.com.cn/api/zhibo/feed"
 
     async def fetch_sina_channel(self, channel: dict) -> List[NewsItem]:
-        """Fetch a single sina finance live feed channel.
+        """Fetch the Sina finance 7x24 live feed via the zhibo API.
 
-        Args:
-            channel: dict with keys: name, lid (int), category
-
-        The API returns JSON:
-          {"result": {"status": {"code": 0}, "data": [
-            {"title": "...", "ctime": 1783052118, "url": "...", "intro": "..."}
-          ]}}
+        The legacy feed.mix.sina.com.cn/api/roll/get endpoint now returns 403
+        for every request from the server IP, so we use the live-broadcast feed
+        (zhibo_id=152 = 财经全球直播). Response JSON:
+          {"result": {"status": {"code": 0},
+            "data": {"feed": {"list": [
+              {"rich_text": "【标题】正文...", "create_time": "YYYY-MM-DD HH:MM:SS",
+               "docurl": "https://finance.sina.cn/7x24/..."}
+            ]}}}}
         """
         items: List[NewsItem] = []
-        channel_name = channel.get("name", "unknown")
-        lid = channel.get("lid", 2509)
+        channel_name = channel.get("name", "7x24")
 
         session = await self._get_session()
         params = {
-            "pageid": "153",
-            "lid": str(lid),
-            "k": "",
-            "num": str(min(self.max_items, 50)),
             "page": "1",
+            "page_size": str(min(self.max_items, 50)),
+            "zhibo_id": "152",
+            "tag_id": "0",
+            "type": "0",
         }
 
         try:
             async with session.get(
-                self.SINA_FEED_URL,
+                self.SINA_ZHIBO_URL,
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=15),
             ) as resp:
@@ -167,37 +183,46 @@ class ChineseNewsFetcher:
             logger.error("新浪财经[%s]: %s", channel_name, e)
             return items
 
-        result = data.get("result", {})
-        if result.get("status", {}).get("code") != 0:
-            logger.warning("新浪财经[%s]: API error %s", channel_name, result.get("status"))
+        if data.get("result", {}).get("status", {}).get("code") != 0:
+            logger.warning("新浪财经[%s]: API error %s", channel_name,
+                           data.get("result", {}).get("status"))
             return items
 
-        for entry in result.get("data", [])[: self.max_items]:
-            title = entry.get("title", "").strip()
-            if not title:
-                continue
+        items = self._parse_zhibo_feed(data, channel_name)
+        if items:
+            logger.info("新浪财经[%s]: %d items fetched", channel_name, len(items))
+        return items
 
-            # Pre-filter: skip categorical noise at source level
-            if self._is_noise_title(title):
+    def _parse_zhibo_feed(self, data: dict, channel_name: str) -> List[NewsItem]:
+        """Extract NewsItems from a zhibo feed response (pure, testable)."""
+        items: List[NewsItem] = []
+        feed_list = (
+            data.get("result", {}).get("data", {}).get("feed", {}).get("list", [])
+        )
+        for entry in feed_list[: self.max_items]:
+            rich = _clean_html(entry.get("rich_text", "") or "").strip()
+            if not rich:
+                continue
+            title, content = _split_zhibo_richtext(rich)
+            if not title or self._is_noise_title(title):
                 logger.debug("新浪财经[%s]: skipped noise — %s", channel_name, title[:60])
                 continue
 
-            ctime = entry.get("ctime", 0)
-            pub_dt = _ts_to_datetime(int(ctime)) if ctime else datetime.now()
-            intro = entry.get("intro", "")
-            url = entry.get("url", "")
+            ct = entry.get("create_time", "")
+            try:
+                pub_dt = datetime.strptime(ct, "%Y-%m-%d %H:%M:%S") if ct else datetime.now()
+            except (ValueError, TypeError):
+                pub_dt = datetime.now()
 
             items.append(NewsItem(
                 title=title,
-                url=url or self.SINA_FEED_URL,
+                url=entry.get("docurl") or self.SINA_ZHIBO_URL,
                 source=f"新浪财经·{channel_name}",
-                content_snippet=intro[:500] if intro else title,
+                content_snippet=content[:500],
                 published_at=pub_dt,
                 captured_at=datetime.now(),
+                tickers_found=_detect_tickers_from_text(title, content),
             ))
-
-        if items:
-            logger.info("新浪财经[%s]: %d items fetched", channel_name, len(items))
         return items
 
     # ------------------------------------------------------------------
@@ -303,30 +328,36 @@ class ChineseNewsFetcher:
     # ------------------------------------------------------------------
 
     async def fetch_all(self) -> List[NewsItem]:
-        """Fetch all configured Chinese news sources."""
-        all_items: List[NewsItem] = []
+        """Fetch all configured Chinese news sources concurrently.
 
-        # 新浪财经 channels
-        for channel in self.sina_channels:
-            try:
-                items = await self.fetch_sina_channel(channel)
-                all_items.extend(items)
-                await asyncio.sleep(self.delay)
-            except Exception as e:
-                logger.error("新浪财经[%s] error: %s", channel.get("name", "?"), e)
+        Sina (4 channels) and WallstreetCN (5 channels) run as two
+        independent groups on different hosts, so they execute fully in
+        parallel.  Within each group, limit_per_host=2 queues excess
+        requests so we don't overwhelm a single API.
 
-        # 华尔街见闻 channels
+        Old serial: ~31.5s.  New concurrent: ~8s.
+        """
+        # ---- Launch all channels concurrently ----
+        tasks = []
+
+        # Sina 7x24 is now a single comprehensive live feed (zhibo tag_id=0),
+        # so fetch it once instead of per legacy roll channel.
+        if self.sina_channels:
+            tasks.append(self.fetch_sina_channel({"name": "7x24"}))
+
         for channel in self.wscn_channels:
-            try:
-                items = await self.fetch_wallstreetcn_channel(channel)
-                all_items.extend(items)
-                await asyncio.sleep(self.delay)
-            except Exception as e:
-                logger.error("华尔街见闻[%s] error: %s", channel.get("name", "?"), e)
+            tasks.append(self.fetch_wallstreetcn_channel(channel))
+
+        results = await asyncio.gather(*tasks) if tasks else []
+
+        all_items: List[NewsItem] = []
+        for result in results:
+            if result:
+                all_items.extend(result)
 
         logger.info(
             "Chinese sources total: %d items from %d channels",
             len(all_items),
-            len(self.sina_channels) + len(self.wscn_channels),
+            (1 if self.sina_channels else 0) + len(self.wscn_channels),
         )
         return all_items
