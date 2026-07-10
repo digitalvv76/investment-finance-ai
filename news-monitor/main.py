@@ -45,6 +45,7 @@ from engine.impact_evaluator import ImpactEvaluator
 from engine.event_driven_evaluator import EventDrivenEvaluator
 from engine.impact_learner import ImpactLearner
 from engine.event_matcher import EventMatcher
+from engine.watchdog import Watchdog
 from engine.relevance import signal_score, get_portfolio_summary
 from engine.actionability_review import ActionabilityReviewer
 from bot.telegram_bot import NewsBot
@@ -142,6 +143,13 @@ class NewsMonitor:
         self.alert_dispatcher = AlertDispatcher()
         self._strategic = StrategicDetector()
 
+        # ---- watchdog (independent liveness monitor) ----------------
+        # Runs on its OWN task, not inside the scheduler, so a scheduler
+        # hang cannot also silence the watchdog.
+        self.watchdog = Watchdog(
+            self.db, self.alert_dispatcher, self.config.load_settings(),
+        )
+
         # ---- impact evaluator (LLM, async, isolated) --------
         self.impact_evaluator = ImpactEvaluator()
         self.event_evaluator = EventDrivenEvaluator()
@@ -171,6 +179,7 @@ class NewsMonitor:
                 learner=self.learner, deep_lane=self.deep_lane, port=web_port,
             )
             self.web_dashboard.impact_evaluator = self.impact_evaluator
+            self.web_dashboard.watchdog = self.watchdog
             self._sse_manager = getattr(self.web_dashboard, 'sse_manager', None)
             logger.info("Web dashboard enabled on port %d", web_port)
         else:
@@ -349,6 +358,9 @@ class NewsMonitor:
         self._collector_task = asyncio.create_task(self._run_collector_loop())
         self._escalator_task = asyncio.create_task(self._run_escalation_loop())
 
+        # Start the independent liveness watchdog.
+        self._watchdog_task = asyncio.create_task(self.watchdog.run_loop())
+
         logger.info("News Monitor running")
 
     async def stop(self) -> None:
@@ -358,6 +370,9 @@ class NewsMonitor:
             self._collector_task.cancel()
         if hasattr(self, '_escalator_task'):
             self._escalator_task.cancel()
+        if hasattr(self, '_watchdog_task'):
+            self.watchdog.stop()
+            self._watchdog_task.cancel()
         if self.web_dashboard:
             await self.web_dashboard.stop()
         if self.bot:

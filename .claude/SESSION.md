@@ -3,7 +3,32 @@
 > 🔔 **[2026-07-09 来自 V1 窗口] ECS 灰度前必读交接 → [`.claude/V1-TO-V2-HANDOFF.md`](V1-TO-V2-HANDOFF.md)**
 > 含：今天的安全修复(`cab7d4f` 已在 main，含生死攸关的 `../config` 卷路径)、V2≠V1 提醒、灰度架构坑、**需先与用户确认 A/B 方案**。开工先读它。
 
-> 最后更新: 2026-07-10 (收工 — 事件驱动引擎 + 事件升级 + 影子环境全部就绪)
+> 最后更新: 2026-07-10 (系统存活看门狗完成 — 解决沉默歧义)
+
+## ✅ 本次完成 (2026-07-10 · 看门狗)
+
+### 系统存活看门狗 (Watchdog)
+- `engine/watchdog.py` — 四态歧义消解: HEALTHY/QUIET_OK/STALLED/DEGRADED
+- 独立异步任务(非寄生 scheduler)+ 防抖 + 冷却 + 每日心跳
+- `alert_dispatcher.send_system_alert()` 警笛/高优/静默
+- Web 健康页 `/health/watchdog`(免登录，Playwright 已验收两态)
+- 全量 **406 passed / 0 failed**
+
+## 📋 下一步 (需用户拍板部署方式)
+
+- **看门狗部署**: 三选一 ⬇️
+  - A. 随 V2 影子→切换一起上（干净，但 V1 问题多等 1-2 天）
+  - B. 现在单独上 V1 生产（快，但 V1 是漂移代码，有集成风险）
+  - C. 影子期让看门狗「真报警」而推送对比仍 DRY_RUN（兼顾：即时保护 + 对比）
+- 原下一步仍在: `./deploy-shadow.sh` 影子对比 V1
+
+## ⚠️ 上次踩坑
+
+- 看门狗必须独立于 scheduler，否则 scheduler 卡死时看门狗一起死
+- 测试用 FakeDispatcher，绝不构造真 AlertDispatcher（[[tests-never-send-real-pushes]]）
+- 影子 DRY_RUN 会让看门狗只 log「WOULD-ALERT」不真报警 → 影子期若要保护需选方案 C
+
+## 🔔 旧交接（仍有效）
 
 ## ✅ 本次完成 (2026-07-10)
 

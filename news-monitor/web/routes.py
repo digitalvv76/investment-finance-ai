@@ -53,6 +53,50 @@ def _get_sse(request: web.Request):
     return request.app["sse_manager"]
 
 
+def _get_watchdog(request: web.Request):
+    return request.app.get("watchdog")
+
+
+def _watchdog_snapshot(wd) -> Dict[str, Any]:
+    """Build a serializable status snapshot from the watchdog.
+
+    Falls back to a live gather+evaluate if no check has run yet, so the
+    page always reflects current truth even right after startup.
+    """
+    if wd is None:
+        return {"available": False, "state": "unknown", "reason": "watchdog 未启用"}
+
+    from engine.watchdog import evaluate_health
+
+    verdict = wd.last_verdict
+    signals = wd.last_signals
+    try:
+        if verdict is None or signals is None:
+            signals = wd.gather_signals()
+            verdict = evaluate_health(signals)
+    except Exception as e:  # never let the health page itself crash
+        return {"available": True, "state": "error", "reason": f"快照失败: {e}"}
+
+    alert_states = {"stalled", "degraded"}
+    return {
+        "available": True,
+        "state": verdict.state.value,
+        "ok": verdict.state.value not in alert_states,
+        "reason": verdict.reason,
+        "should_alert": verdict.should_alert,
+        "emergency": verdict.emergency,
+        "signals": {
+            "ingest_1h": signals.ingest_1h,
+            "ingest_floor": signals.ingest_floor,
+            "hours_since_last_push": signals.hours_since_last_push,
+            "error_events_1h": signals.error_events_1h,
+            "success_rate": signals.success_rate,
+            "assessments_1h": signals.assessments_1h,
+        },
+        "last_check_at": wd.last_check_at,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Health check (no auth required — for monitoring probes)
 # ---------------------------------------------------------------------------
@@ -76,7 +120,72 @@ async def health_check(request: web.Request) -> web.Response:
         "uptime_seconds": int(time.time() - _APP_START_TIME),
         "db": "ok" if db_ok else "error",
         "sse_clients": _get_sse(request).client_count,
+        "watchdog": _watchdog_snapshot(_get_watchdog(request)),
     })
+
+
+async def watchdog_status(request: web.Request) -> web.Response:
+    """Detailed watchdog JSON — the silence-disambiguation verdict + signals."""
+    return _json(_watchdog_snapshot(_get_watchdog(request)))
+
+
+async def watchdog_page(request: web.Request) -> web.Response:
+    """Human-viewable ops health page (unauthenticated via /health prefix).
+
+    Auto-refreshes so the operator can eyeball whether silence is benign
+    (market quiet) or a real fault, without digging into logs.
+    """
+    snap = _watchdog_snapshot(_get_watchdog(request))
+    state = snap.get("state", "unknown")
+    palette = {
+        "healthy": ("#0a7c2f", "✅", "系统健康"),
+        "quiet_ok": ("#0a6b7c", "😴", "市场平静（非故障）"),
+        "stalled": ("#b00020", "🔴", "采集停摆 — 疑似故障"),
+        "degraded": ("#c25e00", "🟠", "处理降级 — 需检查"),
+        "unknown": ("#555", "❔", "未知"),
+        "error": ("#b00020", "⚠️", "快照错误"),
+    }
+    color, icon, label = palette.get(state, palette["unknown"])
+    sig = snap.get("signals", {}) or {}
+    rows = "".join(
+        f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in {
+            "近1h采集条数": sig.get("ingest_1h", "—"),
+            "采集下限(基准)": sig.get("ingest_floor", "—"),
+            "距上次推送(小时)": sig.get("hours_since_last_push", "—"),
+            "近1h错误数": sig.get("error_events_1h", "—"),
+            "处理成功率(%)": sig.get("success_rate", "—"),
+            "近1h评估数": sig.get("assessments_1h", "—"),
+            "上次体检时间": snap.get("last_check_at", "—"),
+        }.items()
+    )
+    html = f"""<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新闻监控 · 系统健康</title>
+<meta http-equiv="refresh" content="30">
+<style>
+ body{{font-family:-apple-system,system-ui,sans-serif;background:#f5f6f8;margin:0;padding:24px;color:#1a1a1a}}
+ .card{{max-width:560px;margin:0 auto;background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden}}
+ .banner{{background:{color};color:#fff;padding:28px 24px}}
+ .banner .icon{{font-size:44px}}
+ .banner h1{{margin:8px 0 4px;font-size:22px}}
+ .banner p{{margin:0;opacity:.92;font-size:15px;line-height:1.5}}
+ table{{width:100%;border-collapse:collapse}}
+ td{{padding:12px 24px;border-top:1px solid #eee;font-size:14px}}
+ td:first-child{{color:#666}} td:last-child{{text-align:right;font-weight:600}}
+ .foot{{padding:14px 24px;color:#999;font-size:12px;text-align:center}}
+</style></head><body>
+<div class="card" data-state="{state}">
+  <div class="banner">
+    <div class="icon">{icon}</div>
+    <h1 id="state-label">{label}</h1>
+    <p id="reason">{snap.get('reason','')}</p>
+  </div>
+  <table><tbody>{rows}</tbody></table>
+  <div class="foot">每 30 秒自动刷新 · state={state}</div>
+</div>
+</body></html>"""
+    return web.Response(text=html, content_type="text/html")
 
 
 # ---------------------------------------------------------------------------

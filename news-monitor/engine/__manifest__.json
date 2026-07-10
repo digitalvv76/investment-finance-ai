@@ -3,7 +3,12 @@
     "engine/alert_dispatcher.py": {
       "tests": ["tests/test_alert_dispatcher.py"],
       "related_scripts": ["scripts/test_phone_alert.py"],
-      "also_tests": []
+      "also_tests": ["tests/test_watchdog.py"]
+    },
+    "engine/watchdog.py": {
+      "tests": ["tests/test_watchdog.py"],
+      "related_scripts": [],
+      "also_tests": ["tests/test_alert_dispatcher.py"]
     },
     "engine/deep_lane.py": {
       "tests": ["tests/test_deep_lane.py"],

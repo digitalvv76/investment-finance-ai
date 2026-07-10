@@ -1499,3 +1499,49 @@ in-session recording (Layer 2, deferred).
 ### e7a00ba · 2026-07-09T20:11 · docs: 孤儿代码审计结论 + 收工同步 SESSION/HISTORY [skip-tests]
 
 ---
+
+## 2026-07-10T01:51 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 6ca47fe · 2026-07-10T00:55 · docs: 收工同步 SESSION/HISTORY — 事件驱动引擎+影子环境就绪 [skip-tests]
+
+---
+
+### 9995beb · 2026-07-10T01:49 · [escalation] 事件升级接入事件驱动评估 — 多源确认 boost intensity
+
+EvaluateStage._apply_event_assessment: 查DB事件线source_count
+≥3源 → intensity +1 (cap 5) + headline_signal追加「多源确认: N家报道」
+_log_event_source_count: JOIN news→event_lines 查源数
+
+---
+
+### 3594250 · 2026-07-10T01:51 · docs: 收工同步 SESSION — 事件升级接入完成 [skip-tests]
+
+---
+
+---
+
+## 2026-07-10T06:48+08:00 · 会话开始
+
+### 🐕 系统存活看门狗 (Watchdog) — 解决「沉默歧义」
+
+**问题**: V1 经常长时间不推送，用户无法分辨是「市场真没料」还是「管道坏了」，需人肉提醒才发现故障。
+
+**方案**: 独立存活监控——测上游采集/处理活体（独立于推送输出），消解沉默歧义，异常时主动报警。
+
+- `engine/watchdog.py` (新) — 纯决策 `evaluate_health()` 四态: HEALTHY / QUIET_OK(市场平静非故障) / STALLED(零采集→警笛) / DEGRADED(错误激增→高优)。`Watchdog` 类: 防抖(连续N次坏才报)+冷却(1h不重复)+每日健康心跳报平安。
+- **独立异步任务**(非寄生 scheduler): scheduler 卡死时看门狗仍能报警。main.py `_watchdog_task`。
+- `alert_dispatcher.send_system_alert()` (新) — 不绑新闻/不翻译的原始运维推送: 警笛(P2)/高优(P1)/静默心跳(P-1)。
+- Web 健康页 `/health/watchdog`(免登录) + `/health/watchdog.json`，`/health` 也内嵌看门狗块。
+- `config/settings.yaml` watchdog 段: 阈值/防抖/冷却/心跳时刻可配。
+- 用户新规矩(已存记忆 [[playwright-acceptance-required]]): 每个新功能必须 Playwright 端到端验收。
+- **Playwright 验收**: 停摆态(data-state=stalled 🔴)+健康态(data-state=healthy ✅)两态真实浏览器渲染正确。
+- **测试**: 14 新测试(evaluate_health 四态 + 防抖/冷却/心跳)，全量 **406 passed / 0 failed**。
+- 登记 engine/__manifest__.json (watchdog + alert_dispatcher also_tests)。
+
+**待用户定**: 部署方式(V1 现在 / 随 V2 切换 / 影子期看门狗真报警)——见会话末。
+
+---
+
+## 2026-07-10T06:48+08:00 · 会话开始
