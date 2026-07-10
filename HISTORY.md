@@ -1393,3 +1393,7 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - 读 `训练资料.docx`(18例:政府入股/补贴11+黄仁勋言论7)，按 event_driven 强度1-5评级。
 - **用户校准**:大额政府计划(CHIPS$520亿/关键矿产/核能$800亿)广度不降级→上调★★★★高优先,要求 LLM 深挖受益股+联动板块(建厂→设备AMAT/LRCX;核能→供电CEG/VST/GEV)。存记忆 govt-program-rating-deepdig。降级只看时效性,非广度。
 - 产出 `data/training/catalyst-cases.jsonl`(18条,15推/4critical/11important/3不推)+README(schema+校准原则)。喂 event_driven 少样本校准用,接入归 V2。
+
+### 扩负面/做空向子集
+- 用户要求扩 JSONL 负面子集。补做空向催化剂5类镜像(N1巨头降维/N2政策受害方/N3领袖唱衰+空头报告/N4里程碑失败/N5基本面暴雷)。
+- 产出 `data/training/catalyst-cases-negative.jsonl`(8条:doc真实2 neg-01 N1X/neg-02英特尔公告日 + 派生模式6,均标注无行情防编数)。新增字段 neg_type/losers/beneficiaries/direction/source。README 加负面类型体系表。
