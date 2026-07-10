@@ -18,16 +18,14 @@
 | **看门狗** | 🟢 已上线，state=healthy，ingest_1h=8，无误报 |
 | 8080 认证 | 🟢 Basic Auth |
 | Pushover / Telegram | 🟢 正常 |
-| 新浪财经 API | ❌ 全 403 |
+| 新浪财经 API | 🟢 已修复 (zhibo feed, 19 条/轮) |
 | news-monitor-shadow (V2 金丝雀) | 🟠 unhealthy 但不推送，归 V2 窗口 |
 
 ## 📋 下一步
 
-1. **观察看门狗首次真实 check**（部署后 5min grace 过后跑第一次；预期 healthy/quiet_ok）
+1. **cherry-pick 到 main** → V2 窗口把本会话 commit 同步（fb0d350/25059ba/78325e5/2768e90/99b588b）
 2. **(可选)** retention DELETE(database.py:543) 仍 UTC，早删 4h，无害可后补
-3. **cherry-pick 到 main** → V2 窗口把 watchdog/安全网/关注列表相关 commit 同步（fb0d350/25059ba/78325e5/2768e90）
-4. **新浪财经 403** — 需新端点或 web scraper
-5. **轮换 root 密码 + 凭证备份**（非紧急）
+3. **轮换 root 密码 + 凭证备份**（非紧急）
 
 ## 🩹 本次踩坑
 
