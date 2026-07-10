@@ -1378,3 +1378,10 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - **真根因（用户抓的点）**：事件驱动路径 `_apply_event_assessment` 只因多源"升级"、**从不因"过期"降级**，完全不看时效性 → 几小时前已公开、市场消化完的旧催化剂照样满级震手机。
 - **方案（用户定阈值=1h）**：事件线 `first_seen` 年龄 > 60min 且 level=IMPORTANT → 降级 NOTABLE（静音TG、手机不响）；CRITICAL 豁免；年龄未知不降。排雷：`first_seen` 由 `cluster.py` `datetime.now()` 写=本地时间+T分隔符（同看门狗坑），SQL 用 `julianday('now','localtime')` + `datetime()` 包裹。
 - **分工（§6 触发）**：改动动 main 流水线 = V2 地盘、非紧急热修不走 v1-stable。用户选 ① → V1 出规格。产出 `SPEC-stale-event-downgrade.md`（意图+契约+实现骨架+时区注意+6条测试用例+部署回滚），实现/测试/部署归 V2/main。
+
+### 诊断：深度分析卡片在编造行情数据（口头交接 V2）
+- **用户反馈**：新闻卡片深度分析股价涨跌全错（样本 id=3340 美光/Meta 那条 TG 卡）。卡片称 META 盘前 -7.64%@649.2、建议做空 META 目标580。
+- **实测（V1，systematic-debugging）**：Finnhub+yfinance 双源确认 META 实际 **+4.70%**（盘前 +3.68%@654.7），方向反了；同卡 MRVL/LITE/WOLF/BABA/SMR 涨跌幅全部对不上真实值。
+- **根因**：`deep_lane.py:_call_llm` 抓行情 `_ENRICH_TIMEOUT=8.0s`（37 行），本地实测这组股 7.3s 卡在门槛 → 生产必超时；超时走 575-576 行**静默丢弃行情（debug 日志）** → LLM 零实时数据；prompt 防幻觉是软约束（56 行）→ DeepSeek 无视、顺新闻语气**编数字**，编出假暴跌+假做空建议。方向对5/6幅度全假、META编反 = 照语气猜数特征，非真实时点数据（对上用户"现在昨日都对不上"）。
+- **交接 V2（口头，未写 SPEC，用户选口头）**：改 `engine/deep_lane.py` = main 流水线 = V2 地盘(§6)。契约：①硬门禁—无真实行情禁止 LLM 输出任何价格/涨跌/建议(软约束改硬拦截)；②输出校验—LLM 的$/%必须能在行情串里匹配；③Finnhub设主源(实时有key快)、yfinance 只算均线，别再超时；④超时改WARNING级+卡片标时间戳。测试：空行情串→断言不含$/%+无建议。非紧急热修不走 v1-stable。
+- **风险提示用户**：V2 修好前，深度分析卡的具体数字和买卖建议都不可信。
