@@ -59,7 +59,10 @@ services:
     deploy:
       resources:
         limits:
-          pids: 150
+          # Chromium/Playwright is process-hungry (~13 helper procs per browser).
+          # 150 was too tight — the collector fork-stalled at 111/150 and hung the
+          # whole ingest gather. 512 gives Chromium headroom, still a runaway backstop.
+          pids: 512
           memory: 2G
         reservations:
           memory: 384M
