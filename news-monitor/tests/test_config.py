@@ -12,7 +12,7 @@ def test_load_settings():
     settings = loader.load_settings()
     assert "frequencies" in settings
     assert "fast_lane" in settings
-    assert settings["frequencies"]["heartbeat"] == 60
+    assert settings["frequencies"]["heartbeat"] == 30
 
 
 def test_load_sources():

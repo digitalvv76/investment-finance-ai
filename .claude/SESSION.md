@@ -12,6 +12,8 @@
 - ✅ **方案A 已执行**: V1 换成 clean main(git checkout源码, 保留ECS compose/.env), 重建。修看门狗3个时区/自污染假象(count_recent_news/get_health_stats localtime + 排除watchdog_)。V1实测 state=healthy/ingest15/success100%, 411 tests绿。回滚镜像 docker-news-monitor:rollback-20260710。
 - 📊 **下一步: 用户观察 V1 真实推送 1-2 天**做验证(方案A的验证环节)。看门狗在线会报平安/故障。
 - ⚠️ 遗留系统性隐患: captured_at/created_at 本地存储 vs 查询时区不一致([[db-captured-at-timezone]]), 已修看门狗路径, 其他查询(如digest/api)待排查。
+- ✅ **配置对齐**: main settings.yaml 已纳入 ECS 调优(heartbeat 60→30, heartbeat_hour 8→21), 不再漂移。
+- 🟡 **待用户定**: sources.yaml 的 request_delay(ECS 3.0/1.5 保守 vs main 1.0/0.3 并发优化)方向不明——是 ECS 撞403后的新调优, 还是并发改造前的旧值? 未合并。死配置 min_impact_for_push(仅ECS, 代码不读)+ 游离文件暂留(无害, 生产删文件有风险)。
 - ✅ 已修的部署阻断(可复用): pids 150→512、watchdog.py入清单、relevance路径硬化、shadow挂memory:ro、--down只撤影子
 - 看门狗代码本身完成且验证通过, 随修复后重部署即可
 

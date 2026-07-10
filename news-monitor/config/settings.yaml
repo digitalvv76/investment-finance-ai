@@ -1,6 +1,6 @@
 # Global settings for news monitor
 frequencies:
-  heartbeat: 60          # 1-minute tier, seconds
+  heartbeat: 30          # 30-second tier (production-tuned from 60s), seconds
   fast: 300              # 5-minute tier, seconds
   normal: 900            # 15-minute tier, seconds
   slow: 1800             # 30-minute tier, seconds
@@ -15,7 +15,7 @@ watchdog:
   weekend_floor_multiplier: 0.34    # markets closed → lower the floor, avoid false alarms
   consecutive_bad_threshold: 2      # require N bad checks in a row before siren (anti-flap)
   alert_cooldown_seconds: 3600      # min gap between repeat fault alerts (1h)
-  heartbeat_hour: 8                 # local hour to send the daily "still alive" report
+  heartbeat_hour: 21                # 21 US-Eastern = 09:00 北京, daily silent "still alive"
   startup_grace_seconds: 300        # warmup before first check (empty DB on cold start ≠ stall)
 
 fast_lane:
