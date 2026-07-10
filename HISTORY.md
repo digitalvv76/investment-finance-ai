@@ -1397,3 +1397,10 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 ### 扩负面/做空向子集
 - 用户要求扩 JSONL 负面子集。补做空向催化剂5类镜像(N1巨头降维/N2政策受害方/N3领袖唱衰+空头报告/N4里程碑失败/N5基本面暴雷)。
 - 产出 `data/training/catalyst-cases-negative.jsonl`(8条:doc真实2 neg-01 N1X/neg-02英特尔公告日 + 派生模式6,均标注无行情防编数)。新增字段 neg_type/losers/beneficiaries/direction/source。README 加负面类型体系表。
+
+### 自动标注训练样本 — 原型 (autolabel_training.py)
+- 思路:系统每天自动出题(新闻),几小时后市场给答案(涨跌)→翻历史新闻+补真实行情→生成带 ground-truth 强度的 JSONL,训练集自增长且100%对口。
+- 实现(TDD):`news-monitor/scripts/autolabel_training.py` + `tests/test_autolabel_training.py`(6绿)。纯函数 move_to_intensity(涨跌%→★1-5,阈值按docx真实反应校准:≥15→5/≥7→4/≥3→3/≥1.5→2)先红后绿;fetch_reaction 用 yfinance 取新闻日 prev_close→close 日涨跌。
+- 端到端实跑(本地dev库10条):10/10出标注。**演示暴露命门**:#2213标题TJX却误标MSFT(子串坑)→垃圾进;#2205 KTOS正确→-3.27%★3干净信号。
+- 结论:机制跑通;真跑量前唯一命门=ticker清洗(用ticker_hint非tickers_found)。真实跑量对生产库(ECS)。
+- 纠偏:文件曾误写进 main 工作树(V2地盘),已按§5挪进 v1-stable 并清理 main。
