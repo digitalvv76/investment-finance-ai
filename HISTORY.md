@@ -1388,3 +1388,8 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 
 ### 补：出书面交接单 SPEC-deep-analysis-stale-data.md
 - 用户改主意要书面版，V1 补出 `SPEC-deep-analysis-stale-data.md`（实测证据/7.3s-8s时序/6只股对照/4档修复契约①硬门禁②输出校验③Finnhub主源④WARNING+时间戳/5条测试用例/部署回滚）。SESSION#0 已指向该 SPEC。实现归 V2/main。
+
+### 训练资料评级 → 生成带标签 JSONL 样本
+- 读 `训练资料.docx`(18例:政府入股/补贴11+黄仁勋言论7)，按 event_driven 强度1-5评级。
+- **用户校准**:大额政府计划(CHIPS$520亿/关键矿产/核能$800亿)广度不降级→上调★★★★高优先,要求 LLM 深挖受益股+联动板块(建厂→设备AMAT/LRCX;核能→供电CEG/VST/GEV)。存记忆 govt-program-rating-deepdig。降级只看时效性,非广度。
+- 产出 `data/training/catalyst-cases.jsonl`(18条,15推/4critical/11important/3不推)+README(schema+校准原则)。喂 event_driven 少样本校准用,接入归 V2。
