@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections import deque
 from typing import TYPE_CHECKING
 
 from pipeline.item import PipelineItem, AlertLevel
@@ -28,6 +29,21 @@ class DispatchStage:
 
     def __init__(self, channels: list[Channel]) -> None:
         self._channels = channels
+        # Ring buffer of recent PUSHED decisions (NOTABLE/IMPORTANT/CRITICAL),
+        # for the /health/decisions observability panel. NORMAL is skipped.
+        self.recent_decisions: deque = deque(maxlen=50)
+
+    def _record(self, item: PipelineItem, level: AlertLevel, silent: bool) -> None:
+        d = item.decision
+        self.recent_decisions.appendleft({
+            "id": item.id,
+            "title": (item.title or "")[:120],
+            "level": level.value,
+            "silent": silent,
+            "ticker_hint": d.ticker_hint,
+            "headline_signal": d.headline_signal,
+            "reason": getattr(d, "alert_reason", ""),
+        })
 
     async def process(self, items: list[PipelineItem]) -> list[PipelineItem]:
         if not items:
@@ -43,6 +59,7 @@ class DispatchStage:
             if level == AlertLevel.NORMAL:
                 continue
             silent = level == AlertLevel.NOTABLE
+            self._record(item, level, silent)
 
             if _DRY_RUN:
                 self._log_push(item, decision, silent)

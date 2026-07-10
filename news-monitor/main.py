@@ -212,6 +212,7 @@ class NewsMonitor:
         if self._sse_manager:
             channels.append(WebSSEChannel(self._sse_manager))
 
+        self._dispatch_stage = DispatchStage(channels=channels)
         self._pipeline = Pipeline([
             IngestStage(db=self.db, dedup=self.dedup, vector_store=self.vector_store, cluster=self.cluster),
             ScreenStage(fast_lane=self.fast_lane),
@@ -223,9 +224,12 @@ class NewsMonitor:
                 event_evaluator=self.event_evaluator,
                 cluster=self.cluster,
             ),
-            DispatchStage(channels=channels),
+            self._dispatch_stage,
             DeepStage(deep_lane=self.deep_lane),
         ])
+        # Expose recent decisions to the web panel (dashboard built before pipeline).
+        if self.web_dashboard is not None:
+            self.web_dashboard.decisions_source = self._dispatch_stage
         logger.info("Pipeline: IngestStage → ScreenStage → EvaluateStage → DispatchStage → DeepStage")
 
     # -----------------------------------------------------------------

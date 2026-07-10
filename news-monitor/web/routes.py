@@ -57,6 +57,73 @@ def _get_watchdog(request: web.Request):
     return request.app.get("watchdog")
 
 
+def _get_decisions(request: web.Request):
+    src = request.app.get("decisions")
+    if src is None:
+        return []
+    try:
+        return list(src.recent_decisions)
+    except Exception:
+        return []
+
+
+async def decisions_status(request: web.Request) -> web.Response:
+    """Recent PUSHED decisions JSON (NOTABLE/IMPORTANT/CRITICAL; NORMAL excluded)."""
+    return _json({"decisions": _get_decisions(request)})
+
+
+async def decisions_page(request: web.Request) -> web.Response:
+    """Human-viewable recent-decisions panel (unauthenticated via /health prefix).
+
+    Shows what the pipeline chose to push and at what level — so the watchlist
+    safety net (level=notable, silent TG) is visible end-to-end in a browser.
+    """
+    rows_data = _get_decisions(request)
+    palette = {
+        "critical": ("#b00020", "🔴 手机+响"),
+        "important": ("#c25e00", "🟠 手机+响"),
+        "notable": ("#0a6b7c", "🔵 静音TG(关注股)"),
+    }
+    if not rows_data:
+        body = '<tr><td colspan="3" style="text-align:center;color:#999;padding:28px">暂无推送决策（NORMAL 不推、不显示）</td></tr>'
+    else:
+        cells = []
+        for d in rows_data:
+            color, label = palette.get(d.get("level", ""), ("#555", d.get("level", "")))
+            th = ", ".join(d.get("ticker_hint") or []) or "—"
+            sig = d.get("headline_signal") or d.get("reason") or ""
+            cells.append(
+                f'<tr data-level="{d.get("level","")}">'
+                f'<td><span style="color:{color};font-weight:600">{label}</span><br>'
+                f'<span style="color:#888;font-size:12px">{th}</span></td>'
+                f'<td>{(d.get("title") or "")}</td>'
+                f'<td style="color:#555;font-size:13px">{sig}</td></tr>'
+            )
+        body = "".join(cells)
+    html = f"""<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>最近推送决策</title>
+<meta http-equiv="refresh" content="20">
+<style>
+ body{{font-family:-apple-system,system-ui,sans-serif;background:#f5f6f8;margin:0;padding:20px;color:#1a1a1a}}
+ .wrap{{max-width:820px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden}}
+ h1{{font-size:18px;margin:0;padding:18px 22px;background:#0a6b7c;color:#fff}}
+ table{{width:100%;border-collapse:collapse}}
+ td{{padding:12px 16px;border-top:1px solid #eee;font-size:14px;vertical-align:top}}
+ th{{padding:10px 16px;text-align:left;color:#888;font-size:12px;background:#fafafa}}
+ .foot{{padding:12px;color:#999;font-size:12px;text-align:center}}
+</style></head><body>
+<div class="wrap" id="decisions">
+  <h1>最近推送决策 · 静音TG=关注股安全网</h1>
+  <table><thead><tr><th>级别 / 关注标的</th><th>标题</th><th>信号</th></tr></thead>
+  <tbody>{body}</tbody></table>
+  <div class="foot">每 20 秒自动刷新 · NORMAL(不推)不显示 · 共 {len(rows_data)} 条</div>
+</div>
+</body></html>"""
+    return web.Response(text=html, content_type="text/html")
+
+
 def _watchdog_snapshot(wd) -> Dict[str, Any]:
     """Build a serializable status snapshot from the watchdog.
 

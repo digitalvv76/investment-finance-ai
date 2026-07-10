@@ -28,6 +28,7 @@ from web.auth import basic_auth_middleware
 from web.routes import (
     health_check,
     watchdog_page, watchdog_status,
+    decisions_page, decisions_status,
     get_stats, get_recent_news, get_news_by_id,
     post_feedback,
     get_profile, put_profile,
@@ -92,6 +93,7 @@ class WebDashboard:
         app["sse_manager"] = self._sse
         app["impact_evaluator"] = getattr(self, "impact_evaluator", None)
         app["watchdog"] = getattr(self, "watchdog", None)
+        app["decisions"] = getattr(self, "decisions_source", None)
 
         # CORS middleware (permissive for local dev)
         @web.middleware
@@ -122,6 +124,8 @@ class WebDashboard:
         # Watchdog ops page + JSON (under /health prefix → no auth)
         app.router.add_get("/health/watchdog", watchdog_page)
         app.router.add_get("/health/watchdog.json", watchdog_status)
+        app.router.add_get("/health/decisions", decisions_page)
+        app.router.add_get("/health/decisions.json", decisions_status)
 
         # ---- API routes ----
         app.router.add_get("/api/stats", get_stats)
