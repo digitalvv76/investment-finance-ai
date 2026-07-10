@@ -22,6 +22,8 @@
 3. **领袖级人物的终局预言**：黄仁勋、马斯克、Sam Altman、Cathie Wood 等明确给出极端目标价或"下一个万亿"等表述。关键词如"trillion""next big thing""Ark Invest price target"等。
 4. **硬核里程碑式批准/突破**：FDA 药物/器械批准、FAA 认证、首次量子优越性实证、聚变净能量增益等，使技术从研发变为确定商业资产。关键词如"FDA approval""FAA certification""quantum supremacy""breakthrough"等。
 5. **极端空头挤压/模因引爆**：高做空比例叠加散户抱团或知名多头逼空声明。关键词如"short squeeze""WallStreetBets""memes""Roaring Kitty"等。
+   ⚠️ **本类专属门槛（务必执行）**：只有**已经发生的真实挤压**才算强催化——即新闻描述股价已启动轧空/已暴涨/散户资金已实际涌入/逼空已在进行（如"today surged 40% on short squeeze""shares halted after retail buying"）。
+   反之，**纯预测/观察/清单式提示**（如"或再现模因行情""值得关注这几只模因股""具备逼空潜力""watch these meme stocks""could squeeze"）→ **不作为触发事件**，返回 `is_event=false, notable=true`（若确有具体标的），**不上手机**。区分关键：**已发生的动作 vs 尚未发生的可能性**。
 
 如果新闻相关但**不触发任何催化剂**，返回：
 {"is_event": false, "notable": false, "ticker_hint": [], "reason": "no catalyst triggered"}
