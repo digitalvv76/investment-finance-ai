@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-10T20:35+08:00 · 📚 催化剂训练样本 few-shot 接入 (V1数据→V2/main实现)
+
+### 背景
+- V1 从训练资料.docx提炼18条标注样本(政府入股/补贴11 + 黄仁勋言论7), commit `173bbcb`@v1-stable, 接入归V2
+- 用户校准原则: 大额政府计划广度不降级→深挖受益股+联动板块; 降级只看时效性([[govt-program-rating-deepdig]])
+
+### 实现 (用户定方案A: 精选few-shot)
+- 数据文件搬进 main 仓库根 `data/training/` (逐字节git show,非手抄):
+  - `catalyst-cases.jsonl` (18例) + `catalyst-cases-negative.jsonl` (5例做空向N1-N5,commit 6e1ae41) + README
+- `config/prompts/event_driven_v1.txt` 加「评级校准范例」段, 精选4例:
+  - gov-01国家入股INTC★★★★★ / gov-07 CHIPS广度不降级★★★★ / jensen-07负面零和★★★★down / gov-10金额小无标的★
+- 教会模型3个关键行为: 广度不降级+深挖受益面、负面也是强催化、金额小+无标的才压低星
+
+### ✅ 真实LLM验收 (Playwright级实测,非只单测)
+- 变体新闻1(150亿清洁能源补贴,训练集外): intensity=4不降级 + ticker_hint铺开7只(ENPH/SEDG/PLUG/BE/FCEL/QS/RUN) + 3板块 ✅广度不降级生效
+- 变体新闻2(苹果自研基带替换高通): intensity=4 + event_types=[]负面 + hint=[QCOM]受损方 + headline点出营收承压 ✅负面强催化生效
+- prompt 3868字符, 占位符保留, 15评估器测试全绿
+
+### 待部署
+- deploy-main.sh (prompt属config/prompts, 在SRC_PATHS内会同步)
+
+---
+
 ## 2026-07-10T20:05+08:00 · 🚨 深度分析编造行情修复 (高危, V1诊断→V2/main实现)
 
 ### 背景 (真实交易风险)
