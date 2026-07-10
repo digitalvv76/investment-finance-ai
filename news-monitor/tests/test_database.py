@@ -99,3 +99,18 @@ def test_get_recent_news(db):
 
     recent = db.get_recent_news(hours=24)
     assert len(recent) == 5
+
+
+def test_health_stats_excludes_watchdog_records(db):
+    """Watchdog's own observability records must NOT count as errors —
+    else the watchdog pollutes its own success_rate → false 'degraded'."""
+    from storage.models import HealthEvent
+    # Two real assessments would exist; simulate only health_events here.
+    db.insert_health_event(HealthEvent(event_type="watchdog_healthy", detail="ok"))
+    db.insert_health_event(HealthEvent(event_type="watchdog_stalled", detail="x"))
+    db.insert_health_event(HealthEvent(event_type="llm_timeout", detail="real error"))
+    # Wide window so a few-hours local/UTC offset can't exclude just-inserted rows;
+    # the point under test is the watchdog_ exclusion, not the time window.
+    stats = db.get_health_stats(hours=24)
+    # Only the real llm_timeout counts as an error, not the 2 watchdog_ records.
+    assert stats["health_events_1h"] == 1

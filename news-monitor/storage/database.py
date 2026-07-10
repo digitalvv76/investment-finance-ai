@@ -520,14 +520,20 @@ class Database:
 
     def get_health_stats(self, hours: int = 1) -> dict:
         with self._get_conn() as conn:
+            # created_at is stored in LOCAL time → anchor on localtime (see
+            # count_recent_news). Bare datetime('now') (UTC) silently undercounts.
             total = conn.execute(
                 "SELECT COUNT(*) as cnt FROM impact_assessments "
-                "WHERE created_at > datetime('now', ?)",
+                "WHERE created_at > datetime('now','localtime', ?)",
                 (f'-{hours} hours',)
             ).fetchone()["cnt"]
+            # Only REAL errors count against success rate. Exclude the watchdog's
+            # own observability records (event_type 'watchdog_*'), else the
+            # watchdog pollutes its own success metric → false 'degraded'.
             errors = conn.execute(
                 "SELECT COUNT(*) as cnt FROM health_events "
-                "WHERE created_at > datetime('now', ?)",
+                "WHERE created_at > datetime('now','localtime', ?) "
+                "AND event_type NOT LIKE 'watchdog_%'",
                 (f'-{hours} hours',)
             ).fetchone()["cnt"]
             return {"total_assessments_1h": total, "health_events_1h": errors,
