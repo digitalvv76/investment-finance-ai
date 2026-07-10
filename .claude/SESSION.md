@@ -1,13 +1,25 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-10 傍晚 CST (V1 窗口 / v1-stable)
+> 最后更新: 2026-07-10 深夜 CST (V1 窗口 / v1-stable) — 关机存档
+
+## 🆕 本会话完成（2026-07-10 晚 · 全在 v1-stable，交接 V2）
+1. **诊断美光$250B误响手机**(id=3340) → 根因=事件驱动路径只升级不因过期降级 → 出 `SPEC-stale-event-downgrade.md`(1h阈值/降静音TG/时区排雷)。**待 V2 实现。**
+2. **诊断深度分析编造行情**(id=3340,META卡片-7.64%实际+4.70%双源确认) → 根因=抓行情8s超时静默丢弃+LLM软约束无视硬编 → 出 `SPEC-deep-analysis-stale-data.md`(硬门禁/输出校验/Finnhub主源)。**待 V2 实现,高优先。**
+3. **评级训练资料.docx** → 生成 `data/training/catalyst-cases.jsonl`(正面18)+`catalyst-cases-negative.jsonl`(负面8,N1-N5)。用户校准:大额政府计划广度不降级→深挖受益股(记忆 govt-program-rating-deepdig)。
+4. **自动标注原型** `news-monitor/scripts/autolabel_training.py`(TDD 6绿):历史新闻+真实涨跌→带真值强度JSONL。命门=ticker清洗(用ticker_hint)。
+5. **训练评估系统上正规流程**:`REQ-training-eval.md`(系列1/4,需求+验收前置)。决策已定:A少样本+C校准/验收80-90-75-70/V1初稿+用户抽核80条金标/噪音取生产库"评过没推"/防泄露few-shot与测试集零重叠。外部第三方评估版在用户桌面。请 V2 评估 handoff 已提交。
+
+## 📋 训练评估项目 — 下一步
+- ⬜ **用户**:发外部版给独立第三方评估(桌面 `REQ-training-eval-外部评估版.docx`);待定正式 owner+排期。
+- ⬜ **V2**:读 `HANDOFF-review-REQ-training-eval.md` 评可落地性/工作量/实现坑 → 写 `REVIEW-*.md` 回仓库。
+- ⬜ **V1(我)**:收齐第三方+V2 反馈 → 写 ②产品/设计文档(数据源/ticker清洗/标注流水线/A+C落地/去重/反馈闭环)。
 
 ## 🧭 本窗口定位（2026-07-10 决定）
 - **生产 = main（V2 主干）**。今天所有修复已收敛/重实现进 main（安全网=NOTABLE 档、74 关注股、Sina zhibo、时区、看门狗、事件哨兵）。唯 `e02d3e6` 弱催化剂档**有意不搬**（与"少而精"冲突）。
 - **v1-stable 保留为短命应急/调参通道**（受 COLLAB-PROTOCOL §2 约束：用完即合回 main、不常驻积累）。退役决定已撤销、worktree 不移除。
 - 新开发默认在 main；本窗口应急/并行时用，守 §1–§7。
 
-## ✅ 本会话完成（已全部收敛进 main）
+## ✅ 上一会话完成（已全部收敛进 main）
 - 诊断"哨兵零推送" → 关注股安全网（`fb0d350`；V2 已在 main 流水线重实现为 NOTABLE 档）
 - 关注列表 21→74（`25059ba`）、新浪 zhibo 修复（`99b588b`）、看门狗移植+时区修复（`78325e5`/`2768e90`）
 - 与 V2 全套协作：`COLLAB-PROTOCOL.md`（双方共签）、安全网 SPEC 交接、多 agent 方案（瘦身版 spec）
