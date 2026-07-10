@@ -1385,3 +1385,6 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - **根因**：`deep_lane.py:_call_llm` 抓行情 `_ENRICH_TIMEOUT=8.0s`（37 行），本地实测这组股 7.3s 卡在门槛 → 生产必超时；超时走 575-576 行**静默丢弃行情（debug 日志）** → LLM 零实时数据；prompt 防幻觉是软约束（56 行）→ DeepSeek 无视、顺新闻语气**编数字**，编出假暴跌+假做空建议。方向对5/6幅度全假、META编反 = 照语气猜数特征，非真实时点数据（对上用户"现在昨日都对不上"）。
 - **交接 V2（口头，未写 SPEC，用户选口头）**：改 `engine/deep_lane.py` = main 流水线 = V2 地盘(§6)。契约：①硬门禁—无真实行情禁止 LLM 输出任何价格/涨跌/建议(软约束改硬拦截)；②输出校验—LLM 的$/%必须能在行情串里匹配；③Finnhub设主源(实时有key快)、yfinance 只算均线，别再超时；④超时改WARNING级+卡片标时间戳。测试：空行情串→断言不含$/%+无建议。非紧急热修不走 v1-stable。
 - **风险提示用户**：V2 修好前，深度分析卡的具体数字和买卖建议都不可信。
+
+### 补：出书面交接单 SPEC-deep-analysis-stale-data.md
+- 用户改主意要书面版，V1 补出 `SPEC-deep-analysis-stale-data.md`（实测证据/7.3s-8s时序/6只股对照/4档修复契约①硬门禁②输出校验③Finnhub主源④WARNING+时间戳/5条测试用例/部署回滚）。SESSION#0 已指向该 SPEC。实现归 V2/main。
