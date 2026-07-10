@@ -1612,3 +1612,25 @@ _log_event_source_count: JOIN news→event_lines 查源数
 - 全量 **414 passed**。
 
 **待用户定**: (1) 部署这3个到生产(Sina 403 live, 建议尽快); (2) 安全网要不要在流水线重新实现。
+
+### 🛡️ 流水线版关注股安全网 + 最近决策面板(已部署生产)
+
+V1窗口交付语义规格 `SPEC-safety-net-pipeline.md`, V2按流水线架构重新实现。
+
+**关键发现(纠正我自己的错)**: 排查中发现当前main **不是"is_event=false完全不推"**——`disable=level==NORMAL` 是"静音发送"不是"跳过", NORMAL项其实会**静音发TG**(我给V1的ARCH回执把这写错了)。用户选方案2「收紧」→ 顺带修了这个潜在firehose。
+
+**实现**:
+- EventAssessment加`notable`字段; prompt在is_event=false返回里输出notable+ticker_hint(规格§2语义)
+- `watchlist_safety_net()`纯函数(规格§6契约) + `relevance.get_tracked_tickers()`(watchlist∪portfolio大写)
+- `AlertLevel.NOTABLE`新档(pipeline/item.py + alert_dispatcher.py两处); 天然不进Pushover
+- **DispatchStage行为改动**: NORMAL不再推任何通道; NOTABLE→静音TG(disable_notification)
+- EvaluateStage: is_event=false命中安全网→NOTABLE
+- **最近决策面板** `/health/decisions`(环形缓冲, 免登录, 浏览器可见NOTABLE)
+- 测试: 纯函数9+路由3+DB; **真LLM验收**: TSLA调价→notable命中静音/El Nino→不命中✅; **Playwright验收**决策面板两态✅; 全量426 passed
+- **生产验证**: V1 healthy, /health/decisions 200, watchdog healthy, Sina 7x24正常。回滚镜像 rollback-pre-safetynet
+
+**Telegram新行为**: 只收 CRITICAL/IMPORTANT(响+手机) + NOTABLE(关注股实质动作, 静音) + 其余NORMAL静默丢弃。
+
+---
+
+**待用户定**: (1) 部署这3个到生产(Sina 403 live, 建议尽快); (2) 安全网要不要在流水线重新实现。

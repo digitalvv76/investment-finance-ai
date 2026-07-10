@@ -15,7 +15,8 @@
 - ✅ **配置对齐**: main settings.yaml 已纳入 ECS 调优(heartbeat 60→30, heartbeat_hour 8→21), 不再漂移。
 - 🟡 **待用户定**: sources.yaml 的 request_delay(ECS 3.0/1.5 保守 vs main 1.0/0.3 并发优化)方向不明——是 ECS 撞403后的新调优, 还是并发改造前的旧值? 未合并。死配置 min_impact_for_push(仅ECS, 代码不读)+ 游离文件暂留(无害, 生产删文件有风险)。
 - ✅ **v1-stable 搬运+部署完成**: 3修复入main并上生产(6757281关注列表74, ba448c4+cf027c9 Sina zhibo, 116f470 get_recent_news时区)。**Sina 403已修复: 新浪财经[7x24]:20 items fetched**。回滚镜像 rollback-pre-sina。
-- 🟡 **待用户定**: 关注股安全网(fb0d350)基于旧内联push架构, 剔除未搬。需在**流水线Evaluate阶段重新实现**(设计任务)。
+- ✅ **流水线版关注股安全网 + 决策面板 已部署生产**: is_event=false默认不推(修firehose), notable+关注股→静音TG(NOTABLE档)。`/health/decisions`面板浏览器可见。真LLM+Playwright双验收。回滚镜像 rollback-pre-safetynet。
+- ⚠️ **纠错记录**: 之前误以为main"is_event=false完全不推", 实际是"静音发TG"(disable=静音非跳过)。已在实现中修正+回执V1。
 - ✅ 已修的部署阻断(可复用): pids 150→512、watchdog.py入清单、relevance路径硬化、shadow挂memory:ro、--down只撤影子
 - 看门狗代码本身完成且验证通过, 随修复后重部署即可
 
