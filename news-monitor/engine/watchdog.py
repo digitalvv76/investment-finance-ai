@@ -175,7 +175,7 @@ class Watchdog:
             return -1.0
 
     def gather_signals(self) -> HealthSignals:
-        ingest = len(self.db.get_recent_news(hours=1, limit=2000))
+        ingest = self.db.count_recent_news(hours=1)
         health = self.db.get_health_stats(hours=1)
         return HealthSignals(
             ingest_1h=ingest,
@@ -247,7 +247,7 @@ class Watchdog:
 
         self._last_heartbeat_date = today
         sig = self.last_signals or self.gather_signals()
-        ingest_24h = len(self.db.get_recent_news(hours=24, limit=5000))
+        ingest_24h = self.db.count_recent_news(hours=24)
         quiet_note = "，市场平静无推送" if sig.hours_since_last_push >= 12 else ""
         title = "✅ 新闻监控日报 · 系统正常"
         message = (

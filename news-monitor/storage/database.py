@@ -321,6 +321,21 @@ class Database:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def count_recent_news(self, hours: int = 1) -> int:
+        """Count news captured in the last N hours — TIMEZONE-CORRECT.
+
+        captured_at is stored in LOCAL time, so the window must anchor on
+        datetime('now','localtime'), not bare datetime('now') (UTC). Using
+        UTC here silently returns 0 during the local-vs-UTC offset, which
+        made the watchdog false-report a stall while ingestion was healthy.
+        """
+        with self._get_conn() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) AS cnt FROM news "
+                "WHERE captured_at > datetime('now','localtime', ?)",
+                (f'-{hours} hours',)
+            ).fetchone()["cnt"]
+
     # ------------------------------------------------------------------
     # Training Docs CRUD
     # ------------------------------------------------------------------

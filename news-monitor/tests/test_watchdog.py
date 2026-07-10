@@ -60,6 +60,9 @@ class FakeDB:
             })
         return rows
 
+    def count_recent_news(self, hours=1):
+        return self._ingest_1h if hours <= 1 else self._ingest_24h
+
     def get_health_stats(self, hours=1):
         return self._health
 
