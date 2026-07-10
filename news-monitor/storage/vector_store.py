@@ -284,3 +284,37 @@ class VectorStore:
         except Exception as e:
             logger.error("Embedding failed: %s", e)
             return None
+
+    def embed_batch(self, texts: List[str]) -> Optional[List[List[float]]]:
+        """Embed many texts in ONE vectorized call.
+
+        SentenceTransformer.encode(list) is far faster than N separate calls
+        and — critically — lets callers encode each text ONCE instead of
+        re-encoding per pairwise comparison (avoids O(N^2) encoding).
+        """
+        if not self._model or not texts:
+            return None
+        try:
+            truncated = [(t or "")[:2000] for t in texts]
+            embeddings = self._model.encode(truncated, show_progress_bar=False)
+            return [e.tolist() for e in embeddings]
+        except Exception as e:
+            logger.error("Batch embedding failed: %s", e)
+            return None
+
+    @staticmethod
+    def cosine(vec_a, vec_b) -> float:
+        """Cosine similarity between two PRECOMPUTED vectors (no encoding)."""
+        if vec_a is None or vec_b is None:
+            return 0.0
+        try:
+            import numpy as np
+            a = np.array(vec_a)
+            b = np.array(vec_b)
+            na = float(np.linalg.norm(a))
+            nb = float(np.linalg.norm(b))
+            if na == 0 or nb == 0:
+                return 0.0
+            return round(float(np.dot(a, b)) / (na * nb), 4)
+        except Exception:
+            return 0.0

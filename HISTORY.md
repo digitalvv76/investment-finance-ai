@@ -1558,6 +1558,21 @@ _log_event_source_count: JOIN news→event_lines 查源数
 
 **当前状态**: V1生产健康运行(旧代码)。影子已撤下。看门狗代码完成+验证通过, 待修采集卡死后重部署。
 
+### 🔬 采集卡死 root cause + 修复 (systematic-debugging)
+
+**根因(已验证)**: `dedup.py` Tier 2.5 批内语义去重是 O(N²) — 每对 item 调 `pair_similarity`, 每次 fresh encode 两段文本(实测106-235ms/次)。156条冷启动批 → 156×155 = 24,180次encode × ~120ms ≈ **48分钟同步阻塞事件循环** → 零入库、后续tick全堵。V1旧代码无此段(P1/P3新加)。
+
+**证据链**: 隔离容器实测单次pair_similarity=119ms + 代码确认嵌套循环 + 单测计数 N=40→1560次encode(正好N(N-1)) = 铁证。
+
+**修复**:
+- `vector_store.py`: 新增 `embed_batch()`(一次向量化编码全部) + `cosine()`(纯向量, 不encode)
+- `dedup.py`: `filter_duplicates` 批前用 embed_batch 预编码一次入缓存; Tier 2.5 改用缓存向量的 cosine(`_cached_embed`), 彻底消除重复encode。O(N²)→O(N)
+- 新测试 `test_batch_dedup_is_linear_not_quadratic`(encode计数守卫)
+- **真容器验证: 156条 48分钟 → 5.4秒**。全量 410 passed / 0 failed
+- 记忆 [[dedup-silent-stall-on2]]
+
+**下一步**: 带此修复重部署影子(建议先 WATCHDOG_ALERTS_ENABLED=false 观察入库正常再开报警)。
+
 ---
 
 ## 2026-07-10T06:48+08:00 · 会话开始

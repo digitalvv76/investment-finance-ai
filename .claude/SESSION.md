@@ -8,10 +8,8 @@
 ## 📋 下一步 (需用户拍板部署方式)
 
 - ⚠️ **影子暂已撤下** (2026-07-10 事故后)。V1 生产已恢复健康、跑旧代码、数据完好。
-- 🔴 **重部署影子前必须先修「影子采集卡死」bug**:
-  - 现象: 采集器抓到156条 → `Heartbeat: 156 items` 聚合成功 → 但 `on_news_batch` 回调无任何管道日志、零入库、零报错 → `_pipeline.run()` 在某阶段卡死(最疑 IngestStage 的 ChromaDB/向量库语义去重查询挂起, 或 LLM 调用)
-  - 已确认非回调未注册(start() 跑完了 `News Monitor running`)
-  - 排查方向: 影子环境 ChromaDB/嵌入模型初始化、向量库 is_ready/is_semantic_duplicate 是否挂起
+- ✅ **「影子采集卡死」已修** (systematic-debugging): 根因 dedup Tier 2.5 批内语义去重 O(N²) 重复encode(156条≈48min阻塞事件循环)。修法 embed_batch预编码+缓存cosine, O(N²)→O(N), 真容器156条 48min→5.4s。410 tests绿。见 [[dedup-silent-stall-on2]]
+- 🚀 **下一步: 带修复重部署影子** — 建议先 `WATCHDOG_ALERTS_ENABLED=false` 观察入库正常(total_news增长)再开真报警, 然后跑对比
 - ✅ 已修的部署阻断(可复用): pids 150→512、watchdog.py入清单、relevance路径硬化、shadow挂memory:ro、--down只撤影子
 - 看门狗代码本身完成且验证通过, 随修复后重部署即可
 

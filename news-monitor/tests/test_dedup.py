@@ -145,3 +145,55 @@ class TestDedupManager:
     def test_empty_items(self, dedup):
         """Empty item list should return empty."""
         assert dedup.filter_duplicates([]) == []
+
+
+class TestBatchSemanticDedupPerformance:
+    """Root-cause guard: within-batch semantic dedup must encode each text
+    ONCE (O(N)), not re-encode per pair (O(N^2)).
+
+    Regression: a 156-item cold-start batch made ~12k pair_similarity calls,
+    each re-encoding via SentenceTransformer (~120ms), blocking the event
+    loop ~24 min → zero ingestion (the shadow "stall" bug, 2026-07-10).
+    """
+
+    class _FakeVS:
+        is_ready = True
+
+        def __init__(self):
+            self.embed_calls = 0
+
+        def _embed(self, text):
+            self.embed_calls += 1
+            return (text,)  # identity vector; distinct texts → not similar
+
+        def embed_batch(self, texts):
+            return [self._embed(t) for t in texts]
+
+        @staticmethod
+        def cosine(a, b):
+            return 1.0 if a == b else 0.0
+
+        def is_semantic_duplicate(self, text, threshold=0.9):
+            return False
+
+        def pair_similarity(self, a, b):  # the O(N^2) hot path (pre-fix)
+            self._embed(a)
+            self._embed(b)
+            return 0.0
+
+    def test_batch_dedup_is_linear_not_quadratic(self):
+        vs = self._FakeVS()
+        dedup = DedupManager(vector_store=vs)
+        N = 40
+        items = [
+            NewsItem(title=f"distinct alpha{i} bravo{i} charlie{i} delta{i}",
+                     url=f"https://x.com/{i}", source="T",
+                     content_snippet=f"body echo{i} foxtrot{i}")
+            for i in range(N)
+        ]
+        kept = dedup.filter_duplicates(items)
+        assert len(kept) == N  # all distinct → all kept
+        # O(N): each item's text encoded ~once. Pre-fix this was ~N^2 (1600+).
+        assert vs.embed_calls <= 3 * N, (
+            f"embed called {vs.embed_calls} times for N={N} — expected O(N), "
+            f"got quadratic (re-encoding per pair)")

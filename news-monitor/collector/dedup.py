@@ -73,7 +73,7 @@ class DedupManager:
     # ------------------------------------------------------------------
 
     def is_duplicate(self, item: NewsItem, existing_urls: set[str] = None,
-                     batch_items: list = None) -> bool:
+                     batch_items: list = None, embed_cache: dict = None) -> bool:
         """Check if this item is a duplicate.
 
         Returns True if the item should be skipped (already seen).
@@ -114,13 +114,17 @@ class DedupManager:
                     )
                     return True
 
-                # Semantic pre-check: pair similarity via vector store
+                # Semantic pre-check: cached-vector cosine (NO re-encoding).
+                # Each unique text is embedded once (pre-warmed batch cache);
+                # this comparison is a cheap dot product.
                 if self._vector_store and self._vector_store.is_ready:
                     accepted_text = (
                         f"{getattr(accepted, 'title', '') or ''} "
                         f"{getattr(accepted, 'content_snippet', '') or ''}"
                     )
-                    sim = self._vector_store.pair_similarity(item_text, accepted_text)
+                    v_item = self._cached_embed(item_text, embed_cache)
+                    v_acc = self._cached_embed(accepted_text, embed_cache)
+                    sim = self._vector_store.cosine(v_item, v_acc)
                     if sim >= self.SEMANTIC_THRESHOLD:
                         logger.debug(
                             "Dedup: batch semantic match (%.3f) — %s...",
@@ -185,14 +189,39 @@ class DedupManager:
         """
         # Reset batch tracking at the start of each batch
         self._batch_titles = []
+
+        # Pre-encode every item's text ONCE (one vectorized call). This kills
+        # the O(N^2) re-encoding that made large cold-start batches (156 items
+        # → ~24k encodes) block the event loop for tens of minutes.
+        embed_cache: dict[str, list] = {}
+        if self._vector_store and self._vector_store.is_ready:
+            texts = [f"{it.title or ''} {it.content_snippet or ''}" for it in items]
+            try:
+                vecs = self._vector_store.embed_batch(texts)
+                if vecs is not None:
+                    for t, v in zip(texts, vecs):
+                        embed_cache[t] = v
+            except Exception:
+                logger.debug("Dedup: batch pre-encode failed, falling back to lazy")
+
         new_items = []
         for item in items:
-            if not self.is_duplicate(item, existing_urls, batch_items=new_items):
+            if not self.is_duplicate(item, existing_urls, batch_items=new_items,
+                                     embed_cache=embed_cache):
                 new_items.append(item)
         skipped = len(items) - len(new_items)
         if skipped:
             logger.info("Dedup: skipped %d/%d duplicates (T1-3 + batch)", skipped, len(items))
         return new_items
+
+    def _cached_embed(self, text: str, embed_cache: dict | None):
+        """Fetch an embedding from the per-batch cache, encoding on miss."""
+        if embed_cache is not None and text in embed_cache:
+            return embed_cache[text]
+        vec = self._vector_store._embed(text[:2000])
+        if embed_cache is not None:
+            embed_cache[text] = vec
+        return vec
 
     # ------------------------------------------------------------------
     # Similarity helpers
