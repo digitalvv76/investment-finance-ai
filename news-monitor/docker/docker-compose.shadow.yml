@@ -33,10 +33,13 @@ services:
       - WEB_PORT=8081
       - DRY_RUN_PUSH=true
       - TZ=America/New_York
-      # Kill all push channels (override .env values)
-      - PUSHOVER_APP_TOKEN=
-      - PUSHOVER_USER_KEY=
-      - PUSHOVER_USER_KEY_2=
+      # Watchdog STILL pages the operator on a real fault, even though news
+      # pushes are silenced above — this is the interim protection for V1.
+      # (news pushes stay muted by DRY_RUN_PUSH in the dispatch stage.)
+      - WATCHDOG_ALERTS_ENABLED=true
+      # Kill Telegram; keep Pushover tokens (from .env) so the watchdog siren
+      # can reach the phone. News never reaches Pushover — DispatchStage
+      # short-circuits on DRY_RUN_PUSH before any channel is called.
       - TELEGRAM_BOT_TOKEN=
       - TELEGRAM_CHAT_ID=
       - TELEGRAM_CHAT_ID_2=

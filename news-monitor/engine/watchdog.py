@@ -29,7 +29,18 @@ from storage.models import HealthEvent
 
 logger = logging.getLogger(__name__)
 
-_DRY_RUN = os.environ.get("DRY_RUN_PUSH", "").lower() in ("1", "true", "yes")
+
+def _alerts_muted() -> bool:
+    """Whether watchdog alerts should be logged-only instead of really sent.
+
+    Watchdog alerts respect DRY_RUN_PUSH by default (shadow silence), BUT
+    WATCHDOG_ALERTS_ENABLED=true forces real alerts even under DRY_RUN — this
+    is how the shadow can still page the operator on a fault while its NEWS
+    pushes stay silent for the V1-vs-V2 comparison.
+    """
+    dry = os.environ.get("DRY_RUN_PUSH", "").lower() in ("1", "true", "yes")
+    forced = os.environ.get("WATCHDOG_ALERTS_ENABLED", "").lower() in ("1", "true", "yes")
+    return dry and not forced
 
 
 class HealthState(Enum):
@@ -214,7 +225,7 @@ class Watchdog:
     async def _fire_alert(self, verdict: Verdict) -> None:
         title = "🔴 新闻监控异常" if verdict.emergency else "🟠 新闻监控降级"
         message = f"{verdict.reason}\n\n请检查 ECS 容器 / 数据源 / LLM 服务。"
-        if _DRY_RUN:
+        if _alerts_muted():
             logger.info("DRY_RUN WOULD-ALERT | %s | %s", title, verdict.reason)
             return
         try:
@@ -242,7 +253,7 @@ class Watchdog:
             f"过去24h采集 {ingest_24h} 条，近1h {sig.ingest_1h} 条/时"
             f"{quiet_note}。管道存活，无需处理。"
         )
-        if _DRY_RUN:
+        if _alerts_muted():
             logger.info("DRY_RUN WOULD-HEARTBEAT | %s | %s", title, message)
             return True
         try:

@@ -205,3 +205,40 @@ class TestWatchdogHeartbeat:
         second = await wd.maybe_daily_heartbeat(datetime(2026, 7, 11, 14, 0))
         assert second is False
         assert len(disp.alerts) == 1
+
+
+class TestAlertMuting:
+    """DRY_RUN silences watchdog alerts UNLESS WATCHDOG_ALERTS_ENABLED forces them.
+
+    This is what lets the shadow page the operator on a fault while its news
+    pushes stay silent for the comparison.
+    """
+
+    @pytest.mark.asyncio
+    async def test_dry_run_mutes_alert(self, monkeypatch):
+        monkeypatch.setenv("DRY_RUN_PUSH", "true")
+        monkeypatch.delenv("WATCHDOG_ALERTS_ENABLED", raising=False)
+        db = FakeDB(ingest_1h=0)
+        disp = FakeDispatcher()
+        wd = Watchdog(db, disp, {"watchdog": {"consecutive_bad_threshold": 1}})
+        await wd.check(now_monotonic=0.0)
+        assert disp.alerts == []           # muted → log only
+
+    @pytest.mark.asyncio
+    async def test_forced_flag_alerts_despite_dry_run(self, monkeypatch):
+        monkeypatch.setenv("DRY_RUN_PUSH", "true")
+        monkeypatch.setenv("WATCHDOG_ALERTS_ENABLED", "true")
+        db = FakeDB(ingest_1h=0)
+        disp = FakeDispatcher()
+        wd = Watchdog(db, disp, {"watchdog": {"consecutive_bad_threshold": 1}})
+        await wd.check(now_monotonic=0.0)
+        assert len(disp.alerts) == 1       # forced → real send
+
+    @pytest.mark.asyncio
+    async def test_no_dry_run_alerts_normally(self, monkeypatch):
+        monkeypatch.delenv("DRY_RUN_PUSH", raising=False)
+        db = FakeDB(ingest_1h=0)
+        disp = FakeDispatcher()
+        wd = Watchdog(db, disp, {"watchdog": {"consecutive_bad_threshold": 1}})
+        await wd.check(now_monotonic=0.0)
+        assert len(disp.alerts) == 1       # production default → real send
