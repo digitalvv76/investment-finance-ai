@@ -1,53 +1,100 @@
 {
   "modules": {
     "engine/alert_dispatcher.py": {
-      "tests": ["tests/test_alert_dispatcher.py"],
-      "related_scripts": ["scripts/test_phone_alert.py"],
-      "also_tests": ["tests/test_watchdog.py"]
+      "tests": [
+        "tests/test_alert_dispatcher.py"
+      ],
+      "related_scripts": [
+        "scripts/test_phone_alert.py"
+      ],
+      "also_tests": [
+        "tests/test_watchdog.py"
+      ]
     },
     "engine/watchdog.py": {
-      "tests": ["tests/test_watchdog.py"],
+      "tests": [
+        "tests/test_watchdog.py"
+      ],
       "related_scripts": [],
-      "also_tests": ["tests/test_alert_dispatcher.py"]
+      "also_tests": [
+        "tests/test_alert_dispatcher.py"
+      ]
     },
     "engine/deep_lane.py": {
-      "tests": ["tests/test_deep_lane.py"],
-      "related_scripts": ["scripts/acceptance_test.py"],
-      "also_tests": ["tests/test_fast_lane.py"]
+      "tests": [
+        "tests/test_deep_lane.py"
+      ],
+      "related_scripts": [
+        "scripts/acceptance_test.py"
+      ],
+      "also_tests": [
+        "tests/test_fast_lane.py"
+      ]
     },
     "engine/fast_lane.py": {
-      "tests": ["tests/test_fast_lane.py"],
-      "related_scripts": ["scripts/acceptance_test.py"],
+      "tests": [
+        "tests/test_fast_lane.py"
+      ],
+      "related_scripts": [
+        "scripts/acceptance_test.py"
+      ],
       "also_tests": []
     },
     "engine/priority.py": {
-      "tests": ["tests/test_priority.py"],
+      "tests": [
+        "tests/test_priority.py"
+      ],
       "related_scripts": [],
-      "also_tests": ["tests/test_fast_lane.py", "tests/test_deep_lane.py"]
+      "also_tests": [
+        "tests/test_fast_lane.py",
+        "tests/test_deep_lane.py"
+      ]
     },
     "engine/strategic_detector.py": {
-      "tests": ["tests/test_strategic_detector.py"],
-      "related_scripts": ["scripts/score_training_cases.py", "scripts/backtest_training_docx.py"],
+      "tests": [
+        "tests/test_strategic_detector.py"
+      ],
+      "related_scripts": [
+        "scripts/score_training_cases.py",
+        "scripts/backtest_training_docx.py"
+      ],
       "also_tests": []
     },
     "engine/relevance.py": {
-      "tests": ["tests/test_impact_push.py"],
-      "related_scripts": ["scripts/score_all_events.py", "scripts/backtest_signal.py"],
+      "tests": [
+        "tests/test_impact_push.py"
+      ],
+      "related_scripts": [
+        "scripts/score_all_events.py",
+        "scripts/backtest_signal.py"
+      ],
       "also_tests": []
     },
     "engine/entity_extractor.py": {
-      "tests": ["tests/test_entity_extractor.py"],
-      "related_scripts": ["scripts/acceptance_test.py"],
+      "tests": [
+        "tests/test_entity_extractor.py"
+      ],
+      "related_scripts": [
+        "scripts/acceptance_test.py"
+      ],
       "also_tests": []
     },
     "engine/impact_evaluator.py": {
-      "tests": ["tests/test_impact_evaluator.py"],
-      "related_scripts": ["scripts/acceptance_test.py"],
+      "tests": [
+        "tests/test_impact_evaluator.py"
+      ],
+      "related_scripts": [
+        "scripts/acceptance_test.py"
+      ],
       "also_tests": []
     },
     "engine/impact_collector.py": {
-      "tests": ["tests/test_impact_push.py"],
-      "related_scripts": ["scripts/calibrate_thresholds.py"],
+      "tests": [
+        "tests/test_impact_push.py"
+      ],
+      "related_scripts": [
+        "scripts/calibrate_thresholds.py"
+      ],
       "also_tests": []
     },
     "engine/impact_learner.py": {
@@ -56,32 +103,44 @@
       "also_tests": []
     },
     "engine/sentiment.py": {
-      "tests": ["tests/test_sentiment.py"],
+      "tests": [
+        "tests/test_sentiment.py"
+      ],
       "related_scripts": [],
       "also_tests": []
     },
     "engine/cluster.py": {
-      "tests": ["tests/test_cluster.py"],
+      "tests": [
+        "tests/test_cluster.py"
+      ],
       "related_scripts": [],
       "also_tests": []
     },
     "engine/curator.py": {
-      "tests": ["tests/test_curator.py"],
+      "tests": [
+        "tests/test_curator.py"
+      ],
       "related_scripts": [],
       "also_tests": []
     },
     "engine/learner.py": {
-      "tests": ["tests/test_learner.py"],
+      "tests": [
+        "tests/test_learner.py"
+      ],
       "related_scripts": [],
       "also_tests": []
     },
     "engine/event_matcher.py": {
-      "tests": ["tests/test_event_matcher.py"],
+      "tests": [
+        "tests/test_event_matcher.py"
+      ],
       "related_scripts": [],
       "also_tests": []
     },
     "engine/content_filter.py": {
-      "tests": ["tests/test_content_filter.py"],
+      "tests": [
+        "tests/test_content_filter.py"
+      ],
       "related_scripts": [],
       "also_tests": []
     },
@@ -96,19 +155,31 @@
       "also_tests": []
     },
     "engine/event_escalator.py": {
-      "tests": ["tests/test_event_escalator.py"],
-      "related_scripts": ["scripts/migrate_event_escalation.py"],
-      "also_tests": ["tests/test_event_escalation_e2e.py"]
+      "tests": [
+        "tests/test_event_escalator.py"
+      ],
+      "related_scripts": [
+        "scripts/migrate_event_escalation.py"
+      ],
+      "also_tests": [
+        "tests/test_event_escalation_e2e.py"
+      ]
     },
     "engine/market_snapshot.py": {
       "tests": [],
       "related_scripts": [],
-      "also_tests": ["tests/test_event_escalator.py"]
+      "also_tests": [
+        "tests/test_event_escalator.py"
+      ]
     },
     "engine/event_driven_evaluator.py": {
-      "tests": ["tests/test_event_driven_evaluator.py"],
+      "tests": [
+        "tests/test_event_driven_evaluator.py"
+      ],
       "related_scripts": [],
-      "also_tests": []
+      "also_tests": [
+        "tests/test_watchlist_safety_net.py"
+      ]
     }
   }
 }

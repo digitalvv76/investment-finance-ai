@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 class AlertLevel(Enum):
     CRITICAL = "critical"
     IMPORTANT = "important"
+    NOTABLE = "notable"      # silent Telegram only (watchlist safety net) — never phone
     NORMAL = "normal"
 
 

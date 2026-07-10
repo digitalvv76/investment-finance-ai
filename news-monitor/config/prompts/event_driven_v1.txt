@@ -20,7 +20,12 @@
 5. **极端空头挤压/模因引爆**：高做空比例叠加散户抱团或知名多头逼空声明。关键词如"short squeeze""WallStreetBets""memes""Roaring Kitty"等。
 
 如果新闻相关但**不触发任何催化剂**，返回：
-{"is_event": false, "reason": "no catalyst triggered"}
+{"is_event": false, "notable": false, "ticker_hint": [], "reason": "no catalyst triggered"}
+
+**在这条"无催化剂"返回里，额外判定 `notable`（关注股安全网用）**：
+- `notable = true` 当且仅当：新闻涉及某上市公司**实质性、可能驱动股价的具体动作**——如分析师重大评级/目标价调整、板块异动传导到个股、重大合同/大客户、显著财报意外、明显放量涨跌、具体产品/运营里程碑。**宁缺毋滥，拿不准判 false。**
+- `notable = false`：顺带提及、旧闻复述、泛泛观点/估值随笔、纯股价描述无催化剂、纯宏观无个股映射。
+- `ticker_hint`：**读全文后**准确提取美股代码数组（Teva→["TEVA"] 而非 ARM；El Nino→[]）。宁缺毋滥、禁止臆测子串。notable=true 时必须给出关联的关注标的代码。
 
 ## 第三步：强度研判与板块标注（仅触发催化剂时）
 当匹配到至少一类催化剂后，按以下要求生成完整信息：

@@ -35,15 +35,22 @@ class DispatchStage:
 
         for item in items:
             decision = item.decision
-            disable = decision.alert_level == AlertLevel.NORMAL
+            level = decision.alert_level
+
+            # NORMAL = not worth a push. Skip ALL push channels (dashboard/DB
+            # still have it). This is the "少而精" tightening: non-events no
+            # longer flood Telegram. NOTABLE (watchlist safety net) → silent TG.
+            if level == AlertLevel.NORMAL:
+                continue
+            silent = level == AlertLevel.NOTABLE
 
             if _DRY_RUN:
-                self._log_push(item, decision, disable)
+                self._log_push(item, decision, silent)
                 continue
 
             for channel in self._channels:
                 try:
-                    success = await channel.send(item, decision, disable_notification=disable)
+                    success = await channel.send(item, decision, disable_notification=silent)
                     if success:
                         logger.debug("DISPATCH: %d sent to %s", item.id, channel.name)
                 except Exception:
@@ -55,14 +62,16 @@ class DispatchStage:
         return items  # Items always pass through
 
     @staticmethod
-    def _log_push(item: PipelineItem, decision, disable: bool) -> None:
-        """Log what would have been pushed in dry-run mode."""
-        if disable:
-            return
+    def _log_push(item: PipelineItem, decision, silent: bool) -> None:
+        """Log what would have been pushed in dry-run mode.
+
+        NORMAL items never reach here (skipped upstream). NOTABLE logs as a
+        silent would-push so the shadow comparison can see safety-net hits.
+        """
         d = decision
         logger.info(
-            "DRY_RUN WOULD-PUSH | level=%s intensity=%d | %s | tickers=%s | signal=%s | risk=%s",
-            d.alert_level.value, d.intensity,
+            "DRY_RUN WOULD-PUSH | level=%s%s intensity=%d | %s | tickers=%s | signal=%s | risk=%s",
+            d.alert_level.value, " (silent)" if silent else "", d.intensity,
             (item.title or "")[:80],
             d.ticker_hint, d.headline_signal, d.risk_snapshot,
         )

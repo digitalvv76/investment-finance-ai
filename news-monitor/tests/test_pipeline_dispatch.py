@@ -62,3 +62,45 @@ class TestDispatchStage:
         stage = DispatchStage(channels=[])
         result = await stage.process([])
         assert result == []
+
+
+class _RecordingChannel:
+    name = "rec"
+    def __init__(self):
+        self.calls = []  # (id, level, disable_notification)
+    async def send(self, item, decision, disable_notification=False):
+        self.calls.append((item.id, decision.alert_level, disable_notification))
+        return True
+
+
+class TestDispatchRouting:
+    """Safety-net routing: NORMAL=no push, NOTABLE=silent, IMPORTANT=loud."""
+
+    @pytest.mark.asyncio
+    async def test_normal_is_not_pushed(self):
+        ch = _RecordingChannel()
+        stage = DispatchStage(channels=[ch])
+        items = [PipelineItem(id=1, title="quiet", source="s", url="http://x/1",
+                              decision=DispatchDecision(alert_level=AlertLevel.NORMAL))]
+        await stage.process(items)
+        assert ch.calls == []  # NORMAL skipped entirely
+
+    @pytest.mark.asyncio
+    async def test_notable_is_sent_silently(self):
+        ch = _RecordingChannel()
+        stage = DispatchStage(channels=[ch])
+        items = [PipelineItem(id=2, title="tracked notable", source="s", url="http://x/2",
+                              decision=DispatchDecision(alert_level=AlertLevel.NOTABLE))]
+        await stage.process(items)
+        assert len(ch.calls) == 1
+        assert ch.calls[0][2] is True  # disable_notification=True (silent)
+
+    @pytest.mark.asyncio
+    async def test_important_is_sent_loud(self):
+        ch = _RecordingChannel()
+        stage = DispatchStage(channels=[ch])
+        items = [PipelineItem(id=3, title="big", source="s", url="http://x/3",
+                              decision=DispatchDecision(alert_level=AlertLevel.IMPORTANT))]
+        await stage.process(items)
+        assert len(ch.calls) == 1
+        assert ch.calls[0][2] is False  # loud

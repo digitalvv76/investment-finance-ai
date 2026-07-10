@@ -87,11 +87,23 @@ class EvaluateStage:
                 logger.exception(
                     "EVALUATE: failed to persist assessment for #%d", item.id)
 
-        # If event-driven ran but said "no push", use its filter reason
+        # If event-driven ran but said "no push": default NORMAL (no push),
+        # BUT rescue a NOTABLE action on a tracked name → NOTABLE (silent TG).
         if event_assessment is not None:
+            from engine.event_driven_evaluator import watchlist_safety_net
+            from engine.relevance import get_tracked_tickers
+            rescued = watchlist_safety_net(event_assessment, get_tracked_tickers())
+            level = AlertLevel.NOTABLE if rescued else AlertLevel.NORMAL
+            reason = event_assessment.filter_reason or "no catalyst triggered"
+            if rescued:
+                reason = ("watchlist_safety_net: notable action on "
+                          + ",".join(event_assessment.ticker_hint))
+                logger.info("EVALUATE: safety net → silent TG: %s — %s",
+                            ",".join(event_assessment.ticker_hint),
+                            (item.title or "")[:60])
             item.decision = DispatchDecision(
-                alert_level=AlertLevel.NORMAL,
-                alert_reason=event_assessment.filter_reason or "no catalyst triggered",
+                alert_level=level,
+                alert_reason=reason,
                 filter_reason=event_assessment.filter_reason,
                 headline_signal=event_assessment.headline_signal,
                 risk_snapshot=event_assessment.risk_snapshot,

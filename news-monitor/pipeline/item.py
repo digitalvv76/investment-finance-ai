@@ -9,6 +9,7 @@ from enum import Enum
 class AlertLevel(str, Enum):
     CRITICAL = "critical"
     IMPORTANT = "important"
+    NOTABLE = "notable"      # silent Telegram only (watchlist safety net) — never phone
     NORMAL = "normal"
 
 

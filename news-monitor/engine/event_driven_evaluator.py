@@ -46,6 +46,7 @@ class EventAssessment:
     headline_signal: str = ""                                # Chinese trading logic
     ticker_hint: list[str] = field(default_factory=list)
     risk_snapshot: str = ""                                  # Chinese risk point
+    notable: bool = False                                    # non-event but substantive action (safety-net)
     filter_reason: str = ""                                  # why filtered (non-event)
     raw_json: str = ""                                       # raw LLM response for audit
 
@@ -82,6 +83,7 @@ class EventAssessment:
             result.headline_signal = str(data.get("headline_signal", "")).strip()
             result.ticker_hint = _parse_str_list(data.get("ticker_hint", []))
             result.risk_snapshot = str(data.get("risk_snapshot", "")).strip()
+            result.notable = bool(data.get("notable", False))
             result.filter_reason = str(data.get("filter_reason", data.get("reason", ""))).strip()
         except (json.JSONDecodeError, TypeError, ValueError) as e:
             logger.warning("EventDrivenEval: JSON parse failed — %s", e)
@@ -90,9 +92,25 @@ class EventAssessment:
         return result
 
 
+def watchlist_safety_net(event_assessment, tracked_tickers: set[str]) -> bool:
+    """Non-event news carrying a NOTABLE action on a tracked ticker → rescue.
+
+    Pure function, no side effects (see SPEC-safety-net-pipeline.md §6). Returns
+    True iff the sentinel said NOT a hard event, BUT flagged a substantive action
+    (notable) on a name the user tracks (watchlist ∪ portfolio). Such items get a
+    SILENT Telegram — never the phone.
+    """
+    ea = event_assessment
+    if ea is None or ea.is_event or not getattr(ea, "notable", False):
+        return False
+    hint = {t.strip().upper() for t in (ea.ticker_hint or []) if t and t.strip()}
+    return bool(hint & tracked_tickers)
+
+
 # ---------------------------------------------------------------------------
 # Evaluator
 # ---------------------------------------------------------------------------
+
 
 
 class EventDrivenEvaluator:

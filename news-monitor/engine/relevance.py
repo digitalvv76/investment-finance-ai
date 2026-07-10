@@ -287,6 +287,14 @@ def _get_watchlist() -> set[str]:
     return _watchlist
 
 
+def get_tracked_tickers() -> set[str]:
+    """Tickers the user tracks = watchlist ∪ portfolio, deduped + UPPERCASED.
+
+    Used by the watchlist safety net to match against LLM ticker_hint.
+    """
+    return {t.upper() for t in (_get_watchlist() | _get_portfolio())}
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Dimension 1 — Timeliness (时效性)      0.0–1.0
 # ═══════════════════════════════════════════════════════════════════════════
