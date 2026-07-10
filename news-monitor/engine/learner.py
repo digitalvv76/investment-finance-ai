@@ -188,14 +188,14 @@ class Learner:
             pushed = conn.execute(
                 """SELECT COUNT(*) as cnt FROM news
                    WHERE status IN ('fast_pushed', 'deep_pushed')
-                   AND captured_at > datetime('now', '-3 days')"""
+                   AND datetime(captured_at) > datetime('now','localtime', '-3 days')"""
             ).fetchone()
             total_pushed = pushed["cnt"] if pushed else 0
 
             # User engagement (any feedback)
             engaged = conn.execute(
                 """SELECT COUNT(*) as cnt FROM feedback
-                   WHERE timestamp > datetime('now', '-3 days')"""
+                   WHERE datetime(timestamp) > datetime('now','localtime', '-3 days')"""
             ).fetchone()
             total_engaged = engaged["cnt"] if engaged else 0
 

@@ -104,13 +104,9 @@ class NewsBot:
                           greed_index: int = 50,
                           key_points: str = "",
                           risk_flags: str = ""):
-        """Push a fast lane alert — English original + Chinese translation.
+        """Push a fast lane alert — Chinese only.
 
-        The English message includes analyst note, ticker CN names, and
-        sector ETFs.  The Chinese message is a translation of the title
-        followed by the same analyst note and ETF line.
-
-        Pushes to ALL registered chat_ids (primary + TELEGRAM_CHAT_ID_2).
+        Pushes to ALL registered chat_ids (primary + TELEGRAM_CHAT_ID_2/_3).
         """
         if not self._app:
             logger.warning("Bot not initialized, can't push")
@@ -126,33 +122,14 @@ class NewsBot:
         tickers = item.get('tickers_found', '')
         macro = item.get('macro_tags', '')
 
-        # --- English alert (includes analyst note + impact + ETFs) ---
-        en_text = format_fast_alert(item, analyst_note=analyst_note,
-                                    event_category=event_category,
-                                    impact_score=impact_score,
-                                    confidence=confidence)
-        keyboard = build_feedback_keyboard(item['id'])
+        keyboard = build_feedback_keyboard(item['id'], url)
 
-        for chat_id in chat_ids:
-            try:
-                await self._app.bot.send_message(
-                    chat_id=chat_id,
-                    text=en_text,
-                    reply_markup=keyboard,
-                    disable_web_page_preview=False,
-                    disable_notification=disable_notification,
-                )
-                logger.info(f"Alert pushed (EN) → chat {chat_id}: {title[:50]}...")
-            except Exception as e:
-                logger.error(f"Push failed (EN) → chat {chat_id}: {e}")
-                continue  # Don't block other chat_ids
-
-        # --- Chinese translation (skip if already Chinese) ---
-        cn_title = None
+        # --- Chinese title ---
         if self._is_chinese(title):
-            logger.debug("Title already Chinese, skipping translation: %s", title[:50])
+            cn_title = title
         else:
             cn_title = await self._translator.translate(title)
+
         if cn_title:
             cn_parts = [f"\U0001f1e8\U0001f1f3 {cn_title}"]
 
@@ -163,7 +140,7 @@ class NewsBot:
                     imp_line += f" | 置信度: {confidence}%"
                 cn_parts.append(imp_line)
 
-            # Analyst note (same as EN version — already in Chinese)
+            # Analyst note
             note = analyst_note or item.get('analyst_note', '')
             if note:
                 cn_parts.append(f"\n{note}")
@@ -174,19 +151,18 @@ class NewsBot:
             if etf_line:
                 cn_parts.append(f"\n{etf_line}")
 
-            if url:
-                cn_parts.append(f"\U0001f517 {url}")
-
             for chat_id in chat_ids:
                 try:
                     await self._app.bot.send_message(
                         chat_id=chat_id,
                         text="\n".join(cn_parts),
+                        reply_markup=keyboard,
                         disable_web_page_preview=False,
                         disable_notification=disable_notification,
                     )
+                    logger.info(f"Alert pushed → chat {chat_id}: {title[:50]}...")
                 except Exception as e:
-                    logger.error(f"Push failed (CN) → chat {chat_id}: {e}")
+                    logger.error(f"Push failed → chat {chat_id}: {e}")
 
     async def push_deep_analysis(self, item: dict):
         """Push deep analysis as a follow-up message to all registered chats."""
@@ -209,30 +185,40 @@ class NewsBot:
                 logger.error(f"Deep analysis push failed → chat {chat_id}: {e}")
 
     def _get_chat_ids(self) -> list[int]:
-        """Get all authorized chat IDs (primary from DB + secondary/tertiary from env)."""
+        """Get all authorized chat IDs.
+
+        Priority:
+        1. TELEGRAM_CHAT_ID env var — locked primary, never overwritten
+        2. Auto-detected (DB) — fallback / additional user
+        3. TELEGRAM_CHAT_ID_2 / _3 — explicit extras
+        """
         ids: list[int] = []
-        # Primary: auto-detected + stored in DB
+
+        # Locked primary: set in .env, never rotates
+        env_primary = os.environ.get("TELEGRAM_CHAT_ID", "")
+        if env_primary:
+            try:
+                ids.append(int(env_primary))
+            except ValueError:
+                logger.warning("Invalid TELEGRAM_CHAT_ID: %s", env_primary)
+
+        # Auto-detected: whoever messaged the bot most recently (DB)
         val = self.db.get_preference("telegram_chat_id")
         if val:
-            ids.append(int(val))
-        # Secondary: explicitly set in .env (mirrors PUSHOVER_USER_KEY_2)
-        env2 = os.environ.get("TELEGRAM_CHAT_ID_2", "")
-        if env2:
-            try:
-                id2 = int(env2)
-                if id2 not in ids:
-                    ids.append(id2)
-            except ValueError:
-                logger.warning("Invalid TELEGRAM_CHAT_ID_2: %s", env2)
-        # Tertiary: third Telegram account
-        env3 = os.environ.get("TELEGRAM_CHAT_ID_3", "")
-        if env3:
-            try:
-                id3 = int(env3)
-                if id3 not in ids:
-                    ids.append(id3)
-            except ValueError:
-                logger.warning("Invalid TELEGRAM_CHAT_ID_3: %s", env3)
+            db_id = int(val)
+            if db_id not in ids:
+                ids.append(db_id)
+
+        # Secondary / tertiary: explicit extras
+        for key in ("TELEGRAM_CHAT_ID_2", "TELEGRAM_CHAT_ID_3"):
+            env_val = os.environ.get(key, "")
+            if env_val:
+                try:
+                    eid = int(env_val)
+                    if eid not in ids:
+                        ids.append(eid)
+                except ValueError:
+                    logger.warning("Invalid %s: %s", key, env_val)
         return ids
 
     def set_chat_id(self, chat_id: int):

@@ -329,15 +329,14 @@ class Database:
     def count_recent_news(self, hours: int = 1) -> int:
         """Count news captured in the last N hours — TIMEZONE-CORRECT.
 
-        captured_at is stored in LOCAL time, so the window must anchor on
-        datetime('now','localtime'), not bare datetime('now') (UTC). Using
-        UTC here silently returns 0 during the local-vs-UTC offset, which
-        made the watchdog false-report a stall while ingestion was healthy.
+        captured_at is stored in LOCAL time with isoformat() 'T' separator,
+        so the window MUST wrap the column in datetime() (normalises T→space)
+        AND anchor on localtime. Missing either silently skews the count.
         """
         with self._get_conn() as conn:
             return conn.execute(
                 "SELECT COUNT(*) AS cnt FROM news "
-                "WHERE captured_at > datetime('now','localtime', ?)",
+                "WHERE datetime(captured_at) > datetime('now','localtime', ?)",
                 (f'-{hours} hours',)
             ).fetchone()["cnt"]
 
@@ -529,7 +528,7 @@ class Database:
             # count_recent_news). Bare datetime('now') (UTC) silently undercounts.
             total = conn.execute(
                 "SELECT COUNT(*) as cnt FROM impact_assessments "
-                "WHERE created_at > datetime('now','localtime', ?)",
+                "WHERE datetime(created_at) > datetime('now','localtime', ?)",
                 (f'-{hours} hours',)
             ).fetchone()["cnt"]
             # Only REAL errors count against success rate. Exclude the watchdog's
@@ -537,7 +536,7 @@ class Database:
             # watchdog pollutes its own success metric → false 'degraded'.
             errors = conn.execute(
                 "SELECT COUNT(*) as cnt FROM health_events "
-                "WHERE created_at > datetime('now','localtime', ?) "
+                "WHERE datetime(created_at) > datetime('now','localtime', ?) "
                 "AND event_type NOT LIKE 'watchdog_%'",
                 (f'-{hours} hours',)
             ).fetchone()["cnt"]
@@ -561,7 +560,7 @@ class Database:
         """Delete news and feedback older than `days`. Returns deleted count."""
         with self._get_conn() as conn:
             c = conn.execute(
-                "DELETE FROM news WHERE captured_at < datetime('now', ?)",
+                "DELETE FROM news WHERE datetime(captured_at) < datetime('now','localtime', ?)",
                 (f'-{days} days',),
             )
             deleted = c.rowcount

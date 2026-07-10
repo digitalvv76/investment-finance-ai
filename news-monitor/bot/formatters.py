@@ -476,14 +476,15 @@ def _translate_macro_tags(macro_tags: str) -> str:
 
 
 # Inline keyboard markup helpers (already Chinese)
-def build_feedback_keyboard(news_id: int) -> dict:
+def build_feedback_keyboard(news_id: int, url: str = "") -> dict:
     """Build inline keyboard with Chinese feedback buttons.
 
     Row 1: Content quality
     Row 2: Prediction accuracy
     Row 3: Deep analysis
+    Row 4: Original article link (if url provided)
     """
-    return {
+    keyboard = {
         'inline_keyboard': [
             [
                 {'text': '📰 内容优质', 'callback_data': f'content_good:{news_id}'},
@@ -497,3 +498,8 @@ def build_feedback_keyboard(news_id: int) -> dict:
             ]
         ]
     }
+    if url:
+        keyboard['inline_keyboard'].append([
+            {'text': '🔗 原文链接', 'url': url},
+        ])
+    return keyboard
