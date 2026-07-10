@@ -1335,3 +1335,11 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 - **TDD**：先写失败测试 → 实现 → 绿。新增 `tests/test_watchlist_safety_net.py`；registry-mapped 70 passed。
 - **真实 LLM 端到端验收**（`scripts/accept_watchlist_safety_net.py`）5/5 PASS：特斯拉 PT hike→fire(TSLA)；MRVL surge→fire；El Nino→ticker=[] 不 fire（ARM 假阳性已消失）；Teva→正确标 TEVA 且 notable=false 不 fire；体育→不 fire。
 - 待续：部署 ECS + 现场确认真实 fresh 新闻触发静音 TG。
+
+### 关注列表全量扩充（21→74 只）
+- 用户提供真实关注池 107+ 只 → 整理出 74 只**美股/ETF**（安全网/哨兵能匹配的）写入 `.claude/memory/watchlist-state.md`
+- 剔除非美股（再鼎09688/三花/兆威/中创/石川岛/Sivers）、未上市（Cerebras/智谱/MINIMAX/SpaceX本体/Figma前）、存疑代码（GTPR/LQAI/AIZN/Dynamix）
+- **纠错**：Tempus AI = TEM 非 TMUS(T-Mobile)
+- 用 tradingview_quote 核实 CRWV/GLXY/NNE/NVTS/SERV/BTDR 等真实存在
+- 容器经 volume 挂载 `../../.claude/memory` 读此文件 → `deploy.sh` FILES 加入 watchlist/portfolio-state.md，部署需重启容器清 `_watchlist` 缓存
+- 本地解析验证：74 tickers 无误标
