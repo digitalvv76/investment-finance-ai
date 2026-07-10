@@ -1583,6 +1583,20 @@ _log_event_source_count: JOIN news→event_lines 查源数
 
 **当前**: V1 生产 = 修复后的 V2 代码, 健康运行, 看门狗上线(真心跳+故障警笛)。影子已撤。待议: V1 跑 V2 是否为期望终态。
 
+### 🧹 方案A: V1 换成 clean main + 修看门狗三个时区/自污染假象
+
+**用户选方案A**(保持V2, 但把V1的"scp拼盘"换成干净测试过的main)。
+
+- 安全网: `docker tag docker-news-monitor:rollback-20260710`(可秒回)
+- 勘查: ECS `docker-compose.yml` 与main差84行=ECS专属配置**不能覆盖**;源码diff大部分是CRLF换行噪音
+- 部署: `git checkout origin/main -- <源码目录>` 归一化为clean main(LF), **保留 docker/ .env config/*.yaml**, 重建V1
+- **连环修看门狗3个假象**(否则会误发警笛到手机):
+  1. 假stalled: `get_recent_news` 用 `datetime('now')`=UTC 比本地时间 captured_at → ingest恒0。新增 `count_recent_news(localtime)`。
+  2. 假degraded-TZ: `get_health_stats` 同样UTC → assessments少算(5 vs 21)。改localtime。
+  3. 假degraded-自污染: 看门狗每次体检写 `watchdog_*` 到 health_events, 却被 get_health_stats 当"错误" → 成功率自己拖低。排除 `event_type LIKE 'watchdog_%'`。
+- **V1实测验证**: state=healthy, ingest_1h=15, success_rate=100%, errors=0, 192条批25s无卡死, 数据完好。全量 **411 passed**。
+- ⚠️ 遗留: captured_at/created_at 本地时间存储 vs 查询时区不一致是系统性隐患([[db-captured-at-timezone]]), 已修看门狗关键路径, 其他查询待排查。
+
 ---
 
 ## 2026-07-10T06:48+08:00 · 会话开始

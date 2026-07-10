@@ -9,8 +9,9 @@
 
 - ⚠️ **影子暂已撤下** (2026-07-10 事故后)。V1 生产已恢复健康、跑旧代码、数据完好。
 - ✅ **「影子采集卡死」已修** (systematic-debugging): 根因 dedup Tier 2.5 批内语义去重 O(N²) 重复encode(156条≈48min阻塞事件循环)。修法 embed_batch预编码+缓存cosine, O(N²)→O(N), 真容器156条 48min→5.4s。410 tests绿。见 [[dedup-silent-stall-on2]]
-- 🚀 **下一步: 带修复重部署影子** — 建议先 `WATCHDOG_ALERTS_ENABLED=false` 观察入库正常(total_news增长)再开真报警, 然后跑对比
-- ⚠️ **V1 已意外变 V2 代码**(--down事故恢复时重建): 已给 V1 打去重补丁(embed_batch), V1 healthy+看门狗上线。**待议: V1 跑V2是否为期望终态**(保持 / 回滚真旧代码)。V1 dedup 已修, 但其余 V2 代码未经影子对比验证。
+- ✅ **方案A 已执行**: V1 换成 clean main(git checkout源码, 保留ECS compose/.env), 重建。修看门狗3个时区/自污染假象(count_recent_news/get_health_stats localtime + 排除watchdog_)。V1实测 state=healthy/ingest15/success100%, 411 tests绿。回滚镜像 docker-news-monitor:rollback-20260710。
+- 📊 **下一步: 用户观察 V1 真实推送 1-2 天**做验证(方案A的验证环节)。看门狗在线会报平安/故障。
+- ⚠️ 遗留系统性隐患: captured_at/created_at 本地存储 vs 查询时区不一致([[db-captured-at-timezone]]), 已修看门狗路径, 其他查询(如digest/api)待排查。
 - ✅ 已修的部署阻断(可复用): pids 150→512、watchdog.py入清单、relevance路径硬化、shadow挂memory:ro、--down只撤影子
 - 看门狗代码本身完成且验证通过, 随修复后重部署即可
 
