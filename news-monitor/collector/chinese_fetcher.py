@@ -221,7 +221,6 @@ class ChineseNewsFetcher:
                 content_snippet=content[:500],
                 published_at=pub_dt,
                 captured_at=datetime.now(),
-                tickers_found=_detect_tickers_from_text(title, content),
             ))
         return items
 
