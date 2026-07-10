@@ -16,6 +16,7 @@ watchdog:
   consecutive_bad_threshold: 2      # require N bad checks in a row before siren (anti-flap)
   alert_cooldown_seconds: 3600      # min gap between repeat fault alerts (1h)
   heartbeat_hour: 8                 # local hour to send the daily "still alive" report
+  startup_grace_seconds: 300        # warmup before first check (empty DB on cold start ≠ stall)
 
 fast_lane:
   multi_source_count: 3        # sources reporting same event

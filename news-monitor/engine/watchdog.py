@@ -133,6 +133,7 @@ class Watchdog:
         self._consecutive_threshold = int(cfg.get("consecutive_bad_threshold", 2))
         self._cooldown = int(cfg.get("alert_cooldown_seconds", 3600))       # 1h
         self._heartbeat_hour = int(cfg.get("heartbeat_hour", 8))            # local hour
+        self._startup_grace = int(cfg.get("startup_grace_seconds", 300))   # 5 min warmup
         self._running = False
 
         # State for debounce / cooldown / once-a-day heartbeat
@@ -267,9 +268,14 @@ class Watchdog:
     async def run_loop(self) -> None:
         self._running = True
         logger.info(
-            "Watchdog started — interval=%ds, floor=%d/h, siren after %d consecutive",
-            self._interval, self._floor, self._consecutive_threshold,
+            "Watchdog started — interval=%ds, floor=%d/h, siren after %d consecutive, grace=%ds",
+            self._interval, self._floor, self._consecutive_threshold, self._startup_grace,
         )
+        # Startup grace: a fresh container has an empty DB (ingest=0). Wait for
+        # collectors to warm up before the first judgment, else cold start
+        # looks like a stall.
+        if self._startup_grace > 0:
+            await asyncio.sleep(self._startup_grace)
         while self._running:
             try:
                 verdict = await self.check()

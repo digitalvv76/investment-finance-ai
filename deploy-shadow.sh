@@ -92,6 +92,7 @@ FILES=(
     "news-monitor/collector/api_fetcher.py"
     "news-monitor/collector/playwright_fetcher.py"
     # Config
+    "news-monitor/config/loader.py"
     "news-monitor/config/sources.yaml"
     "news-monitor/config/settings.yaml"
     "news-monitor/config/keywords.yaml"
