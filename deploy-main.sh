@@ -34,6 +34,19 @@ SRC_PATHS=(
   news-monitor/main.py news-monitor/config/prompts news-monitor/requirements.txt
 )
 
+# ── UptimeRobot：部署期间自动暂停监控，消除容器重建 1-2min blip 误报 ──────
+# 需 .env 的 UPTIMEROBOT_API_KEY (Main API key)；无则静默跳过（key-guard）。
+# 监控 id 见 getMonitors（当前 47.76.50.77:8080/health = 803451600）。
+# trap EXIT 保证无论部署成败，退出时都恢复——绝不把监控留在暂停态。
+_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+UR_KEY="$(grep -s '^UPTIMEROBOT_API_KEY=' "${_SCRIPT_DIR}/.env" | cut -d= -f2- | tr -d '\r' || true)"
+UR_MID="803451600"
+UR_PAUSED=false
+_ur() { curl -s -m 12 -X POST "https://api.uptimerobot.com/v2/editMonitor" -d "api_key=${UR_KEY}&id=${UR_MID}&status=$1" >/dev/null 2>&1 || true; }
+ur_pause()  { [ -n "$UR_KEY" ] || { warn "     (UptimeRobot 未配置 API key，跳过监控暂停)"; return 0; }; _ur 0; UR_PAUSED=true; info "     UptimeRobot 监控已暂停 (id=${UR_MID})——部署期间不误报"; }
+ur_resume() { [ "$UR_PAUSED" = true ] && { _ur 1; info "     UptimeRobot 监控已恢复"; }; return 0; }
+trap ur_resume EXIT
+
 # ── 0. 前置：本地 main 已推送？ ─────────────────────────────────────────
 info "0/5  前置检查"
 echo "     本地 HEAD: $(git log -1 --oneline)"
@@ -44,6 +57,7 @@ if ! ssh -o ConnectTimeout=6 -o BatchMode=yes "$ECS_HOST" "echo ok" &>/dev/null;
   err "SSH 不通 ECS"; exit 1
 fi
 info "     SSH: OK"
+ur_pause
 
 # ── 1. 打回滚镜像（固化习惯）────────────────────────────────────────────
 info "1/5  打回滚镜像 ${ROLLBACK_TAG}"
