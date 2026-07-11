@@ -103,7 +103,7 @@
     },
     "engine/deep_lane.py": {
       "tests": ["tests/test_deep_lane.py"],
-      "related_scripts": ["scripts/acceptance_test.py"]
+      "related_scripts": []
     },
     "engine/entity_extractor.py": {
       "tests": ["tests/test_entity_extractor.py"],

@@ -25,9 +25,7 @@
         "tests/test_deep_lane.py",
         "tests/test_deep_analysis_grounding.py"
       ],
-      "related_scripts": [
-        "scripts/acceptance_test.py"
-      ],
+      "related_scripts": [],
       "also_tests": [
         "tests/test_fast_lane.py"
       ]
