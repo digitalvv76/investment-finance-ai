@@ -296,3 +296,194 @@ class TestCallLlmGrounding:
         assert "做空" not in result
         assert NO_DATA_BANNER in result
 
+
+# ══════════════════════════════════════════════════════════════════════════
+# ④ V1 4-step prompt restored (user chose B): restore the deep analysis, keep
+#    the anti-fabrication filter — analytical percents must survive with data.
+# ══════════════════════════════════════════════════════════════════════════
+
+class TestFourStepPromptRestored:
+    def test_analysis_prompt_is_four_step(self):
+        from engine.deep_lane import ANALYSIS_PROMPT
+        for step in ("事件定性", "传导路径", "组合映射", "置信度"):
+            assert step in ANALYSIS_PROMPT, f"missing 4-step marker {step}"
+        # The old flash-note framing must be gone.
+        assert "flash note" not in ANALYSIS_PROMPT.lower()
+        assert "150-250" not in ANALYSIS_PROMPT
+
+    def test_grounding_discipline_retained(self):
+        """Restored prompt must still tell the LLM to cite live figures exactly."""
+        from engine.deep_lane import ANALYSIS_PROMPT
+        assert "exact" in ANALYSIS_PROMPT.lower()
+
+
+class TestAnalyticalPercentsSurviveWithData:
+    """The core reconciliation: with REAL market data present, analytical
+    percents (position sizing / trigger thresholds / valuation ratios) must NOT
+    be stripped — otherwise Step 3 portfolio-mapping scenarios get gutted to
+    empty labels (verified against real DeepSeek output)."""
+
+    ENRICH = "  META: $669.21 (+5.97%) 50MA 600.49 200MA 643.20"
+
+    def test_position_sizing_and_threshold_percent_kept(self):
+        llm = "情景三：若涨幅超过15%放量滞涨，减持10-20%仓位锁定利润。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert flagged == []
+        assert "10-20%" in cleaned and "15%" in cleaned
+
+    def test_grounded_price_with_analytical_percent_kept(self):
+        llm = "回踩50日均线$600.49时分批加仓，单次不超组合2-3%。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert flagged == []
+        assert "600.49" in cleaned and "2-3%" in cleaned
+
+    def test_valuation_ratio_percent_kept(self):
+        llm = "前瞻PE 18.4倍，预计EPS CAGR>15%仍具吸引力。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert flagged == []
+        assert "15%" in cleaned
+
+    def test_live_price_fabrication_stripped(self):
+        """A stated CURRENT price (现报) that's wrong is still caught with data."""
+        llm = "META现报520美元，已大幅回落。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert len(flagged) > 0
+        assert "520" not in cleaned
+
+    def test_analyst_target_price_kept_with_data(self):
+        """Option B: analytical target/stop levels ride free when data present."""
+        llm = "目标价看向$800，止损设在$640下方。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert flagged == []
+        assert "800" in cleaned and "640" in cleaned
+
+    def test_percent_stays_strict_when_no_data(self):
+        """Regression: no enrichment → a specific percent is still fabrication."""
+        llm = "META料下跌7.64%。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, "")
+        assert len(flagged) > 0
+        assert "7.64" not in cleaned
+
+
+class TestDirectionAwareGuard:
+    """Adversarial-review-driven fix: the data-present guard reads each ticker's
+    REAL direction and strips only sentences that assert the OPPOSITE direction
+    as fact. This closes the magnitude-collision leak (下跌5.97% when +5.97%) and
+    stops over-stripping analytical triggers (若涨8%则止盈)."""
+
+    ENRICH = "  META: $669.21 (+5.97% today) 50MA 600.49"
+
+    def test_reverse_direction_stripped(self):
+        llm = "META今日实际下跌8%，恐慌蔓延。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert len(flagged) > 0
+        assert "下跌8%" not in cleaned
+
+    def test_magnitude_collision_reverse_stripped(self):
+        """Key leak closed: reversed direction whose magnitude collides with a
+        grounded number (下跌5.97% while real is +5.97%) is still caught."""
+        llm = "META下跌5.97%，形势严峻。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert len(flagged) > 0
+        assert "下跌5.97%" not in cleaned
+
+    def test_cross_phrasing_reverse_stripped(self):
+        """跌超/跌幅/下探 — common Chinese move phrasings — all caught by direction."""
+        for llm in ("META跌超8%，跌破支撑。", "META跌幅达8%。", "META今日下探8%。"):
+            cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+            assert len(flagged) > 0, f"not stripped: {llm}"
+
+    def test_english_reverse_stripped(self):
+        llm = "META fell 8% today amid the selloff."
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert len(flagged) > 0
+
+    def test_same_direction_overstatement_kept(self):
+        """Accepted limitation: right-direction magnitude overstatement is kept
+        (catching it needs exact-magnitude grounding, which over-strips rounded
+        real moves). Direction is right, so no wrong-way trade signal."""
+        llm = "META大涨20%，创历史新高。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert flagged == []
+
+    def test_grounded_move_kept(self):
+        llm = "META大涨5.97%，动能强劲。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert flagged == []
+        assert "5.97%" in cleaned
+
+    def test_bare_reverse_attributed_to_primary(self):
+        """A bare directional claim (no ticker) is attributed to the news ticker."""
+        llm = "我认为后市将下跌8%，风险积聚。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH, primary_ticker="META")
+        assert len(flagged) > 0
+
+    def test_market_subject_not_misattributed(self):
+        """A market-level down claim must NOT be attributed to an up ticker."""
+        llm = "大盘今日下跌2%，情绪偏谨慎。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH, primary_ticker="META")
+        assert flagged == []
+
+    def test_down_trigger_kept(self):
+        """'若跌破…减仓' is a downside trigger, not a reverse claim → kept."""
+        llm = "若跌破50日均线则减仓三成以控制回撤。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert flagged == []
+
+    def test_threshold_percent_not_treated_as_move(self):
+        llm = "若涨幅超过15%放量滞涨，则减仓。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert flagged == []
+        assert "15%" in cleaned
+
+    def test_bare_down_trigger_with_action_kept(self):
+        """'跌10%时加仓' — a downside trigger with a trade action → kept."""
+        llm = "跌10%时可分批加仓。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert flagged == []
+
+    def test_break_below_ma_threshold_kept(self):
+        """'跌破200MA' is a threshold (verb+破), not a move-percent → kept."""
+        llm = "若跌破200MA则减仓三成以控制回撤。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert flagged == []
+
+    def test_bare_live_price_claim_stripped(self):
+        """Adversarial Finding 2: bare '现价669.5' (wrong) must be caught."""
+        llm = "该股现价669.5一线，突破前高。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert len(flagged) > 0
+        assert "669.5" not in cleaned
+
+    def test_reverse_fact_with_trade_action_stripped(self):
+        """HIGH-SEV fix: a reverse fact + trade rec in ONE sentence (the incident
+        shape) must NOT be exempted by the trade-action word → stripped."""
+        llm = "META今日暴跌8%，建议逢低抄底。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert len(flagged) > 0
+        assert "暴跌8%" not in cleaned
+
+    def test_reverse_fact_with_bare_ze_stripped(self):
+        """'则' used as 'thus' (no digit before it) must not exempt a reverse fact."""
+        llm = "META今日大跌，恐慌情绪则蔓延全场。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert len(flagged) > 0
+
+    def test_negated_direction_kept(self):
+        """'不会下跌' negates the direction — bullish/neutral, must be kept."""
+        llm = "预计META短期不会下跌，支撑稳固。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+        assert flagged == []
+
+    def test_trend_reversal_kept(self):
+        """'下跌通道已走完' / '跌幅收窄' are bullish reversals, not a fall → kept."""
+        for llm in ("META下跌通道已走完，有望反弹。", "META跌幅收窄，企稳迹象显现。"):
+            cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH)
+            assert flagged == [], f"wrongly stripped: {llm}"
+
+    def test_other_subject_not_attributed(self):
+        """A bare down claim about a competitor must not be pinned on primary."""
+        llm = "同业竞争对手今日下跌8%，拖累半导体板块。"
+        cleaned, flagged = _strip_fabricated_numbers(llm, self.ENRICH, primary_ticker="META")
+        assert flagged == []
+

@@ -39,9 +39,12 @@ _ENRICH_TIMEOUT = 8.0         # total budget for all market data fetches
 _SPX_SYMBOL = "^GSPC"
 _VIX_SYMBOL = "^VIX"
 
-# Default LLM prompt template — concise, action-oriented flash note.
-# 150-250 words, 3 sections, single recommendation.  No academic essays.
-ANALYSIS_PROMPT = """You are a buy-side analyst writing a flash note for a portfolio manager. Be CONCISE. Be ACTIONABLE. Do NOT write an academic essay.
+# Default LLM prompt template — 4-step structured reasoning (restored V1).
+# 事件定性 → 传导路径 → 组合映射(带触发条件) → 置信度.  Analytical, not a
+# flash-note summary.  The grounding-discipline paragraph keeps it compatible
+# with the anti-fabrication filter: live prices/percents must be exact, while
+# analytical figures (position sizes, thresholds, valuation ratios) are welcome.
+ANALYSIS_PROMPT = """You are a financial markets strategist serving a professional investor. Analyze this news with structured reasoning — do NOT just summarize.
 
 Title: {title}
 Source: {source}
@@ -51,20 +54,19 @@ Sentiment: {sentiment} (score: {sentiment_score:.2f})
 
 {extra_context}
 
-Write a short flash note in Chinese with exactly these 3 sections. 150-250 words total.
+Follow this exact 4-step structure. If you lack information for any step, state "信息不足" rather than guessing.
 
-CRITICAL RULES:
-- Only quote numbers that are explicitly provided in the market data above. If no real-time data is available, say "需查当前价格" rather than guessing.
-- ONLY mention tickers listed in the investor's watchlist or the news tickers. Do not invent unrelated stocks.
-- The "Action" must be ONE recommendation. Pick one and commit.
+Step 1 — 事件定性: Classify this event. Is it Macro (interest rate / policy), Sector (supply-demand / technology), or Company-specific (earnings / management)? State the category and why.
 
-1. What happened (1-2 sentences)
+Step 2 — 传导路径: Trace the impact chain. Which sectors/positions are directly affected? Through what mechanism (cost, demand, valuation multiples)? Be specific about the causal logic.
 
-2. Market impact (2-3 sentences)
+Step 3 — 组合映射: Map to the investor's portfolio. Given the holdings and investment rules in the knowledge base, provide 1-3 concrete action scenarios (观望 / 减仓 / 加仓) with trigger conditions for each.
 
-3. Action (1-2 sentences)
+Step 4 — 置信度: Rate your analysis confidence as 高 / 中 / 低. If 低, explicitly state what information is missing and what to monitor.
 
-Confidence: High/Medium/Low"""
+Grounding discipline: when you cite a specific live price or percentage move for a ticker, use ONLY the exact figures given in the market data above — do NOT round them and do NOT invent any. If the market data has no figure for a point you want to make, describe the direction qualitatively instead. Position sizes, entry/stop levels tied to the given moving averages, thresholds, and valuation ratios you reason about are analytical and welcome — this rule is only about never fabricating a ticker's live price/percent.
+
+Respond in Chinese. Be analytical, not journalistic."""
 
 # User-customizable analysis framework (stored in DB preferences)
 DEFAULT_ANALYSIS_FRAMEWORK = "default"
@@ -115,11 +117,61 @@ Confidence: Low (no live data)"""
 #   percents: -7.64% | +4.70% | 7.64％ (full-width) | 7.64个百分点 | 百分之七
 _PRICE_DOLLAR_RE = re.compile(r"\$\s?\d[\d,]*(?:\.\d+)?")
 _PRICE_CNY_RE = re.compile(r"\d[\d,]*(?:\.\d+)?\s?(?:美元|元)")
-# Bare number attached to a trade-level keyword (target / stop / position price)
+# Bare number attached to a trade-level or live-price keyword.
+# Adversarial review found bare live-price claims ("现价669.2") bypassed the
+# price patterns — 现价/现报/最新价 are unambiguously live-price claims and must
+# be grounded like $-prices.
 _PRICE_KEYWORD_RE = re.compile(
-    r"(?:目标价?|止损|止盈|支撑位?|阻力位?|点位|建仓|买入价|卖出价)\s*[:：]?\s*\d[\d,]*(?:\.\d+)?"
+    r"(?:目标价?|止损|止盈|支撑位?|阻力位?|点位|建仓|买入价|卖出价|现价|现报|最新价)\s*[:：]?\s*\d[\d,]*(?:\.\d+)?"
 )
 _PCT_RE = re.compile(r"[+-]?\d+(?:\.\d+)?\s?(?:%|％|个百分点)")
+# LIVE-price claims (现价/现报/最新价 + number) assert the ticker's CURRENT price
+# and must always be grounded, even in the lenient (data-present) mode. Trigger
+# levels (止损/目标/支撑) are analytical and ride free when data is present.
+_LIVE_PRICE_RE = re.compile(r"(?:现价|现报|最新价)\s*[:：]?\s*[$￥]?\d[\d,]*(?:\.\d+)?")
+
+# ── Direction-aware fabrication guard (data-present) ──────────────────────
+# Regex/magnitude matching could not tell "META actually fell 8%" (fabrication
+# when META is +6%) from "if it rises 8%, take profit" (a trigger). So instead
+# we read each ticker's REAL direction from the enrichment and flag a sentence
+# only when it asserts the OPPOSITE direction as fact. This catches reverse
+# fabrication even when the magnitude collides with a grounded number, and it
+# stops over-stripping analytical triggers.
+_DOWN_WORDS = (
+    "下跌", "大跌", "暴跌", "重挫", "跳水", "下挫", "崩跌", "跌超", "跌幅",
+    "收跌", "走低", "下探", "急跌", "杀跌", "低开",
+)
+_UP_WORDS = (
+    "上涨", "大涨", "暴涨", "飙升", "拉升", "走高", "涨超", "涨幅",
+    "收涨", "冲高", "急涨", "高开", "走强",
+)
+_DOWN_EN = ("fell", "fall", "falls", "dropped", "drop", "plunge", "plunged",
+            "slump", "slumped", "tumble", "tumbled", "sank", "sink")
+_UP_EN = ("rose", "rise", "rises", "surge", "surged", "jump", "jumped",
+          "gain", "gained", "rally", "rallied", "soar", "soared", "climb")
+# Bare 涨/跌 immediately before a number (下跌8% / 跌8% / 涨6%) — the verb touching
+# a digit reads as an actual move, whereas 跌破/涨幅/回调 (verb+破/幅/调) do not.
+_BARE_DOWN_RE = re.compile(r"跌\s*了?\s*[约近]?\s*[+-]?\d")
+_BARE_UP_RE = re.compile(r"涨\s*了?\s*[约近]?\s*[+-]?\d")
+# Conditional / trigger connectives → sentence is a hypothetical plan, not a
+# claim about the ticker's actual move. Includes a number-adjacent 时/即/则
+# ("跌10%时加仓", "涨8%即止盈", "8%则减仓") so the trigger is caught WITHOUT the
+# trade-action exemption (which was a high-severity hole: it let a reverse fact
+# + trade rec in one sentence — the incident pattern — escape). The digit
+# adjacency avoids the 同时/即将 (bare 时/即) and 恰恰..则 (bare 则) traps.
+_CONDITIONAL_RE = re.compile(r"若|如果|一旦|倘|假如|万一|假设|设想|[\d%％]\s*[时即则]")
+# Negation / trend-reversal → a direction word here is NOT asserting an actual
+# opposite move ("不会下跌", "跌幅收窄", "下跌通道已走完", "止跌企稳").
+_HEDGE_RE = re.compile(
+    r"不会|不再|不.{0,2}[涨跌]|未.{0,2}[涨跌]|无.{0,2}[涨跌]|难.{0,3}[涨跌]"
+    r"|没.{0,3}[涨跌]|收窄|收敛|走完|结束|企稳|见底|触底|止跌|止住|反转|扭转"
+)
+# Non-primary subject → a bare directional claim is about the market/another
+# entity, not the news ticker, so it must not be attributed to primary.
+_MARKET_SUBJECT_RE = re.compile(
+    r"市场|大盘|指数|板块|标普|道指|纳指|纳斯达克|恒生|A股|美股|SPX|VIX"
+    r"|对手|同业|同行|竞品|友商|其他|大市|全场"
+)
 # Any concrete number token (used only to decide if a sentence carries a claim)
 _ANY_PRICE_RE = re.compile(
     r"\$\s?\d[\d,]*(?:\.\d+)?|\d[\d,]*(?:\.\d+)?\s?(?:美元|元)"
@@ -217,8 +269,12 @@ def _extract_grounded_numbers(enrichment: str) -> set[str]:
     return grounded
 
 
-def _sentence_numbers(sentence: str) -> list[str]:
-    """Extract normalized price/percent tokens from a sentence."""
+def _sentence_price_numbers(sentence: str) -> list[str]:
+    """Extract PRICE tokens ($/美元/元/裸目标止损价) from a sentence.
+
+    These are always market-state claims: a concrete price for a ticker.
+    An ungrounded one is a fabrication regardless of whether we have data.
+    """
     nums: list[str] = []
     for m in _PRICE_DOLLAR_RE.finditer(sentence):
         nums.append(m.group().lstrip("$").replace(",", "").strip())
@@ -228,42 +284,174 @@ def _sentence_numbers(sentence: str) -> list[str]:
         num = re.search(r"\d[\d,]*(?:\.\d+)?", m.group())
         if num:
             nums.append(num.group().replace(",", ""))
+    return nums
+
+
+def _sentence_percent_numbers(sentence: str) -> list[str]:
+    """Extract PERCENT tokens (%/％/个百分点) from a sentence.
+
+    A percent can be EITHER a market-move claim ("META下跌7.64%") OR a
+    legitimate analytical figure (仓位 减仓10-20% / 阈值 涨超15% / 增速 CAGR>15%).
+    We only treat ungrounded percents as fabrication when there is NO real
+    market data to ground on (see _strip_fabricated_numbers).
+    """
+    nums: list[str] = []
     for m in _PCT_RE.finditer(sentence):
         nums.append(re.sub(r"(?:%|％|个百分点)", "", m.group()).lstrip("+-").strip())
     return nums
 
 
+def _sentence_live_price_numbers(sentence: str) -> list[str]:
+    """Extract LIVE-price numbers (现价/现报/最新价 + number) from a sentence.
+
+    A current-price claim must always be grounded; unlike trigger levels
+    (止损/目标/支撑) it is a statement of present market state, not analysis.
+    """
+    nums: list[str] = []
+    for m in _LIVE_PRICE_RE.finditer(sentence):
+        num = re.search(r"\d[\d,]*(?:\.\d+)?", m.group())
+        if num:
+            nums.append(num.group().replace(",", ""))
+    return nums
+
+
+def _ticker_directions(enrichment: str | None) -> dict[str, str]:
+    """Map each ticker in the enrichment to its real move sign ('+' or '-').
+
+    Parses rows like ``META: 现价 $669.21 (+5.97%)`` → {"META": "+"}. Used to
+    detect fabrication where an analysis sentence claims the OPPOSITE direction.
+    """
+    dirs: dict[str, str] = {}
+    if not enrichment:
+        return dirs
+    for line in enrichment.splitlines():
+        s = line.strip()
+        m = re.match(r"([A-Z]{1,6}(?:\.[A-Z]+)?)\s*[:：]", s)
+        if not m:
+            continue
+        # First signed percentage on the row is the ticker's change.
+        pm = re.search(r"\(\s*([-+])\s*\d", s) or re.search(r"([-+])\d+(?:\.\d+)?\s?[%％]", s)
+        if pm:
+            dirs[m.group(1)] = pm.group(1)
+    return dirs
+
+
+def _direction_contradiction(
+    sentence: str, ticker_dirs: dict[str, str], primary_ticker: str | None = None,
+) -> bool:
+    """True iff the sentence asserts a ticker moved OPPOSITE to its real direction.
+
+    Skips hypothetical/trigger sentences (若/则/时/即 …) and market-level
+    statements (市场/大盘 …). A bare directional claim with no explicit ticker is
+    attributed to ``primary_ticker`` (or the sole ticker) — the news subject.
+    """
+    if not ticker_dirs:
+        return False
+    # A conditional/trigger sentence ("若涨8%则止盈", "跌10%时加仓") is a plan, not
+    # a claim about the actual move. NOTE: do NOT exempt on trade-action words —
+    # that let "META今日暴跌8%，建议抄底" (reverse fact + rec, the incident shape)
+    # escape whole-sentence. Real plans (逢低加仓META / 跌破200MA减仓) have no
+    # up/down word anyway, so down==up→False already keeps them.
+    if _CONDITIONAL_RE.search(sentence):
+        return False
+    # Negation / trend-reversal → the direction word is not a real opposite move.
+    if _HEDGE_RE.search(sentence):
+        return False
+
+    down = (
+        any(w in sentence for w in _DOWN_WORDS)
+        or bool(_BARE_DOWN_RE.search(sentence))
+        or any(w in sentence.lower() for w in _DOWN_EN)
+    )
+    up = (
+        any(w in sentence for w in _UP_WORDS)
+        or bool(_BARE_UP_RE.search(sentence))
+        or any(w in sentence.lower() for w in _UP_EN)
+    )
+    if down == up:
+        return False  # no clear direction, or ambiguous (both) → don't strip
+    claimed = "-" if down else "+"
+
+    mentioned = [tk for tk in ticker_dirs if tk in sentence]
+    if not mentioned:
+        # Bare claim: attribute to the news ticker unless it's about the market.
+        if _MARKET_SUBJECT_RE.search(sentence):
+            return False
+        cand = primary_ticker if primary_ticker in ticker_dirs else (
+            next(iter(ticker_dirs)) if len(ticker_dirs) == 1 else None
+        )
+        if not cand:
+            return False
+        mentioned = [cand]
+
+    return any(ticker_dirs.get(tk) and ticker_dirs[tk] != claimed for tk in mentioned)
+
+
 def _strip_fabricated_numbers(
     llm_text: str, enrichment: str, no_data: bool = False,
+    primary_ticker: str | None = None,
 ) -> tuple[str, list[str]]:
-    """Remove sentences whose prices/percents are NOT grounded in enrichment.
+    """Remove sentences whose numbers/claims are fabricated vs the market data.
 
-    Last line of defence: any concrete number the LLM produced that can't be
-    matched to the real market block is treated as fabricated and its sentence
-    is dropped. Handles Chinese/full-width formats (美元/元/％/个百分点) and
-    bare target/stop prices.
+    Layered so the restored 4-step analysis keeps its analytical figures
+    (Step-3 trigger levels, position sizing, valuation ratios) while genuine
+    fabrication is blocked:
 
-    When ``no_data`` is True, sentences carrying a directional trade call
-    (做空/买入/...) are ALSO stripped even without a number — a trade
-    recommendation with zero price data is unjustifiable.
+    * LIVE-PRICE claims (现价/现报/最新价 + number) are ALWAYS grounded — a stated
+      current price is present-market-state, not analysis.
+
+    * DIRECTION (data-present): a sentence asserting a ticker moved OPPOSITE to
+      its real direction (下跌 while it's +6%) is stripped — this catches reverse
+      fabrication even when the magnitude collides with a grounded number, and
+      unlike magnitude-matching it does not delete analytical triggers (若涨8%则
+      止盈, 涨幅超过15%, 减仓10-20%). See _direction_contradiction.
+
+    * STRICT (no data / empty enrichment): every specific price AND percent is
+      ungroundable → stripped, and pure-text trade calls too. This is the
+      original no-data incident path (LLM invents "-7.64% @ 649.2, short META").
+
+    * OTHERWISE (data present): analytical prices (止损/目标/区间) and analytical
+      percents ride free — they are the investor-facing actionable content.
+
+    ``primary_ticker`` is the news ticker, used to attribute a bare directional
+    claim ("会下跌8%") that names no ticker explicitly.
 
     Returns (cleaned_text, flagged_fragments).
     """
     grounded = _extract_grounded_numbers(enrichment)
+    ticker_dirs = _ticker_directions(enrichment)
+    # Strict on all numbers only when there is nothing real to ground on.
+    strict = no_data or not grounded
     kept: list[str] = []
     flagged: list[str] = []
 
     for sentence in _SENT_SPLIT_RE.split(llm_text):
         if not sentence.strip():
             continue
-        nums = _sentence_numbers(sentence)
 
-        if nums and any(n not in grounded for n in nums):
+        # (1) Live-price claim — always grounded.
+        live = _sentence_live_price_numbers(sentence)
+        if live and any(p not in grounded for p in live):
             flagged.append(sentence.strip())
-            continue  # drop the whole sentence — ungrounded number
+            continue
+
+        # (2) Direction-aware guard (data-present): reverse-direction fabrication.
+        if not strict and _direction_contradiction(sentence, ticker_dirs, primary_ticker):
+            flagged.append(sentence.strip())
+            continue
+
+        # (3) No real data → every specific price/percent is invented.
+        if strict:
+            nums = _sentence_price_numbers(sentence) + _sentence_percent_numbers(sentence)
+            if nums and any(n not in grounded for n in nums):
+                flagged.append(sentence.strip())
+                continue
+
+        # (4) No data → no directional trade call (unjustifiable without prices).
         if no_data and _has_trade_recommendation(sentence):
             flagged.append(sentence.strip())
-            continue  # no data → no directional call allowed
+            continue
+
         kept.append(sentence)
 
     return "".join(kept), flagged
@@ -822,8 +1010,12 @@ class DeepLane:
 
         # ── ② OUTPUT VALIDATION: strip ungrounded price/percent + (no-data)
         #     pure-text trade calls ──
+        _primary = next(
+            (t.strip().upper() for t in (tickers or "").split(",") if t.strip()),
+            None,
+        )
         cleaned, flagged = _strip_fabricated_numbers(
-            analysis, enrichment, no_data=not has_data,
+            analysis, enrichment, no_data=not has_data, primary_ticker=_primary,
         )
         if flagged:
             logger.warning(
