@@ -1,8 +1,15 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-10 深夜 CST (V1 窗口 / v1-stable) — 关机存档
+> 最后更新: 2026-07-11 CST (V1 窗口 / v1-stable) — 关机存档
 
-## 🆕 本会话完成（2026-07-10 晚 · 全在 v1-stable，交接 V2）
+## 🆕 本会话完成（2026-07-11 · 全在 v1-stable，交接 V2）
+1. **列最近推送 + 渠道** → 查生产 `/health/decisions.json`(内存环形缓冲仅6条)；渠道映射核对 `alert_dispatcher`(CRITICAL手机警笛/IMPORTANT手机高优/NOTABLE仅TG静音)。
+2. **诊断 id=3612 为何 CRITICAL** → `intensity≥5` 机械阈值；发现**标尺利好偏置**(利空硬套利好顶格→误拉手机警笛)。
+3. **推送标准三决策全锁 → `SPEC-intensity-scale-bear-bias.md`**(交V2实现)：①标尺改方向中性②利空降档B(仅命中持仓/关注股 且 已确认才升警笛)③手机门槛≥3→≥4、强度3只上TG静音(复用NOTABLE)。`cal-01`(news_id=3612)生产校准锚点入 `catalyst-cases-negative.jsonl`。⚠️GOOGL在关注股内,靠"传闻不升级"挡住cal-01不回critical。
+4. **经验总纲 `LESSONS.md`**：第一原则=不假设对着代码核实 + 五板块(协作/技术坑/推送评级/流程/评估)；§B 去重后为纯索引(不抄修复,指向TROUBLESHOOTING/记忆)。
+5. **隐忧核查 → `HANDOFF-lessons-concerns.md`**(交V2)：dev_checklist 红=**v1-stable漂移非main bug**(scheduler差149/106、`test_scraper_tick`在main不存在、6errors=ChromaDB-Windows已知容忍)；门禁容忍逻辑别吞真失败(真归main)。
+
+## 🕐 旧会话完成（2026-07-10 晚 · 全在 v1-stable，交接 V2）
 1. **诊断美光$250B误响手机**(id=3340) → 根因=事件驱动路径只升级不因过期降级 → 出 `SPEC-stale-event-downgrade.md`(1h阈值/降静音TG/时区排雷)。**待 V2 实现。**
 2. **诊断深度分析编造行情**(id=3340,META卡片-7.64%实际+4.70%双源确认) → 根因=抓行情8s超时静默丢弃+LLM软约束无视硬编 → 出 `SPEC-deep-analysis-stale-data.md`(硬门禁/输出校验/Finnhub主源)。**待 V2 实现,高优先。**
 3. **评级训练资料.docx** → 生成 `data/training/catalyst-cases.jsonl`(正面18)+`catalyst-cases-negative.jsonl`(负面8,N1-N5)。用户校准:大额政府计划广度不降级→深挖受益股(记忆 govt-program-rating-deepdig)。
@@ -33,6 +40,7 @@
 | 决策面板 `/health/decisions` | 🟢 V2 已加 |
 
 ## 📋 下一步 / 待办
+0d. **🆕 V2 待办（2026-07-11 交接）**：读 `HANDOFF-lessons-concerns.md` —— ①v1-stable 已攒 scheduler 漂移(§2违反)，请 V2/用户定 port回main / 丢弃 / 当草稿分支(退役v1-stable是owner决策)；②确认 dev_checklist 容忍逻辑只白名单 `test_vector_store`、别吞真失败；③建议把 `LESSONS.md` 拉进 main 与 living docs 同处。
 0c. **🆕 V2 待办（2026-07-11 交接，决策已锁）**：`SPEC-intensity-scale-bear-bias.md` —— intensity 强度标尺**利好偏置** + **推送门槛调整**（同一段 `alert_level` 映射，一并改）。①标尺改方向中性"波动剧烈程度"+显式利空档；②**渠道决策 B**：利空手机上限 important，仅「命中持仓/关注股 **且** 已确认(非传闻)」才升警笛；③**手机门槛 ≥3 抬到 ≥4，强度3只上TG静音**（复用现有 NOTABLE 档，无需新增；owner 选静音不响铃）。⚠️坑：GOOGL 在关注股内，cal-01(强度3二手)靠"传闻不升级"挡住不回 critical。验收锚点：cal-01 改后不得判 critical、不得上手机（只上TG）。校准素材 `catalyst-cases-negative.jsonl` 已备。归属 main/V2。已 push origin/v1-stable。
 0. **🆕 V2 待办（新·高优先）**：深度分析卡片**在编造行情数据**（`engine/deep_lane.py`）。**见 `SPEC-deep-analysis-stale-data.md`**（实测证据/7.3s-8s时序/6只股对照/硬门禁契约/测试）。样本 id=3340：卡片称 META 盘前 -7.64% 建议做空，实际 META +4.70%（双源确认）。根因=抓行情 8s 超时（实测 7.3s 卡门槛）→ 575-576 行静默丢弃 → LLM 零数据仍硬编（56 行软约束被无视）。**已出 SPEC + 口头交接 V2**：①硬门禁-无行情禁止输出价格/建议；②输出校验-$/%须匹配行情串；③Finnhub 设主源；④超时改 WARNING+标时间戳。测试：空行情串→断言无$/%无建议。⚠️修好前深度分析数字/建议不可信。
 0b. **🆕 V2 待办**：实现 `SPEC-stale-event-downgrade.md` —— 事件驱动推送加"过期降级"闸（事件线 first_seen>1h 且 IMPORTANT → 降 NOTABLE 静音TG；CRITICAL 豁免）。诊断+设计+时区排雷 V1 已做完。触发：美光 $250B 旧催化剂误响手机（id=3340）。
