@@ -2096,3 +2096,9 @@ pause/resume 往返实测通过, bash -n 语法OK。
 
 - **manifest 补注册**: `scripts/eval_framework_holdout.py`（盲测评估工具, [[holdout-blind-eval]]）加入 `news-monitor/scripts/__manifest__.json`, 消除 session_startup 未注册警告。tests/related/also 均空(support 工具无对应测试)。
 - **提交积压**: SessionEnd 自动补账写入的 HISTORY 条目(722c0bf/a009eac 补录)一并提交, 清空脏工作区。
+
+### V1交办: 修 deep_lane 登记表误挂 acceptance_test.py (止误报「过时」)
+
+- **根因(已核实)**: `acceptance_test.py` import fast_lane/entity_extractor/sentiment/priority/learner,**唯独不 import deep_lane**; 却被挂在 deep_lane 的 related_scripts → session_startup 每次误报「acceptance_test.py 落后 210h」。
+- **改动(commit bfbd26a 已推)**: 两张登记表 deep_lane 的 related_scripts 均清空 `[]`(旧表 config/module_registry.json 供 session_startup 读; 新表 engine/__manifest__.json 供 pre_commit 读——只删旧表误报会从提交路径再冒)。fast_lane 保留(真 import)。deep_lane 真实覆盖=test_deep_lane.py。
+- V1 只点了旧表,V2 顺手把新表同一误挂一并清,防复发。
