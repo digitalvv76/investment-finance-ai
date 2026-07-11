@@ -33,13 +33,17 @@ main 当前原文（`git show origin/main:news-monitor/config/prompts/event_driv
 
 这样利空事件按自己的剧烈程度评级，不再靠类比利好顶格。
 
-## 4. ⚠️ 待用户/V2 拍板的关键决策：利空满级要不要拉手机警笛？
+## 4. ✅ 渠道决策（owner 已拍板 2026-07-11：**方案 B**）
 
-强度方向中性后，一个**真实确认的板块级利空**可能评到 5。此时渠道怎么走？两条路：
-- **A（对称）**：利空 5 也 critical 拉警笛（重大避险=值得震醒）。
-- **B（利空降一档上限）**：下行事件手机最高到 important（高优不拉警笛），除非命中**持仓/关注股**风险才升级。
+强度方向中性后，利空也可能评到 5。渠道规则**锁定为 B（利空降一档 + 命中关注股才升级，但传闻不升级）**：
 
-> V1 倾向 B 的变体：**方向中性强度 + 确定性门槛**——`reportedly/传闻` 或巨头难撼类，先按确定性打折（cal-01 三理由的 ①②），再看方向。但**这是 owner 的决策**，请用户定 A/B。
+- `direction=up`（利好）：维持现状，`intensity>=5 → critical → 手机警笛`。
+- `direction=down`（利空）：**手机最高到 `important`（高优提醒、不拉警笛）**，即利空 5 星映射 important 渠道，不发 Pushover emergency。
+- **利空升级回 critical/警笛的唯一条件（两者同时满足）**：
+  1. `losers ∩ tracked_tickers`（持仓 ∪ 关注股，复用 `get_tracked_tickers()`）非空 —— 砸到你的钱；**且**
+  2. 事件**已确认**（非 `reportedly`/传闻/未证实）—— 确定性够。
+
+> ⚠️ **为什么必须加第 2 条（实现别漏）**：cal-01 的 losers=[GOOGL, MSFT]，而 **GOOGL 就在关注股里**（`watchlist-state.md:41`）。若只按"利空命中关注股→升级"，cal-01 会被重新拉回 critical，**违反 §6 验收锚点**。第 2 条"传闻不升级"正好挡住：cal-01 是 `reportedly` 二手 → 不满足 → 保持 important。此条与 §5 的信源置信度门槛是同一根因，建议一并落地。
 
 ## 5. 次要硬化（可选，二期）
 
@@ -49,6 +53,8 @@ main 当前原文（`git show origin/main:news-monitor/config/prompts/event_driv
 ## 6. 验收锚点（A3 回归，硬性）
 
 - **cal-01 / news_id=3612**：改后**不得判 critical**（目标 important）。判成 critical = 回归。
+  - ⚠️ 陷阱：losers=[GOOGL,MSFT]，**GOOGL 在关注股内** → 必须靠 §4 第 2 条"传闻不升级"挡住，否则会被"利空命中关注股→升级"重新拉成 critical。此锚点专门盯这条交互。
+- **利空命中关注股 + 已确认**（构造用例：关注股确认级利空，如 portfolio/watchlist 内个股确认下调指引/重大合同流失）：**应**升级 critical/警笛（B 的升级路径正常工作）。
 - 取一条**确认的**利好板块级事件（如 catalyst-cases.jsonl 中 gov 高优例）：仍应 5/critical，**别把利好档误伤降级**。
 - 校准素材：`data/training/catalyst-cases-negative.jsonl`（N1-N5 镜像 + cal-01）已备好，可作少样本/回归集。
 
