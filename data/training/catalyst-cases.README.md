@@ -46,3 +46,23 @@
 **防编数纪律**：仅 2 条来自文档(neg-01 N1X / neg-02 英特尔公告日)带真实涨跌；其余 6 条为**模式示例**，`market_reaction` 明确标"无特定历史行情"、`losers` 用占位符——教的是**事件形状→方向/受损面**，不是具体数字。接入时真实标的涨跌必须实时抓取核实（同 deep_lane 硬门禁原则）。
 
 **关键**：负面同样是强催化，别只训练做多。方向(direction)与时间窗口(如 neg-02 当日做空后反转)都要判。
+
+---
+
+## 生产校准锚点 (`source: "production"` / `label_type: "calibration_downgrade"`)
+
+除文档(`doc`)与派生(`derived-pattern`)外，新增第三类来源：**生产真实过评/漏评样本**——从 `/health/decisions.json` 决策面板捞出的、系统评级站不住的真实案例。这类是**验收 A3 的具名回归锚点**（见 `REQ-training-eval.md`）：改评估器后此条必须回到修正标签，否则算回归。
+
+**差异字段**：
+| 字段 | 含义 |
+|------|------|
+| `source: "production"` | 真实生产案例（非造） |
+| `prod_news_id` | 生产库 news 主键，可回溯原文 |
+| `system_intensity` / `system_alert_level` | 系统**当时实际**打的分/档（保留证据） |
+| `intensity` / `alert_level` | **修正后**的金标签（ground truth） |
+| `label_type: "calibration_downgrade"` | 标记方向：系统过评→应降级（反之 `_upgrade`=漏评应升级） |
+
+**已收录**：
+- `cal-01`（news_id=3612）：OpenAI/谷歌被曝向五角大楼黑名单中资子公司供 AI → 系统 **intensity=5 拉手机警笛**。降级三理由：①`reportedly` 二手传闻非官方；②GOOGL/MSFT 万亿巨头，单条合规传闻难成板块级异动；③**利空事件被硬塞进按"板块暴涨"写的利好标尺顶格**。修正 = `important`（上手机不拉警笛）/intensity 3。**验收锚点：此条不得判 critical。**
+
+**防编数纪律同样适用**：`market_reaction` 未实时核实的一律标"待核实"，接入时按 `captured_at` 实时抓取，禁子串臆测（见记忆 `tickers-found-unreliable` / deep_lane 硬门禁）。

@@ -1419,3 +1419,14 @@ engine/alert_dispatcher → 不再依赖 bot/ (反向依赖已切断)
 ### 请 V2 评估 REQ + 出外部第三方评估版
 - 出 `REQ-training-eval-external.md`(去黑话+补背景+第10节列6个待评问题)→桌面 md+docx 给用户发独立第三方。
 - 出 `HANDOFF-review-REQ-training-eval.md` 请 V2 评估:聚焦可落地性/工作量/实现坑(与第三方看方法学互补),6条评审清单(路线token代价/ticker_hint是否落库/噪音例能否从库捞/验收指标生产怎么量/防泄露去重放哪层/排期)。产出请写 REVIEW-*.md 回仓库。
+
+---
+
+## 2026-07-11T09:16+08:00 · 会话开始
+
+### 列最近推送 + 新增生产校准锚点 cal-01
+- 用户要"最近10条推送+渠道" → 查生产 `/health/decisions.json`（内存环形缓冲，重启至今仅 6 条）。渲染表格：id/消息/相关股/档位/渠道。渠道映射核对 `alert_dispatcher.py`：CRITICAL→手机警笛+TG三连 / IMPORTANT→手机高优+TG提醒 / NOTABLE→仅TG静音。
+- 用户问"为什么#5(id=3612)是CRITICAL" → 核 `event_driven_evaluator.alert_level`：intensity≥5→critical，纯机械阈值。哨兵 LLM 给了满分5(catalyst_types=[1,2]=制裁+AI巨头共振+突发独家)。
+- **V1 指出偏差**：intensity=5 标尺按"板块暴涨(利好)"写，但这条是**利空/避险**(制裁风险)，被硬塞顶格拉警笛；且 `reportedly` 二手 + GOOGL/MSFT 万亿巨头难撼 → 判5偏高，更像3-4。用户**同意**当校准样本。
+- 产出：`data/training/catalyst-cases-negative.jsonl` 追加 `cal-01`（source=production/news_id=3612/system打5-critical/修正=important-3/三条降级理由/label_type=calibration_downgrade）。README 加"生产校准锚点"节 + 新字段说明 + 定位为**验收 A3 具名回归锚点**（此条不得判critical）。行情标"待核实"不编数（防编数纪律）。JSONL 9行全绿。
+- **通知 V2 更正标尺利好偏置**：§4 先核 main 真实代码——main prompt 与 v1-stable 不同(多反过滤例外)，但缺陷坐实：main 第38行 intensity 仍纯利好("5=板块暴涨/4=个股暴涨")，利空无档。出 `SPEC-intensity-scale-bear-bias.md`(缺陷/证据cal-01/契约=强度改方向中性+显式利空档/待拍板A利空5也警笛-B利空手机上限important/A3锚点cal-01不得判critical)。归属 main/V2。commit+push origin v1-stable 当信道。SESSION 加 0c。
