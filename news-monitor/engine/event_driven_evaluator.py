@@ -47,22 +47,27 @@ class EventAssessment:
     ticker_hint: list[str] = field(default_factory=list)
     risk_snapshot: str = ""                                  # Chinese risk point
     notable: bool = False                                    # non-event but substantive action (safety-net)
+    direction: str = "up"                                    # up/down/neutral — decoupled from intensity (SPEC-intensity-scale-bear-bias)
+    confirmed: bool = False                                  # True only when LLM affirms official/happened; fail-safe: omitted → not confirmed → no siren
     filter_reason: str = ""                                  # why filtered (non-event)
     raw_json: str = ""                                       # raw LLM response for audit
 
     @property
     def should_push(self) -> bool:
-        """Only events with intensity >= 3 trigger push notification."""
+        """Only events with intensity >= 3 trigger push (intensity 3 = silent TG)."""
         return self.is_event and self.intensity >= 3
 
     @property
     def alert_level(self) -> str:
-        """Map intensity to alert level for dispatch."""
+        """Base direction-aware channel level (no escalation — that needs tracked).
+
+        See event_channel_level(). The bearish→critical escalation (tracked
+        losers + confirmed) is applied in the pipeline where tracked tickers
+        are available.
+        """
         if not self.should_push:
             return "normal"
-        if self.intensity >= 5:
-            return "critical"
-        return "important"  # intensity 3-4
+        return event_channel_level(self.intensity, self.direction, confirmed=self.confirmed)
 
     @classmethod
     def from_json(cls, raw: str) -> EventAssessment:
@@ -84,12 +89,63 @@ class EventAssessment:
             result.ticker_hint = _parse_str_list(data.get("ticker_hint", []))
             result.risk_snapshot = str(data.get("risk_snapshot", "")).strip()
             result.notable = bool(data.get("notable", False))
+            result.direction = (str(data.get("direction", "up")).strip().lower() or "up")
+            # confirmed defaults False (fail-safe): a phone siren for bearish must
+            # be affirmatively justified; omitted field → treated as unconfirmed.
+            result.confirmed = bool(data.get("confirmed", False))
             result.filter_reason = str(data.get("filter_reason", data.get("reason", ""))).strip()
         except (json.JSONDecodeError, TypeError, ValueError) as e:
             logger.warning("EventDrivenEval: JSON parse failed — %s", e)
             result.is_event = False
             result.filter_reason = f"JSON parse error: {e}"
         return result
+
+
+def event_channel_level(
+    intensity: int,
+    direction: str,
+    *,
+    confirmed: bool = False,
+    losers: set[str] | None = None,
+    tracked: set[str] | None = None,
+) -> str:
+    """Direction-aware channel mapping (SPEC-intensity-scale-bear-bias §4/§4b).
+
+    FAIL-SAFE toward silence: this is an anti-false-alarm fix, so whenever the
+    LLM output is ambiguous/missing a field the mapping errs toward LESS
+    alerting (notable/important), never toward a phone siren.
+
+    Intensity measures volatility magnitude (direction-neutral). Channel:
+      ★≤2              → normal (no push)
+      ★3               → notable (silent TG, NEVER phone) — any direction
+      ★4/★5 up         → important / critical (phone) — the bullish siren path
+      ★4/★5 down, unconfirmed → notable (silent TG, never phone) — reportedly
+                         rumors don't reach the phone even if multi-source bumps
+                         intensity (cal-01 anchor).
+      ★4/★5 down, confirmed   → important (channel B, no siren), escalating to
+                         critical only when it hits tracked money (holdings ∪
+                         watchlist).
+      neutral / unknown direction → capped at important (no siren).
+
+    ``confirmed`` defaults False: a phone SIREN for a bearish event must be
+    affirmatively justified by the LLM, not assumed when the field is omitted.
+    """
+    direction = (direction or "").strip().lower()
+    if intensity < 3:
+        return "normal"
+    if intensity == 3:
+        return "notable"  # silent TG, no phone (phone threshold raised to ≥4)
+    # intensity >= 4
+    if direction == "down":
+        if not confirmed:
+            return "notable"  # reportedly/unverified bearish → never phone (cal-01)
+        if (losers or set()) & (tracked or set()):
+            return "critical"  # confirmed bearish hitting tracked money → siren
+        return "important"  # confirmed bearish → phone high-pri (channel B, no siren)
+    if direction == "up":
+        return "critical" if intensity >= 5 else "important"
+    # neutral / empty / unknown → cap at important (no siren) — fail-safe.
+    return "important"
 
 
 def watchlist_safety_net(event_assessment, tracked_tickers: set[str]) -> bool:

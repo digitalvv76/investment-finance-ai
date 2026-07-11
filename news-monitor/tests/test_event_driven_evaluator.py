@@ -95,15 +95,94 @@ class TestDecisionMapping:
         assert ea.alert_level == "important"
         assert ea.should_push is True
 
-    def test_intensity_3_important(self):
+    def test_intensity_3_notable(self):
+        """SPEC-intensity-scale-bear-bias §4b: intensity 3 → notable (silent TG,
+        no phone). Phone threshold raised to ≥4."""
         ea = EventAssessment(is_event=True, intensity=3)
-        assert ea.alert_level == "important"
-        assert ea.should_push is True
+        assert ea.alert_level == "notable"
+        assert ea.should_push is True  # still pushed, just TG-only
 
     def test_intensity_1_normal(self):
         ea = EventAssessment(is_event=True, intensity=1)
         assert ea.should_push is False
-        assert ea.alert_level == "normal"
+
+
+class TestDirectionAwareChannel:
+    """SPEC-intensity-scale-bear-bias §4/§4b — direction-aware channel + bearish
+    escalation. event_channel_level is the single source of truth used by both
+    EventAssessment.alert_level (base) and the pipeline (with tracked)."""
+
+    def test_bearish_unconfirmed_notable(self):
+        """FAIL-SAFE: reportedly bearish ★5 → notable (silent TG, never phone),
+        even at high intensity — the source-confidence gate."""
+        from engine.event_driven_evaluator import event_channel_level
+        assert event_channel_level(5, "down") == "notable"           # confirmed defaults False
+        assert event_channel_level(4, "down", confirmed=False) == "notable"
+
+    def test_bearish_confirmed_caps_at_important(self):
+        """Confirmed bearish (not hitting tracked) → important (channel B, no siren)."""
+        from engine.event_driven_evaluator import event_channel_level
+        assert event_channel_level(5, "down", confirmed=True) == "important"
+        assert event_channel_level(4, "down", confirmed=True) == "important"
+
+    def test_bullish_5_critical(self):
+        from engine.event_driven_evaluator import event_channel_level
+        assert event_channel_level(5, "up") == "critical"
+
+    def test_neutral_direction_caps_at_important(self):
+        """FAIL-SAFE #2: neutral/unknown direction never sirens — caps at important."""
+        from engine.event_driven_evaluator import event_channel_level
+        assert event_channel_level(5, "neutral") == "important"
+        assert event_channel_level(5, "") == "important"
+        assert event_channel_level(5, "DOWN ") == "notable"  # stripped+lowered → down, unconfirmed
+
+    def test_intensity_3_notable_both_directions(self):
+        from engine.event_driven_evaluator import event_channel_level
+        assert event_channel_level(3, "up") == "notable"
+        assert event_channel_level(3, "down", confirmed=True) == "notable"
+
+    def test_bearish_escalates_when_tracked_and_confirmed(self):
+        """Bearish 5 hitting a tracked name AND confirmed → critical (siren)."""
+        from engine.event_driven_evaluator import event_channel_level
+        lvl = event_channel_level(5, "down", confirmed=True,
+                                  losers={"GOOGL"}, tracked={"GOOGL", "AAPL"})
+        assert lvl == "critical"
+
+    def test_bearish_rumor_stays_off_phone(self):
+        """cal-01 trap: bearish hits tracked GOOGL but reportedly → notable (off phone),
+        NOT important — fail-safe closes the multi-source-to-phone leak."""
+        from engine.event_driven_evaluator import event_channel_level
+        lvl = event_channel_level(5, "down", confirmed=False,
+                                  losers={"GOOGL"}, tracked={"GOOGL"})
+        assert lvl == "notable"
+
+    def test_bearish_confirmed_not_tracked_important(self):
+        from engine.event_driven_evaluator import event_channel_level
+        lvl = event_channel_level(5, "down", confirmed=True,
+                                  losers={"XYZ"}, tracked={"GOOGL"})
+        assert lvl == "important"
+
+    def test_intensity_3_bearish_never_escalates(self):
+        """A ★3 bearish stays notable even if tracked+confirmed (escalation is ★4/5)."""
+        from engine.event_driven_evaluator import event_channel_level
+        lvl = event_channel_level(3, "down", confirmed=True,
+                                  losers={"GOOGL"}, tracked={"GOOGL"})
+        assert lvl == "notable"
+
+    def test_direction_confirmed_parsed_from_json(self):
+        raw = """{"is_event": true, "event_types": [], "intensity": 3, "direction": "down", "confirmed": false, "ticker_hint": ["GOOGL","MSFT"], "headline_signal": "x", "risk_snapshot": "y"}"""
+        ea = EventAssessment.from_json(raw)
+        assert ea.direction == "down"
+        assert ea.confirmed is False
+        assert ea.alert_level == "notable"  # ★3 → notable regardless of direction
+
+    def test_direction_defaults_up_when_absent(self):
+        """Backward compat: no direction field → 'up' (old bullish behavior)."""
+        raw = """{"is_event": true, "event_types": [1], "intensity": 5, "ticker_hint": ["INTC"], "headline_signal": "x", "risk_snapshot": "y"}"""
+        ea = EventAssessment.from_json(raw)
+        assert ea.direction == "up"
+        assert ea.confirmed is False  # fail-safe default (bullish path ignores it)
+        assert ea.alert_level == "critical"
 
     def test_not_event_normal(self):
         ea = EventAssessment(is_event=False, filter_reason="noise")

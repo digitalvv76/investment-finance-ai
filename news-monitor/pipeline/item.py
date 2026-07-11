@@ -38,6 +38,7 @@ class DispatchDecision:
     ticker_hint: list[str] = field(default_factory=list)
     risk_snapshot: str = ""      # 中文最大风险点
     filter_reason: str = ""      # 过滤原因（非事件时）
+    direction: str = "up"        # up/down/neutral — event direction (SPEC-intensity-scale-bear-bias)
 
 
 @dataclass

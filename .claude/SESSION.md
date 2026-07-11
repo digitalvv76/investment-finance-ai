@@ -1,19 +1,27 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-11。生产=clean main + 深度分析老版4步已恢复 + 认方向过滤已上、健康。双窗口保留(受 COLLAB-PROTOCOL 约束)。
+> 最后更新: 2026-07-11。生产=clean main + 深度分析(老版4步已恢复→再精简250-300字+组合映射修正) + 认方向过滤 + intensity方向感知渠道，均已上、健康。双窗口保留(受 COLLAB-PROTOCOL 约束)。
 
 ## ✅ 本次会话交付(2026-07-11)
-- **深度分析恢复老版4步 + 防幻觉升级「认方向」**(engine/deep_lane.py): 用户对深度分析不满→诊断出 `afff8b9` 曾把4步推理砍成快讯→用户选B回老版
-  - ANALYSIS_PROMPT 还原为4步(事件定性/传导路径/组合映射带触发条件/置信度)+grounding纪律
-  - 防幻觉过滤器重构为「认方向」: `_ticker_directions`读真实涨跌符号 + `_direction_contradiction`只拦说反方向的句子(豁免条件/触发/否定句,归属主标的,市场主语不归属); 价格选项B宽松(仅现价类永远校验,止损/目标价放行); 无数据仍全严
-  - 🛡️ **4轮对抗核实**抓到并修我引入的**1个高危洞**(交易动作豁免让"反向事实+交易建议同句"逃逸=重演事故)→去豁免改数字紧跟时即则识别触发
-  - 508测试绿(+26); 真DeepSeek端到端删0句、4步深度完整; deploy已上生产
+- **深度分析恢复老版4步 + 防幻觉升级「认方向」**(deep_lane.py, commit `873d4c9` 已部署): 用户不满→诊断 `afff8b9` 砍成快讯→用户选B回老版
+  - ANALYSIS_PROMPT还原4步 + 防幻觉过滤器重构「认方向」(读真实涨跌只拦说反方向,价格选项B宽松)
+  - 🛡️ 4轮对抗核实抓到并修我引入的高危洞(交易动作豁免让反向事实+建议同句逃逸)→去豁免改数字紧跟时即则
+- **V1交接①: intensity标尺利好偏置修正**(event_driven_evaluator/evaluate/item/prompt, SPEC-intensity-scale-bear-bias): 利空事件不再误拉手机警笛
+  - intensity改方向中性 + direction/confirmed字段 + event_channel_level渠道映射 + 利空升级(confirmed AND losers∩tracked); ★3→NOTABLE静音TG(手机门槛≥4)
+  - 🛡️ 对抗核实抓高危洞: confirmed默认True=失败朝手机开→改**失败朝静音**(默认False/neutral封important/未确认利空→notable绝不上手机)
+  - 验收: cal-01传闻→notable不上手机✅ 确认利空砸持仓→critical警笛✅
+- **V1交接③: 深度分析精简250-300字+修组合映射**(deep_lane.py, SPEC-deep-analysis-trim): 用户嫌太长(实测1484字)
+  - ANALYSIS_PROMPT重写~250-300字深度在②③; ③强制映射到用户持仓∪关注股(主受益股不在仓→改指同链条跟踪票); NO_DATA_PROMPT对齐结构+无方向词无数字; max_tokens 1500→900
+  - 验收(news3787防务): 276字③正确从LMT五大改指HII/KTOS等关注股✅ 无价位无买卖✅
+- 525测试全绿; intensity+trim一并 commit+部署(见本次末尾)
 
 ## 📋 下一步
-- 📊 **观察生产深度分析 1-2 天**: 看真实推送的深度分析是否恢复了4步深度、组合映射带触发价位; 确认认方向过滤不误删也不漏反向 (看日志 flagged 记录)
-- ⚠️ **认方向残留边界(中低危)**: 复合句一句双票反向(down==up→跳过)、多票新闻主标的行情抓取失败时裸方向句无归属→漏; 深度分析人工审核兜底,若生产出问题再升级语义判别
-- 🟡 **待用户定**: sources.yaml request_delay(ECS 3.0/1.5 vs main 1.0/0.3,方向不明,未合并)
-- ⚠️ **遗留时区隐患**: captured_at/created_at 本地存储 vs 查询 UTC 不一致([[db-captured-at-timezone]]), digest/api 等查询待排查
+- 📊 **观察生产 1-2 天(三改一起看)**: ①深度分析是否变精简(~250-300字)且③映射到你的持仓/关注股 ②认方向过滤不误删不漏反向 ③利空事件不再误拉手机警笛(看日志 direction/confirmed/渠道)
+- ⚠️ **intensity残留(对抗核实报,已报用户)**: #3 ticker_hint=损失方靠prompt约定无代码强制(LLM若把tracked受益股误放ticker_hint→利空误判); 靠confirmed主动化+prompt缓解,生产出问题再加schema
+- ⚠️ **认方向残留(中低危)**: 复合句双票反向/多票主标的抓取失败裸方向句; 人工审核兜底
+- 🟢 **V1通知②待办(用户已知)**: v1-stable漂移(选A丢弃旧scheduler)/门禁潜在漏洞(dev_checklist容忍逻辑只查字符串存在→混入真error)/LESSONS.md拉进main — 均待处理
+- 🟡 **待用户定**: sources.yaml request_delay(ECS 3.0/1.5 vs main 1.0/0.3)
+- ⚠️ **遗留时区隐患**: captured_at/created_at 本地 vs 查询UTC不一致([[db-captured-at-timezone]]), digest/api待排查
 
 ## ⚠️ 上次踩坑(关键教训)
 - **交易动作豁免=高危洞**: 用"句含交易词就豁免方向检查"让反向事实+交易建议同句逃逸(=原事故形态);对抗核实第4轮才抓到。真计划句本身无涨跌方向词,压根不需豁免→只对真条件/触发句豁免

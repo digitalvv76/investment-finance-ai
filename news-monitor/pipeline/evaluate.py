@@ -255,15 +255,28 @@ class EvaluateStage:
                 item.id, source_count, intensity,
             )
 
-        # Map intensity to alert level
-        if intensity >= 5:
-            level = AlertLevel.CRITICAL
-        elif intensity >= 4:
-            level = AlertLevel.IMPORTANT
-        else:
-            level = AlertLevel.IMPORTANT  # intensity 3
+        # Map intensity to alert level — direction-aware channel (SPEC-intensity-
+        # scale-bear-bias §4/§4b). Bearish caps at IMPORTANT (no siren) unless it
+        # hits a tracked name AND is confirmed (not reportedly).
+        from engine.event_driven_evaluator import event_channel_level
+        from engine.relevance import get_tracked_tickers
+        direction = (getattr(ea, "direction", "up") or "up").lower()
+        confirmed = bool(getattr(ea, "confirmed", True))
+        losers = {t.strip().upper() for t in (ea.ticker_hint or []) if t and t.strip()}
+        tracked = get_tracked_tickers()
+        level = AlertLevel(event_channel_level(
+            intensity, direction, confirmed=confirmed, losers=losers, tracked=tracked,
+        ))
+        if direction == "down":
+            escalated = level == AlertLevel.CRITICAL
+            logger.info(
+                "EVALUATE: bearish event #%s intensity=%d confirmed=%s losers∩tracked=%s → %s%s",
+                item.id, intensity, confirmed, sorted(losers & tracked),
+                level.value, " [escalated: tracked+confirmed]" if escalated else " [capped B]",
+            )
 
-        reason = f"event_driven: catalyst_types={ea.event_types} intensity={intensity}"
+        reason = (f"event_driven: catalyst_types={ea.event_types} intensity={intensity} "
+                  f"direction={direction} confirmed={confirmed}")
         if escalation_note:
             reason += f" escalated({source_count}sources)"
 
@@ -288,6 +301,7 @@ class EvaluateStage:
             headline_signal=headline,
             ticker_hint=ea.ticker_hint,
             risk_snapshot=ea.risk_snapshot,
+            direction=direction,
             needs_deep=(intensity >= 4),
             urgency="FLASH" if intensity >= 5 else "ALERT",
             flash_note=headline,

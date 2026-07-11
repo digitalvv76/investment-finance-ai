@@ -164,3 +164,57 @@ class TestAssessmentPersistence:
         )
         result = await stage.process(items)
         assert len(result) == 1
+
+
+class TestEventDirectionChannel:
+    """SPEC-intensity-scale-bear-bias — _apply_event_assessment direction-aware
+    channel + bearish escalation, end-to-end through the pipeline stage."""
+
+    def _apply(self, ea, tracked):
+        from engine.event_driven_evaluator import EventAssessment  # noqa: F401
+        stage = EvaluateStage(impact_evaluator=MagicMock(), dispatcher=MagicMock())
+        item = PipelineItem(id=1, title="t", source="s", url="http://x/1")
+        with patch("engine.relevance.get_tracked_tickers", return_value=set(tracked)):
+            stage._apply_event_assessment(item, ea)
+        return item.decision
+
+    def _ea(self, **kw):
+        from engine.event_driven_evaluator import EventAssessment
+        base = dict(is_event=True, intensity=5, direction="up", confirmed=True,
+                    ticker_hint=[], headline_signal="h", risk_snapshot="r")
+        base.update(kw)
+        return EventAssessment(**base)
+
+    def test_cal01_reportedly_bearish_3_is_notable_not_phone(self):
+        """cal-01 acceptance anchor: reportedly bearish ★3 hitting tracked GOOGL
+        → NOTABLE (silent TG), NOT critical, NOT phone."""
+        ea = self._ea(intensity=3, direction="down", confirmed=False,
+                      ticker_hint=["GOOGL", "MSFT"])
+        d = self._apply(ea, tracked=["GOOGL"])
+        assert d.alert_level == AlertLevel.NOTABLE
+
+    def test_bullish_5_critical(self):
+        d = self._apply(self._ea(intensity=5, direction="up"), tracked=[])
+        assert d.alert_level == AlertLevel.CRITICAL
+
+    def test_bearish_5_caps_important(self):
+        ea = self._ea(intensity=5, direction="down", confirmed=True, ticker_hint=["XYZ"])
+        d = self._apply(ea, tracked=["GOOGL"])
+        assert d.alert_level == AlertLevel.IMPORTANT
+
+    def test_bearish_5_escalates_when_tracked_and_confirmed(self):
+        ea = self._ea(intensity=5, direction="down", confirmed=True, ticker_hint=["GOOGL"])
+        d = self._apply(ea, tracked=["GOOGL", "AAPL"])
+        assert d.alert_level == AlertLevel.CRITICAL
+
+    def test_bearish_5_rumor_off_phone_notable(self):
+        """Fail-safe: unconfirmed (reportedly) bearish → NOTABLE (silent TG),
+        never phone — holds even at ★5 hitting a tracked name."""
+        ea = self._ea(intensity=5, direction="down", confirmed=False, ticker_hint=["GOOGL"])
+        d = self._apply(ea, tracked=["GOOGL"])
+        assert d.alert_level == AlertLevel.NOTABLE
+
+    def test_intensity_3_up_notable(self):
+        d = self._apply(self._ea(intensity=3, direction="up"), tracked=[])
+        assert d.alert_level == AlertLevel.NOTABLE
+        assert d.direction == "up"
