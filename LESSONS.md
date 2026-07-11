@@ -22,16 +22,20 @@
 - 会话开始读对方 `SESSION.md` + `git log origin/main & origin/v1-stable`。
 - → 细节：`COLLAB-PROTOCOL.md` §1–§8。
 
-## B. 技术硬坑（可直接复用）
-- **时区+T分隔符**：`captured_at` 存本地时间、Py3.12 存 `T` 分隔 → SQL 必须 `datetime()` 包裹 + `localtime`。看门狗/事件线/stale-event 三处都栽过。
-- **测试真发手机推送**：构造真实 `AlertDispatcher` 会真发 Pushover → 必须清空凭证 + stub 发送方，别信"凭证不存在"假设。
-- **`tickers_found` 子串误匹配**：禁用于推送门禁，改用 LLM `ticker_hint`。
-- **异步管道藏同步 O(N²)**：编码阻塞事件循环 → 采集静默停摆。
-- **deploy-shadow `--down`**：`compose down` 会连 V1 一起删 → 必须 `rm -sf` 单服务。
-- **手机 API 必须走 Vercel HTTPS**：裸 IP HTTP 手机不可靠；新增手机端点必同步 Vercel rewrite。
-- **改阈值必须同步改测试断言**（硬编码断言会挂）。
-- **RSS/Sina 源**：每个源从 ECS 实测；Sina 用 `zhibo` feed 绕 IP 级 403。
-- → 细节：`.claude/TROUBLESHOOTING.md`。
+## B. 技术硬坑（**纯索引** → 修复步骤只在源里维护一处，此处只导航）
+| 坑（症状关键词） | 真相源（去这里看修复） |
+|------|------|
+| 时区 + T 分隔符 → SQL 时间窗口失效 | 记忆 `db-captured-at-timezone` |
+| 测试真发手机推送（Pushover） | TROUBLESHOOTING「单元测试真的把推送发到手机」+ 记忆 `tests-never-send-real-pushes` |
+| `tickers_found` 子串误匹配 → 禁用于门禁 | 记忆 `tickers-found-unreliable` |
+| 异步管道藏同步 O(N²) → 采集静默停摆 | 记忆 `dedup-silent-stall-on2` |
+| deploy-shadow `--down` 误删 V1 | 记忆 `shadow-down-kills-v1` |
+| 手机 API 必须走 Vercel HTTPS | TROUBLESHOOTING「深度分析链接错误」+ 记忆 `vercel-proxy-architecture` |
+| 改阈值必须同步改测试断言 | TROUBLESHOOTING「改了 alert_dispatcher 阈值后测试失败」 |
+| RSS/Sina 源要从 ECS 实测（Sina 用 zhibo feed） | TROUBLESHOOTING「修改 config/sources.yaml」+ 记忆 `sina-feed-endpoint` |
+| ECS SSH 不通 / 内存 / IOPS / chat_id 丢失 等运维 | TROUBLESHOOTING「ECS·部署」各条 + 记忆 `ecs-*` |
+
+> 本表只有"坑名 + 去哪看"，**不抄修复内容**——避免和 TROUBLESHOOTING/记忆 双写漂移。
 
 ## C. 推送/评级（信噪比治理）
 - **少而精**，屏门槛严。
