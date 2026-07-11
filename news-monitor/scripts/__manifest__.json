@@ -31,6 +31,11 @@
       "related_scripts": [],
       "also_tests": []
     },
+    "scripts/eval_framework_holdout.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
     "scripts/install_service.py": {
       "tests": [],
       "related_scripts": [],
