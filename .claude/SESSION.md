@@ -8,6 +8,7 @@
 3. **推送标准三决策全锁 → `SPEC-intensity-scale-bear-bias.md`**(交V2实现)：①标尺改方向中性②利空降档B(仅命中持仓/关注股 且 已确认才升警笛)③手机门槛≥3→≥4、强度3只上TG静音(复用NOTABLE)。`cal-01`(news_id=3612)生产校准锚点入 `catalyst-cases-negative.jsonl`。⚠️GOOGL在关注股内,靠"传闻不升级"挡住cal-01不回critical。
 4. **经验总纲 `LESSONS.md`**：第一原则=不假设对着代码核实 + 五板块(协作/技术坑/推送评级/流程/评估)；§B 去重后为纯索引(不抄修复,指向TROUBLESHOOTING/记忆)。
 5. **隐忧核查 → `HANDOFF-lessons-concerns.md`**(交V2)：dev_checklist 红=**v1-stable漂移非main bug**(scheduler差149/106、`test_scraper_tick`在main不存在、6errors=ChromaDB-Windows已知容忍)；门禁容忍逻辑别吞真失败(真归main)。
+6. **深度分析精简 → `SPEC-deep-analysis-trim.md`**(交V2)：逐轮定稿(样例 news_id=3787)。收紧~250-300字；①定性精炼②传导只留直接链去间接/加密货币③**组合映射修正**(映射到用户实仓/关注股;查出五大主承包商不在仓、HII/KTOS/AVAV/BWXT/PLTR在→改指后者)、方向词仅当有行情、禁价位与操作④置信度1行。不得回退anti-fabrication。
 
 ## 🕐 旧会话完成（2026-07-10 晚 · 全在 v1-stable，交接 V2）
 1. **诊断美光$250B误响手机**(id=3340) → 根因=事件驱动路径只升级不因过期降级 → 出 `SPEC-stale-event-downgrade.md`(1h阈值/降静音TG/时区排雷)。**待 V2 实现。**
