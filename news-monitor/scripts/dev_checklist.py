@@ -77,9 +77,12 @@ def check_git_clean() -> tuple[bool, str]:
 
 def check_tests() -> tuple[bool, str]:
     """Run full test suite (with generous timeout for 313 tests)."""
-    # Use --tb=no for faster output, -x for fail-fast
+    # --tb=no for fast output; -rE prints one "ERROR path::test - reason" line per
+    # errored test so we can verify EACH error is the tolerated ChromaDB one
+    # (not a blanket substring match that would swallow a real error co-occurring
+    # with a vector_store error — V1 gate-hygiene concern, 2026-07-11).
     r = run(
-        ["python", "-m", "pytest", "tests/", "-q", "--tb=no"],
+        ["python", "-m", "pytest", "tests/", "-q", "--tb=no", "-rE"],
         cwd=str(NEWS_MONITOR),
         timeout=600,  # 10 minutes — full suite takes ~200s
     )
@@ -90,10 +93,22 @@ def check_tests() -> tuple[bool, str]:
         if "passed" in stripped:
             if "failed" in stripped:
                 return False, stripped
-            # ChromaDB vector_store errors on Windows are a known platform issue
+            # ChromaDB vector_store errors on Windows are a known platform issue.
+            # Tolerate ONLY when EVERY errored test is test_vector_store — a real
+            # error elsewhere must still fail the gate even if a vector_store
+            # error is also present.
             if "error" in stripped:
-                if "test_vector_store" not in output:
-                    return False, stripped
+                error_nodes = [
+                    l.strip() for l in output.split("\n")
+                    if l.strip().startswith("ERROR ")
+                ]
+                non_vs = [l for l in error_nodes if "test_vector_store" not in l]
+                if non_vs or not error_nodes:
+                    # non_vs: a real error slipped in. not error_nodes: errors
+                    # reported in the summary but no per-node lines to vet → don't
+                    # blindly tolerate.
+                    detail = "; ".join(non_vs[:3]) if non_vs else "error nodes unresolved"
+                    return False, f"{stripped} | non-vector_store errors: {detail}"
             if "passed" in stripped and ("in" in stripped or "s " in stripped):
                 return True, stripped
     # Fallback: check return code
