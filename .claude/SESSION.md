@@ -19,7 +19,7 @@
 - 📊 **观察生产 1-2 天(三改一起看)**: ①深度分析是否变精简(~250-300字)且③映射到你的持仓/关注股 ②认方向过滤不误删不漏反向 ③利空事件不再误拉手机警笛(看日志 direction/confirmed/渠道)
 - ⚠️ **intensity残留(对抗核实报,已报用户)**: #3 ticker_hint=损失方靠prompt约定无代码强制(LLM若把tracked受益股误放ticker_hint→利空误判); 靠confirmed主动化+prompt缓解,生产出问题再加schema
 - ⚠️ **认方向残留(中低危)**: 复合句双票反向/多票主标的抓取失败裸方向句; 人工审核兜底
-- 🟢 **V1通知②已处理(2/3落地)**: ①门禁漏洞已修(dev_checklist.check_tests改为逐条核实每个ERROR行都是test_vector_store,真error与已知error同现时不再被吞) ②LESSONS.md已从origin/v1-stable拉进main根目录 ③v1-stable漂移决策=**选A**(已确认main scheduler 17绿→v1-stable旧scheduler是漂移,应丢弃回归短命应急;**实际重置在V1窗口做,V2不跨窗口碰v1-stable**)
+- 🟢 **V1通知②已处理(2/3落地)**: ①门禁漏洞已修(dev_checklist.check_tests改为逐条核实每个ERROR行都是test_vector_store,真error与已知error同现时不再被吞) ②LESSONS.md已从origin/v1-stable拉进main根目录 ③v1-stable漂移决策=**选A·已执行(2026-07-11 V1窗口)**: 归档→`archive/v1-stable-20260711`(d209aee,113提交可恢复,已推origin) + v1-stable `reset`到clean main(a009eac) + 保留在建训练评估项目5文件(REQ×2/HANDOFF-review/autolabel原型+测试, commit `91e695a`)。origin/v1-stable已强推同步。main全程未碰。未提交HISTORY.md WIP存stash。
 - 🟡 **待用户定**: sources.yaml request_delay(ECS 3.0/1.5 vs main 1.0/0.3)
 - ⚠️ **遗留时区隐患**: captured_at/created_at 本地 vs 查询UTC不一致([[db-captured-at-timezone]]), digest/api待排查
 
