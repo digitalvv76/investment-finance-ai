@@ -1,6 +1,13 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-11。生产=clean main + 深度分析(老版4步已恢复→再精简250-300字+组合映射修正) + 认方向过滤 + intensity方向感知渠道，均已上、健康。双窗口保留(受 COLLAB-PROTOCOL 约束)。
+> 最后更新: 2026-07-11 下午。生产未动(仍是上午三改健康运行中)。本次会话=纯卫生+协作(登记表/评审)，无运行时/部署改动。双窗口保留(受 COLLAB-PROTOCOL 约束)。
+
+## ✅ 本次会话交付(2026-07-11 下午 · 卫生+V1协作)
+- **清卫生项**(commit `66046b6`): ①补注册 `eval_framework_holdout.py` 进 __manifest__.json(消未注册警告) ②提交积压 HISTORY(SessionEnd 补账)，工作区干净。
+- **V1交办: deep_lane 登记表误挂修复**(commit `bfbd26a`): `acceptance_test.py` 不 import deep_lane(已核实)却被挂 related_scripts→常报「过时」。**两张表一并清**(旧 module_registry.json 供 session_startup + 新 engine/__manifest__.json 供 pre_commit，只删旧的会从提交路径复发)→ [[two-manifest-tables-sync]]。回执 `.claude/V2-TO-V1-HANDOFF.md`。
+- **V1评审: REQ-training-eval**(commit `fb36f7d` → `REVIEW-REQ-training-eval.md`): 对着 main 真实代码核实(非文档假设)。**头号发现=event_driven 决策完全不落库**(evaluate.py:96-99 命中即 return 不写表;ticker_hint 内存态从不入 news 表)→ R1/R3/G4 自动标注塌方 + R4 噪音负例捞不出 + A2 precision/recall 量不出。建议**新增 R0 落库表(V2 0.5天)排②设计前 + 别回填历史 + 路线 C 先于 A**。方法学(相关≠因果)明确让第三方。**球已发回 origin/main，等 V1 自己读吸收进②产品设计。**
+
+<details><summary>上午会话交付(已存档)</summary>
 
 ## ✅ 本次会话交付(2026-07-11)
 - **深度分析恢复老版4步 + 防幻觉升级「认方向」**(deep_lane.py, commit `873d4c9` 已部署): 用户不满→诊断 `afff8b9` 砍成快讯→用户选B回老版
@@ -15,7 +22,10 @@
   - 验收(news3787防务): 276字③正确从LMT五大改指HII/KTOS等关注股✅ 无价位无买卖✅
 - 525测试全绿; intensity+trim一并 commit+部署(见本次末尾)
 
+</details>
+
 ## 📋 下一步
+- ⏳ **等 V1 吸收评审**: `REVIEW-REQ-training-eval.md` 已发回 origin/main。若 V1 采纳 R0 落库表→**V2 认领实现**(新增 event_decisions 表, evaluate.py 事件路径 return 前落库, ~0.5天)。这是训练评估项目的地基。
 - 📊 **观察生产 1-2 天(三改一起看)**: ①深度分析是否变精简(~250-300字)且③映射到你的持仓/关注股 ②认方向过滤不误删不漏反向 ③利空事件不再误拉手机警笛(看日志 direction/confirmed/渠道)
 - ⚠️ **intensity残留(对抗核实报,已报用户)**: #3 ticker_hint=损失方靠prompt约定无代码强制(LLM若把tracked受益股误放ticker_hint→利空误判); 靠confirmed主动化+prompt缓解,生产出问题再加schema
 - ⚠️ **认方向残留(中低危)**: 复合句双票反向/多票主标的抓取失败裸方向句; 人工审核兜底
