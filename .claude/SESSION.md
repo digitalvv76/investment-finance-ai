@@ -40,6 +40,7 @@
 | 决策面板 `/health/decisions` | 🟢 V2 已加 |
 
 ## 📋 下一步 / 待办
+0e. **🆕 V2 待办（2026-07-11 交接）**：`SPEC-deep-analysis-trim.md` —— 深度分析(有行情4步版)太长 → 收紧 ~250-300字。规则：①定性精炼1-2句 ②传导只留直接链(去间接/去加密货币) ③**组合映射修正**=映射到用户实际持仓∪关注股(主受益股不在仓则改指同链条中跟踪的票)、单场景、方向词仅当有实时行情、禁价位与买卖操作、可含1句反向风险 ④置信度1行。⚠️不得回退 anti-fabrication 硬门禁；确认 portfolio∪watchlist 真注入 prompt。回归锚点 news_id=3787(定稿样例在SPEC §4)。归属 main/V2。
 0d. **🆕 V2 待办（2026-07-11 交接）**：读 `HANDOFF-lessons-concerns.md` —— ①v1-stable 已攒 scheduler 漂移(§2违反)，请 V2/用户定 port回main / 丢弃 / 当草稿分支(退役v1-stable是owner决策)；②确认 dev_checklist 容忍逻辑只白名单 `test_vector_store`、别吞真失败；③建议把 `LESSONS.md` 拉进 main 与 living docs 同处。
 0c. **🆕 V2 待办（2026-07-11 交接，决策已锁）**：`SPEC-intensity-scale-bear-bias.md` —— intensity 强度标尺**利好偏置** + **推送门槛调整**（同一段 `alert_level` 映射，一并改）。①标尺改方向中性"波动剧烈程度"+显式利空档；②**渠道决策 B**：利空手机上限 important，仅「命中持仓/关注股 **且** 已确认(非传闻)」才升警笛；③**手机门槛 ≥3 抬到 ≥4，强度3只上TG静音**（复用现有 NOTABLE 档，无需新增；owner 选静音不响铃）。⚠️坑：GOOGL 在关注股内，cal-01(强度3二手)靠"传闻不升级"挡住不回 critical。验收锚点：cal-01 改后不得判 critical、不得上手机（只上TG）。校准素材 `catalyst-cases-negative.jsonl` 已备。归属 main/V2。已 push origin/v1-stable。
 0. **🆕 V2 待办（新·高优先）**：深度分析卡片**在编造行情数据**（`engine/deep_lane.py`）。**见 `SPEC-deep-analysis-stale-data.md`**（实测证据/7.3s-8s时序/6只股对照/硬门禁契约/测试）。样本 id=3340：卡片称 META 盘前 -7.64% 建议做空，实际 META +4.70%（双源确认）。根因=抓行情 8s 超时（实测 7.3s 卡门槛）→ 575-576 行静默丢弃 → LLM 零数据仍硬编（56 行软约束被无视）。**已出 SPEC + 口头交接 V2**：①硬门禁-无行情禁止输出价格/建议；②输出校验-$/%须匹配行情串；③Finnhub 设主源；④超时改 WARNING+标时间戳。测试：空行情串→断言无$/%无建议。⚠️修好前深度分析数字/建议不可信。
