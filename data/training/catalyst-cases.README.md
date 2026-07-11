@@ -2,7 +2,7 @@
 
 **来源**：`训练资料.docx`（政府入股/补贴 11 例 + 黄仁勋言论 7 例，共 18 例）
 **用途**：喂 `event_driven` 评估器做少样本校准——不只学"打几星"，更学"看到大额政府计划→往外铺哪些受益股+联动板块"。
-**评级框架**：沿用 `config/prompts/event_driven_v1.txt` 的强度 1–5（5=板块暴涨→critical，3-4→important 上手机，≤2 不上手机）。
+**评级框架**：沿用 `config/prompts/event_driven_v1.txt` 的强度 1–5。**渠道门槛（2026-07-11 更新，见 `SPEC-intensity-scale-bear-bias.md`）**：★5 利好→critical 手机警笛；★4→important 手机高优；**★3→只上 TG 不上手机（手机门槛由 ≥3 抬到 ≥4）**；★≤2 不推。利空按方案 B 降档（手机上限 important，仅命中持仓/关注股且已确认才升警笛）。
 
 ## 字段
 | 字段 | 含义 |
@@ -16,7 +16,7 @@
 | `linked_tickers` | 联动/溢出受益股（建厂→设备、核能→供电等） |
 | `sector_etf` | 板块 ETF |
 | `market_reaction` | 文档记载的真实市场反应（强度的 ground truth） |
-| `is_push` / `alert_level` | is_event & intensity≥3 → 手机；critical/important/none |
+| `is_push` / `alert_level` | 渠道判定（2026-07-11 新门槛）：★≥4→手机(critical/important)；★3→只上TG(notable)；★≤2→none |
 | `note` | 评级依据/坑 |
 
 ## 关键校准原则（见记忆 govt-program-rating-deepdig）
@@ -63,6 +63,6 @@
 | `label_type: "calibration_downgrade"` | 标记方向：系统过评→应降级（反之 `_upgrade`=漏评应升级） |
 
 **已收录**：
-- `cal-01`（news_id=3612）：OpenAI/谷歌被曝向五角大楼黑名单中资子公司供 AI → 系统 **intensity=5 拉手机警笛**。降级三理由：①`reportedly` 二手传闻非官方；②GOOGL/MSFT 万亿巨头，单条合规传闻难成板块级异动；③**利空事件被硬塞进按"板块暴涨"写的利好标尺顶格**。修正 = `important`（上手机不拉警笛）/intensity 3。**验收锚点：此条不得判 critical。**
+- `cal-01`（news_id=3612）：OpenAI/谷歌被曝向五角大楼黑名单中资子公司供 AI → 系统 **intensity=5 拉手机警笛**。降级三理由：①`reportedly` 二手传闻非官方；②GOOGL/MSFT 万亿巨头，单条合规传闻难成板块级异动；③**利空事件被硬塞进按"板块暴涨"写的利好标尺顶格**。修正 = intensity 3 → **按新门槛只上 TG、不上手机**。**验收锚点：此条不得判 critical、不得触发手机推送。**
 
 **防编数纪律同样适用**：`market_reaction` 未实时核实的一律标"待核实"，接入时按 `captured_at` 实时抓取，禁子串臆测（见记忆 `tickers-found-unreliable` / deep_lane 硬门禁）。

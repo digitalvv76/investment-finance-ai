@@ -45,14 +45,37 @@ main 当前原文（`git show origin/main:news-monitor/config/prompts/event_driv
 
 > ⚠️ **为什么必须加第 2 条（实现别漏）**：cal-01 的 losers=[GOOGL, MSFT]，而 **GOOGL 就在关注股里**（`watchlist-state.md:41`）。若只按"利空命中关注股→升级"，cal-01 会被重新拉回 critical，**违反 §6 验收锚点**。第 2 条"传闻不升级"正好挡住：cal-01 是 `reportedly` 二手 → 不满足 → 保持 important。此条与 §5 的信源置信度门槛是同一根因，建议一并落地。
 
-## 5. 次要硬化（可选，二期）
+## 4b. 推送门槛调整（owner 已拍板 2026-07-11）：**强度 3 不上手机，只上 TG**
+
+手机门槛从 `intensity≥3` **抬到 `intensity≥4`**。强度 3 仍推，但**只走 Telegram、不触发 Pushover 手机推送**。
+
+**统一后的 强度 × 方向 → 渠道映射**（V2 按此重写 `event_driven_evaluator.alert_level` + dispatcher 接线）：
+
+| 强度 | 利好 up | 利空 down |
+|:---:|---------|-----------|
+| ★5 | 🚨 critical 手机警笛 | 📱 important 手机高优（B 降档，不警笛）※ |
+| ★4 | 📱 important 手机高优 | 📱 important 手机高优（B，不警笛）※ |
+| **★3** | **📨 只上 TG（不上手机）** | **📨 只上 TG（不上手机）** |
+| ★≤2 | 不推 | 不推 |
+
+※ 利空 4/5 **命中持仓/关注股 且 已确认** → 升 critical 手机警笛（§4 的 B 升级路径）。
+
+**实现触点（V2）**：
+- `should_push` 注释与语义：现为"`intensity>=3`→push"。强度 3 仍算 push（不能归 no_push），但要走 TG-only 档——别把 3 掉进 `normal/no_push` 分支。
+- `alert_level`：`>=5`→critical、`==4`→important、`==3`→**TG-only 档**、`<3`→no_push。
+- dispatcher 已有 `NOTABLE`（line 35 = "silent Telegram only, never phone"）可复用作 TG-only 落点。
+- ⚠️ **待你定的子选项**：强度 3 的 TG 要**响铃**还是**静音**？
+  - **响铃 TG（V1 推荐）**：`disable_notification=False` 但**不发 Pushover**——你能在 TG 看到、不吵手机警报。需 V2 新增一档"TG 响铃不上手机"。理由：强度 3 是真催化剂(明显异动)，你把它留下就是想看到；静音 TG 你之前反映过会漏(RKLB)。
+  - **静音 TG（省事）**：直接复用现有 `NOTABLE`（disable_notification=True），与关注股安全网同档。
+
+
 
 - **确定性/信源门槛**：`reportedly`/未证实传闻 + 万亿市值标的 → intensity 打折。现 prompt 只有"市场预期充分度"，无信源置信度维度。
 - 与 `SPEC-stale-event-downgrade.md`（时效降级）正交：那管"旧闻降级"，本 SPEC 管"利空标尺缺失"。两者叠加才完整。
 
 ## 6. 验收锚点（A3 回归，硬性）
 
-- **cal-01 / news_id=3612**：改后**不得判 critical**（目标 important）。判成 critical = 回归。
+- **cal-01 / news_id=3612**：改后**不得判 critical，且不得上手机**（强度 3 → 只上 TG）。判 critical 或触发 Pushover = 回归。
   - ⚠️ 陷阱：losers=[GOOGL,MSFT]，**GOOGL 在关注股内** → 必须靠 §4 第 2 条"传闻不升级"挡住，否则会被"利空命中关注股→升级"重新拉成 critical。此锚点专门盯这条交互。
 - **利空命中关注股 + 已确认**（构造用例：关注股确认级利空，如 portfolio/watchlist 内个股确认下调指引/重大合同流失）：**应**升级 critical/警笛（B 的升级路径正常工作）。
 - 取一条**确认的**利好板块级事件（如 catalyst-cases.jsonl 中 gov 高优例）：仍应 5/critical，**别把利好档误伤降级**。
