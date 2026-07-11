@@ -55,7 +55,7 @@ main 当前原文（`git show origin/main:news-monitor/config/prompts/event_driv
 |:---:|---------|-----------|
 | ★5 | 🚨 critical 手机警笛 | 📱 important 手机高优（B 降档，不警笛）※ |
 | ★4 | 📱 important 手机高优 | 📱 important 手机高优（B，不警笛）※ |
-| **★3** | **📨 只上 TG（不上手机）** | **📨 只上 TG（不上手机）** |
+| **★3** | **📨 只上 TG 静音（不上手机，复用 NOTABLE）** | **📨 只上 TG 静音（不上手机）** |
 | ★≤2 | 不推 | 不推 |
 
 ※ 利空 4/5 **命中持仓/关注股 且 已确认** → 升 critical 手机警笛（§4 的 B 升级路径）。
@@ -63,10 +63,8 @@ main 当前原文（`git show origin/main:news-monitor/config/prompts/event_driv
 **实现触点（V2）**：
 - `should_push` 注释与语义：现为"`intensity>=3`→push"。强度 3 仍算 push（不能归 no_push），但要走 TG-only 档——别把 3 掉进 `normal/no_push` 分支。
 - `alert_level`：`>=5`→critical、`==4`→important、`==3`→**TG-only 档**、`<3`→no_push。
-- dispatcher 已有 `NOTABLE`（line 35 = "silent Telegram only, never phone"）可复用作 TG-only 落点。
-- ⚠️ **待你定的子选项**：强度 3 的 TG 要**响铃**还是**静音**？
-  - **响铃 TG（V1 推荐）**：`disable_notification=False` 但**不发 Pushover**——你能在 TG 看到、不吵手机警报。需 V2 新增一档"TG 响铃不上手机"。理由：强度 3 是真催化剂(明显异动)，你把它留下就是想看到；静音 TG 你之前反映过会漏(RKLB)。
-  - **静音 TG（省事）**：直接复用现有 `NOTABLE`（disable_notification=True），与关注股安全网同档。
+- dispatcher：强度 3 → **直接复用现有 `NOTABLE` 档**（line 35 = "silent Telegram only, never phone"，`disable_notification=True`）。**无需新增档位。**
+- ✅ **子选项已拍板（2026-07-11）：强度 3 = 静音 TG**（复用 NOTABLE，与关注股安全网同档）。owner 选静音（不响铃）——手机门槛之上才出声。
 
 
 
