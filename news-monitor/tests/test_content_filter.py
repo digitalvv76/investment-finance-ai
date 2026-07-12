@@ -68,6 +68,52 @@ class TestGeoMarketFilter:
         assert result == 0.6, f"Expected 0.6, got {result}"
 
 
+class TestMilitaryConflictOverride:
+    """Military conflict escalation overrides non-US political demotion."""
+
+    def test_iran_missile_deployment_no_us_connector(self):
+        """Iran deploys missiles near key shipping lane — military escalation → ×0.80"""
+        text = "Iran deploys ballistic missiles to coastal launch sites, IRGC on heightened alert"
+        result = geo_market_filter(text)
+        assert result == 0.80, f"Expected 0.80, got {result}"
+
+    def test_us_iran_naval_standoff_keeps_score(self):
+        """US destroyers face off with IRGC — has US connector → ×1.0"""
+        text = "US destroyers face off with IRGC speedboats near Strait of Hormuz"
+        result = geo_market_filter(text)
+        assert result == 1.0, f"Expected 1.0, got {result}"
+
+    def test_iran_election_still_blocked(self):
+        """Iran domestic election without military conflict → still ×0.2"""
+        text = "Iran presidential election sees record turnout in Tehran"
+        result = geo_market_filter(text)
+        assert result == 0.2, f"Expected 0.2, got {result}"
+
+    def test_north_korea_icbm_test(self):
+        """North Korea ICBM test — military escalation → ×0.80"""
+        text = "North Korea tests ICBM capable of reaching US mainland, Japan on high alert"
+        result = geo_market_filter(text)
+        assert result == 0.80, f"Expected 0.80, got {result}"
+
+    def test_chinese_iran_military_exercise(self):
+        """Chinese: Iran Revolutionary Guard military exercise → ×0.80"""
+        text = "伊朗革命卫队在霍尔木兹海峡举行大规模军事演习，模拟封锁海峡"
+        result = geo_market_filter(text)
+        assert result == 0.80, f"Expected 0.80, got {result}"
+
+    def test_iran_state_funeral_still_blocked(self):
+        """Iran state funeral — domestic political, no military conflict → ×0.2"""
+        text = "Iran holds state funeral for Khamenei, millions mourn in Tehran"
+        result = geo_market_filter(text)
+        assert result == 0.2, f"Expected 0.2, got {result}"
+
+    def test_russia_military_exercise(self):
+        """Belarus military mobilization near border — military escalation → ×0.80"""
+        text = "Belarus begins large-scale military exercise near border, mobilizes reserves"
+        result = geo_market_filter(text)
+        assert result == 0.80, f"Expected 0.80, got {result}"
+
+
 class TestContentQualityFilter:
     """Content quality / noise filter."""
 

@@ -126,6 +126,51 @@ _US_MARKET_CONNECTORS = [
     "oil tanker", "LNG", "sea lane",
 ]
 
+# Military conflict escalation keywords — these override the non-US political
+# demotion because cross-border military conflict has global market implications
+# (oil supply risk, defense spending, risk-off sentiment) regardless of whether
+# US forces are explicitly mentioned.
+_MILITARY_CONFLICT_ESCALATION = [
+    # Missile / nuclear
+    "missile", "ballistic", "ICBM", "warhead", "nuclear facility",
+    "uranium enrichment", "centrifuge",
+    # Airstrike / drone
+    "airstrike", "air strike", "air raid", "bombardment",
+    "drone strike", "drone attack", "UAV", "cruise missile",
+    # Naval
+    "warship", "destroyer", "aircraft carrier", "submarine",
+    "naval deployment", "naval exercise", "naval blockade",
+    # Military mobilization / exercise
+    "military exercise", "war game", "troop deployment",
+    "mobilization", "military buildup", "call-up",
+    "reservist", "active duty",
+    # Escalation / retaliation
+    "retaliatory strike", "military retaliation",
+    "military escalation", "heightened alert",
+    "precision strike", "targeted strike",
+    "preemptive strike", "surgical strike",
+    # Standoff / confrontation
+    "military standoff", "military confrontation",
+    "showdown", "red line", "ultimatum",
+    # Iran-specific military entities
+    "IRGC", "Revolutionary Guard", "Quds Force",
+    "Basij", "IRGC-N", "IRGC-QF",
+    # Strait of Hormuz (already in US connectors, but also a military flashpoint)
+    "mine-laying", "speedboat swarm", "fast attack craft",
+    # Chinese equivalents
+    "导弹", "弹道导弹", "洲际导弹", "核弹头", "核设施",
+    "铀浓缩", "离心机",
+    "空袭", "轰炸", "无人机袭击", "无人机攻击", "巡航导弹",
+    "军舰", "驱逐舰", "航母", "潜艇", "海军部署", "海军演习",
+    "军事演习", "军演", "实战化演训", "兵力部署",
+    "动员令", "军事集结", "征召", "预备役",
+    "报复性打击", "军事报复", "军事升级", "高度警戒",
+    "精确打击", "定点清除", "先发制人",
+    "军事对峙", "对峙", "最后通牒", "红线",
+    "革命卫队", "圣城旅", "巴斯杰",
+    "布雷", "快艇 swarm", "封锁海峡",
+]
+
 # Countries / regions whose economic/political events DO affect US markets
 # (No demotion for these — they're globally systemic)
 _GLOBAL_SYSTEMIC_COUNTRIES = [
@@ -202,6 +247,18 @@ def geo_market_filter(text: str, source: str = "") -> float:
     if has_us_connector:
         # E.g., "Venezuela oil sanctions → US refinery impact"
         return 1.0
+
+    # Military conflict escalation override: cross-border military conflict
+    # involving any country has global market implications (oil supply, defense
+    # spending, risk-off sentiment) even without explicit US connector.
+    has_military_escalation = any(
+        kw.lower() in text_lower for kw in _MILITARY_CONFLICT_ESCALATION
+    )
+    if has_military_escalation:
+        logger.debug(
+            "Geo-filter: military conflict '%s' → ×0.80", matched_country
+        )
+        return 0.80
 
     if has_political_action:
         # E.g., "Venezuela government collapses" with no US connection

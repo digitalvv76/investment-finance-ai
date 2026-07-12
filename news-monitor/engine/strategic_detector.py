@@ -281,11 +281,61 @@ class StrategicDetector:
         return action_lower in all_endorse
 
     def _is_false_positive(self, text: str) -> bool:
-        """Check if the text matches known false positive patterns."""
+        """Check if the text matches known false positive patterns.
+
+        Military conflict override: Iran/Russia/NK/Venezuela sanctions are
+        normally excluded (geopolitical ≠ US investment), but when military
+        conflict keywords are present the event IS strategically relevant.
+        """
         for pattern in self._EXCLUSION_PATTERNS:
             if pattern.search(text):
+                # If this is a geopolitical sanctions exclusion, check for
+                # military conflict keywords — those override the exclusion.
+                if self._is_geopolitical_exclusion(pattern) and self._has_military_conflict(text):
+                    logger.debug(
+                        "Strategic: military conflict overrides geopolitical exclusion"
+                    )
+                    continue
                 return True
         return False
+
+    # Patterns that indicate geopolitical sanctions (not military conflict)
+    _GEOPOLITICAL_EXCLUSION_PATTERNS = [
+        re.compile(p, re.IGNORECASE) for p in [
+            r'(sanction|制裁).*(iran|north\s*korea|russia|venezuela)',
+            r'(iran|north\s*korea|russia|venezuela).*(sanction|制裁)',
+            r'sanctions?\s+relief', r'oil\s+(export|inventor|shipment)',
+            r'(OPEC|opec|crude\s+oil|oil\s+price).*(iran|sanction)',
+            r'(iran|sanction).*(OPEC|opec|crude\s+oil|oil\s+price)',
+        ]
+    ]
+
+    # Military conflict keywords that override geopolitical exclusion
+    _MILITARY_CONFLICT_KEYWORDS = [
+        "missile", "ballistic", "airstrike", "air strike", "air raid",
+        "drone strike", "drone attack", "warship", "destroyer",
+        "aircraft carrier", "submarine", "naval deployment", "naval blockade",
+        "military exercise", "war game", "troop deployment", "mobilization",
+        "military buildup", "retaliatory strike", "military retaliation",
+        "military escalation", "standoff", "military standoff",
+        "military confrontation", "showdown", "nuclear facility",
+        "IRGC", "Revolutionary Guard", "Quds Force",
+        "Strait of Hormuz",
+        # Chinese equivalents
+        "导弹", "空袭", "军舰", "航母", "驱逐舰", "潜艇",
+        "军事演习", "军演", "兵力部署", "动员令", "军事集结",
+        "报复性打击", "军事报复", "军事升级", "军事对峙", "对峙",
+        "核设施", "革命卫队", "圣城旅", "霍尔木兹海峡",
+    ]
+
+    def _is_geopolitical_exclusion(self, pattern: re.Pattern) -> bool:
+        """Check if a matched pattern is a geopolitical sanctions exclusion."""
+        return pattern in self._GEOPOLITICAL_EXCLUSION_PATTERNS
+
+    def _has_military_conflict(self, text: str) -> bool:
+        """Check if text contains military conflict escalation keywords."""
+        text_lower = text.lower()
+        return any(kw.lower() in text_lower for kw in self._MILITARY_CONFLICT_KEYWORDS)
 
     def detect(self, text: str) -> List[StrategicMatch]:
         """Scan text for strategic relationship patterns.
