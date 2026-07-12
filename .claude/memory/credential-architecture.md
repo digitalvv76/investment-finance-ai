@@ -3,7 +3,7 @@ name: credential-architecture
 description: Complete credential architecture — single source of truth, loading flow, recovery procedures
 metadata:
   type: reference
-  updated: 2026-07-03
+  updated: 2026-07-13
 ---
 
 # Credential Architecture
@@ -30,17 +30,50 @@ All other credential stores derive from it.
 
 ## Credential Inventory
 
+### LLM / AI
+
 | Variable | Required | Purpose | Module |
 |----------|----------|---------|--------|
-| `TELEGRAM_BOT_TOKEN` | Yes | Telegram bot | `bot/telegram_bot.py`, `main.py` |
-| `DEEPSEEK_API_KEY` | Yes* | LLM deep analysis (primary) | `engine/deep_lane.py`, `engine/curator.py`, `engine/trainer.py` |
-| `ANTHROPIC_API_KEY` | Yes* | LLM deep analysis (fallback) | `engine/deep_lane.py` |
-| `PUSHOVER_APP_TOKEN` | Recommended | Pushover emergency push | `engine/alert_dispatcher.py` |
-| `PUSHOVER_USER_KEY` | Recommended | Pushover user identifier | `engine/alert_dispatcher.py` |
-| `FRED_API_KEY` | Optional | FRED macro data | `collector/api_fetcher.py` |
-| `ALPHA_VANTAGE_API_KEY` | Optional | Stock fundamentals | `collector/api_fetcher.py` |
+| `DEEPSEEK_API_KEY` | ✅ 必须 | 主力 LLM (评估+分析+训练+对抗核实) | `news-monitor/engine/`, `news-monitor/pipeline/` |
 
-*At least one LLM key required. DeepSeek preferred.
+### 推送通道
+
+| Variable | Required | Purpose | Module |
+|----------|----------|---------|--------|
+| `TELEGRAM_BOT_TOKEN` | ✅ 必须 | Telegram Bot | `news-monitor/bot/telegram_bot.py` |
+| `TELEGRAM_CHAT_ID` | ✅ 必须 | TG 频道 1 |同上|
+| `TELEGRAM_CHAT_ID_2` | 可选 | TG 频道 2 (双手机) |同上|
+| `TELEGRAM_CHAT_ID_3` | 可选 | TG 频道 3 |同上|
+| `PUSHOVER_APP_TOKEN` | ✅ 必须 | Pushover 推送 | `news-monitor/engine/alert_dispatcher.py` |
+| `PUSHOVER_USER_KEY` | ✅ 必须 | Pushover 用户 1 |同上|
+| `PUSHOVER_USER_KEY_2` | 可选 | Pushover 用户 2 |同上|
+
+### 行情数据
+
+| Variable | Required | Purpose | Module |
+|----------|----------|---------|--------|
+| `ALPHA_VANTAGE_API_KEY` | 推荐 | 美股基本面 | `news-monitor/collector/api_fetcher.py` |
+| `FINNHUB_API_KEY` | 推荐 | 美股实时/基本面 |同上|
+| `FRED_API_KEY` | 可选 | 宏观经济数据 |同上|
+| `BINANCE_API_KEY` | 可选 | 币安行情 | `news-monitor/collector/` |
+| `BINANCE_SECRET_KEY` | 可选 | 币安签名 |同上|
+
+### 数据源
+
+| Variable | Required | Purpose | Module |
+|----------|----------|---------|--------|
+| `TWITTER_AUTH_TOKEN` | 可选 | Twitter/X 采集 | `news-monitor/collector/` |
+
+### 基础设施
+
+| Variable | Required | Purpose | Module |
+|----------|----------|---------|--------|
+| `WEB_USERNAME` / `WEB_PASSWORD` | ✅ 必须 | Web 面板认证 | `news-monitor/web/` |
+| `WEB_PORT` | 可选 | Web 端口 (默认 8080) | `news-monitor/main.py` |
+| `WEB_DASHBOARD_URL` | 推荐 | 面板外网地址 | `news-monitor/web/` |
+| `UPTIMEROBOT_API_KEY` | 推荐 | 部署时暂停/恢复监控 | `deploy-main.sh` |
+| `HTTPS_PROXY` / `HTTP_PROXY` | 按需 | 国内访问外网代理 | 全模块 |
+| `PYTHONIOENCODING` | 必须 | UTF-8 编码 |启动时|
 
 ## Verification
 

@@ -1,8 +1,13 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-12 晚。event_driven 时效性修复 + R0 落库表已部署 ECS。
+> 最后更新: 2026-07-13 凌晨。关机前：V2 完成 CLAUDE.md 合并 + 记忆修复，V1 评审通过。
 
-## ✅ 本次会话交付(2026-07-12 晚间)
+## 🟢 当前部署状态
+- **ECS 生产**: V2 (origin/main)，健康 ✅
+- **v1-stable 分支**: 已重置为干净 main + 军事冲突关键词原型 — 已偏离 main
+- **看门狗**: healthy，8条/时采集正常，2.4h uptime
+
+## ✅ 上次会话交付(2026-07-12 晚间)
 
 - **🔧 WSJ Intel 误推诊断+修复** (`bd4246b`→`a691426`): 
   - 链路追踪：event_driven_v1.txt→催化剂1→few-shot对齐→★5→critical→Pushover
@@ -13,15 +18,22 @@
   - should_push 推/不推两条路径都落库
 - **🚀 已部署 ECS**: 三次提交均已上线生产
 
+## ✅ 本次会话交付(2026-07-13 凌晨)
+
+- **文件恢复验证**: 用户误删 D:\class1 文件 → V2 从 git + E:\class1 恢复 → V1 逐项核对（diff + 行数 + 内容），确认完整
+- **全局记忆审计**: 33 条记忆中 2 条关键错误（pending-tasks 系统状态写"ECS跑V1"、v1-became-v2 "待决策"）+ 6 条过时 → V2 修复
+- **CLAUDE.md 合并评审**: V2 合并 Karpathy 4 条 + Mnimiy 5 条行为准则 → V1 评审通过，1 个小调整（"用户期望"位置）
+- **回执提交**: V1→V2 HANDOFF 已 push (`dda84bd`)
+
 ## 📋 下一步
-- ⏳ **等 V1 吸收评审**: REQ-training-eval → R0 已由 V2 实现，V1 可直接用
 - ⏳ **等用户 GLM 新 key**: 余额到账后继续 P0→P1
 - 📊 **观察生产**: timeliness 字段分布 + 误推是否归零
 - 🔧 **GLM 后续**: P1 Translator切GLM → P2 Curator切GLM → P3 对抗式核实
+- 🟡 **V2 待提交**: main 工作区有 V2 的 6 个未提交文件（CLAUDE.md/HISTORY/SESSION/记忆等），下次 V2 开工需 commit
 
 ## ⚠️ 本次踩坑
-- **event_driven 不落库**: 排查 WSJ 误推时翻遍 DB/Docker logs 找不到评估结果 → 已修
-- **硬闸门 vs LLM 评估**: 初始方案 Step 1.5 硬闸门，用户指出 LLM 做 nuanced 判断更好 → 重构为 timeliness 并入 intensity
+- **文件恢复不能只看文件名**: 用户指出必须抽检内容，发现 .env + settings.json 不在 git 里需从 E 盘手动恢复
+- **记忆时效性**: `v1-became-v2-pending-decision` 2 天前的内容"待决策"已过时，V2 读到会误判 ECS 状态 — 记忆需要定期审计
 
 ## ✅ 上午会话交付(2026-07-12 · 高产)
 

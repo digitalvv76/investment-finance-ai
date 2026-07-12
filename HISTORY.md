@@ -2230,3 +2230,77 @@ prompt可修不需叠规则) [skip-tests]
 ---
 
 ## 2026-07-12T20:37+08:00 · 会话开始
+
+## 2026-07-12T22:22 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### f9e3521 · 2026-07-12T21:04 · docs: 记录 event_driven 时效性诊断+修复 — 7/12晚间 [skip-tests]
+
+---
+
+### a691426 · 2026-07-12T21:08 · refactor(prompt): 时效性融入 intensity 评分而非硬闸门 — LLM原生评估
+
+用户反馈：时效性不应是硬闸门，LLM更擅长 nuanced 判断。
+
+改动：
+- prompt: 移除 Step 1.5 硬闸门，改为 intensity 考量因素①(权重最高)
+- prompt: 新增 timeliness 输出字段(immediate/recent/retrospective_new/retrospective)
+- prompt: 新增原则7「时效性是第一权重」
+- 代码: EventAssessment 加 timeliness 字段 + 解析 + normalize
+- 代码: _apply_event_assessment 加 timeliness cap(retrospective→2, retrospective_new→3)
+- prompt: confirmed 简化为纯信源验证（时效由 timeliness 独立评估）
+
+69 tests passed.
+
+---
+
+### 9af94d7 · 2026-07-12T21:44 · feat(db): R0 event_decisions 落库表 — event_driven 评估不再消失
+
+关闭 REQ-training-eval 头号发现：event_driven 决策完全不落库。
+
+新增:
+- storage/models.py: EventDecision dataclass (17字段)
+- storage/database.py: event_decisions 表 + insert_event_decision()
+- pipeline/evaluate.py: _persist_event_decision() 在两处调用
+  - should_push路径: 推送前落库
+  - 非推路径: safety_net/skip 也落库
+
+525 tests passed. 零破坏。
+
+---
+
+### 6d8a33a · 2026-07-12T21:52 · docs(session): 更新 SESSION.md — 7/12晚收工 [skip-tests]
+
+---
+
+---
+
+## 2026-07-13T00:30+08:00 · 会话开始
+
+### 文件恢复验证（用户误删 → V2 恢复 → V1 核查）
+- D:\class1 大面积文件被误删，V2 从 git + E:\class1 恢复
+- V1 逐项 diff 核对：全部文件内容与 git HEAD 一致
+- 发现 .env + settings.json 不在 git 里 → 从 E 盘手动恢复
+- 发现 HISTORY.md E 版多出 7/12 晚收工条目 → 合并
+
+### 全局记忆审计
+- 审计 33 条全局记忆（C:\Users\nycr\.claude\projects\D--class1\memory\）
+- 2 条关键错误：pending-tasks（系统状态"ECS跑V1"）、v1-became-v2-pending-decision（"待决策"已过时）
+- 6 条过时、17 条准确、8 条小问题
+- V2 修复了 2 条关键 + 更新 pending-tasks 系统状态
+
+### CLAUDE.md 行为准则合并评审
+- V2 合并 Karpathy 4 条 + Mnimiy 5 条（跳 3 条重叠/冲突）→ CLAUDE.md 新增「编码行为准则」节
+- V1 逐条评审：9 条全部到位，改写合理，跳过的 3 条有理
+- 1 个小调整：「用户期望」放错位置（嵌在编码准则节末尾，应移回角色分工节）
+- V1→V2 回执已 push (`dda84bd`)
+
+### ECS 系统确认
+- 容器 healthy，看门狗正常，14条/时采集，0 错误，100% 成功率
+
+### dda84bd · docs(handoff): V1→V2 回执 — CLAUDE.md 合并评审通过，一个小调整
+
+---
+
+## 2026-07-13T01:30 · 关机
