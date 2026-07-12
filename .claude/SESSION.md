@@ -1,14 +1,27 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-12 晚间。event_driven 时效性闸门已修复，待部署。
+> 最后更新: 2026-07-12 晚。event_driven 时效性修复 + R0 落库表已部署 ECS。
 
 ## ✅ 本次会话交付(2026-07-12 晚间)
 
-- **🔧 用户反馈诊断+修复** (`bd4246b`): WSJ Intel 深度报道（描述11个月前政府入股）被 event_driven 误判为 ★5 手机警笛
-  - 完整链路追踪：采集→event_driven_v1.txt→催化剂1→few-shot对齐→★5→critical→Pushover
-  - 根因：prompt 不区分「新事件」vs「旧闻新报」，confirmed 缺时间维度，stale 检查只看采集时间
-  - 修复：Step 1.5 时效性闸门 + confirmed 双重验证 + WSJ Intel 反例 few-shot
-  - 161 tests 绿
+- **🔧 WSJ Intel 误推诊断+修复** (`bd4246b`→`a691426`): 
+  - 链路追踪：event_driven_v1.txt→催化剂1→few-shot对齐→★5→critical→Pushover
+  - 根因：prompt 不区分「新事件」vs「旧闻新报」
+  - 修复：timeliness 融入 intensity 评分（LLM 原生评估）+ 代码层 cap 兜底
+- **📊 R0 event_decisions 落库表** (`9af94d7`): event_driven 评估不再凭空消失
+  - EventDecision model + 表 + insert + _persist_event_decision()
+  - should_push 推/不推两条路径都落库
+- **🚀 已部署 ECS**: 三次提交均已上线生产
+
+## 📋 下一步
+- ⏳ **等 V1 吸收评审**: REQ-training-eval → R0 已由 V2 实现，V1 可直接用
+- ⏳ **等用户 GLM 新 key**: 余额到账后继续 P0→P1
+- 📊 **观察生产**: timeliness 字段分布 + 误推是否归零
+- 🔧 **GLM 后续**: P1 Translator切GLM → P2 Curator切GLM → P3 对抗式核实
+
+## ⚠️ 本次踩坑
+- **event_driven 不落库**: 排查 WSJ 误推时翻遍 DB/Docker logs 找不到评估结果 → 已修
+- **硬闸门 vs LLM 评估**: 初始方案 Step 1.5 硬闸门，用户指出 LLM 做 nuanced 判断更好 → 重构为 timeliness 并入 intensity
 
 ## ✅ 上午会话交付(2026-07-12 · 高产)
 
