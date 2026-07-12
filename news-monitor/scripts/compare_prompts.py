@@ -22,12 +22,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 from openai import OpenAI
 
 PROMPT_DIR = Path(__file__).resolve().parent.parent / "config" / "prompts"
-DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "training"
+DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "training"
 
 # ── 加载 prompt ──────────────────────────────────────────────
 
@@ -78,6 +78,51 @@ def call_llm(system_prompt: str, user_prompt: str, label: str = "") -> dict | No
 
 # ── 加载测试集 ────────────────────────────────────────────────
 
+def load_test_cases_from_db(limit: int = 10, status_filter: str = None,
+                           skip_recent: int = 0) -> list[dict]:
+    """从生产 DB 取最近 N 条新闻。可选择只取已推送和跳过最近 N 条。"""
+    import sqlite3
+    db_path = Path(__file__).resolve().parent.parent / "data" / "news.db"
+    if not db_path.is_file():
+        print(f"DB not found: {db_path}")
+        return []
+    db = sqlite3.connect(str(db_path))
+    db.row_factory = sqlite3.Row
+    where = "WHERE content_snippet IS NOT NULL AND length(content_snippet) > 50"
+    params = []
+    if status_filter:
+        where += " AND status IN ('fast_pushed', 'deep_pushed')"
+    rows = db.execute(f"""
+        SELECT id, title, content_snippet, source, captured_at, status
+        FROM news
+        {where}
+        ORDER BY captured_at DESC
+        LIMIT ?
+    """, [limit + skip_recent]).fetchall()
+    db.close()
+
+    # 跳过最近 skip_recent 条
+    seen = 0
+    cases = []
+    for r in rows:
+        if seen < skip_recent:
+            seen += 1
+            continue
+        cases.append({
+            "case_id": f"tg-{r['id']}",
+            "title": r["title"],
+            "snippet": (r["content_snippet"] or "")[:500],
+            "source": r["source"],
+            "status": r["status"] if "status" in r.keys() else "",
+            "captured_at": r["captured_at"],
+            "note": "",
+            "beneficiaries": [], "losers": [], "linked_sectors": [], "sector_etf": [],
+        })
+        if len(cases) >= limit:
+            break
+    return cases
+
+
 def load_test_cases(limit: int = 12) -> list[dict]:
     """从 catalyst-cases 加载测试新闻。正例+负例各取一半。"""
     cases = []
@@ -106,8 +151,8 @@ def load_test_cases(limit: int = 12) -> list[dict]:
 def build_user_prompt(case: dict) -> str:
     """模拟 impact evaluator 的 user prompt 构建。"""
     title = case.get("title", "")
-    # catalyst cases 没有 snippet，用 note 或空字符串
-    snippet = case.get("note", case.get("market_reaction", ""))
+    # 优先用 snippet (DB 来源)，其次 note (训练集)，最后 market_reaction
+    snippet = case.get("snippet", "") or case.get("note", "") or case.get("market_reaction", "")
     tickers = ", ".join(case.get("beneficiaries", []) + case.get("losers", []))
     sectors = ", ".join(case.get("linked_sectors", case.get("sector_etf", [])))
 
@@ -154,7 +199,7 @@ def compare_outputs(old: dict | None, new: dict | None, case: dict) -> dict:
 
 # ── 主流程 ─────────────────────────────────────────────────────
 
-async def main(limit: int = 12, verbose: bool = False):
+async def main(limit: int = 12, verbose: bool = False, source: str = "training"):
     print("=" * 72)
     print("  Prompt A/B 对比实验")
     print("  A (线上): impact_v1.txt    B (实验): impact_v1_exp.txt")
@@ -166,7 +211,7 @@ async def main(limit: int = 12, verbose: bool = False):
     # 验证实验版有 3 个改动标记
     checks = {
         "A. greed_index 锚点": "EXTREME FEAR" in prompt_new,
-        "B. confidence 混合信号降权": "both bullish and bearish" in prompt_new,
+        "B. confidence 混合信号降权": "bullish and bearish" in prompt_new.lower(),
         "C. 快速预判": "QUICK PRE-SCREEN" in prompt_new,
     }
     print("\n改动确认:")
@@ -176,8 +221,16 @@ async def main(limit: int = 12, verbose: bool = False):
         print("\n❌ 实验版 prompt 缺少预期改动，终止。")
         return
 
-    cases = load_test_cases(limit)
-    print(f"\n测试集: {len(cases)} 条 (catalyst-cases 正例+负例混合)")
+    if source == "db":
+        cases = load_test_cases_from_db(limit)
+        source_label = "生产 DB 最近新闻"
+    elif source == "tg":
+        cases = load_test_cases_from_db(limit, status_filter="pushed", skip_recent=10)
+        source_label = "生产 DB 已推送 TG 新闻 (跳过已测10条)"
+    else:
+        cases = load_test_cases(limit)
+        source_label = "catalyst-cases 训练集"
+    print(f"\n测试集: {len(cases)} 条 ({source_label})")
     print(f"每条调用 2 次 LLM (A+B)，共 {len(cases) * 2} 次调用\n")
 
     results = []
@@ -314,13 +367,18 @@ async def main(limit: int = 12, verbose: bool = False):
         }, f, ensure_ascii=False, indent=2)
 
     print(f"\n完整结果已保存: {result_file}")
-    print(f"耗时: {elapsed:.0f}s  ({(elapsed/total*2):.1f}s/调用)")
+    if total > 0:
+        print(f"耗时: {elapsed:.0f}s  ({(elapsed/total*2):.1f}s/调用)")
+    else:
+        print(f"耗时: {elapsed:.0f}s")
 
 
 if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser(description="Prompt A/B 对比实验")
     p.add_argument("--limit", type=int, default=12, help="测试条数 (默认 12)")
+    p.add_argument("--source", choices=["training", "db", "tg"], default="training",
+                   help="数据源: training (训练集), db (生产DB最近), tg (已推送TG新闻)")
     p.add_argument("--verbose", "-v", action="store_true", help="显示每条完整输出")
     args = p.parse_args()
-    asyncio.run(main(limit=args.limit, verbose=args.verbose))
+    asyncio.run(main(limit=args.limit, verbose=args.verbose, source=args.source))

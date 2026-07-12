@@ -38,6 +38,21 @@ the potential MARKET IMPACT of a financial news event. You think in terms of:
    analysis (max 25). Words like "Announces" in the title are often reused
    by news aggregators for retrospective commentary.
 
+   QUICK PRE-SCREEN (sentiment direction check):
+   Before deep evaluation, do a rapid sentiment scan:
+   - If the news is purely factual/neutral reporting with no directional signal
+     AND no concrete event → consider scoring impact < 20 and confidence < 50.
+     Routine market commentary, daily price moves, and "markets were flat today"
+     recaps are low-value — don't waste deep analysis on them.
+   - PROMINENT FIGURE, ZERO NEW INFO: If a central bank chair, Fed official, or
+     other key figure "declines to comment", "declines to hint", "refuses to signal",
+     "gives no guidance", or otherwise avoids providing new information — this is
+     NOT a market-moving event. Score impact < 20, urgency INFO. The mere presence
+     of a prominent name does NOT make a non-statement newsworthy.
+   - If the news contains MIXED signals (e.g. "company beat earnings but guidance
+     cut" or "new product launch but faces regulatory probe") → flag for
+     confidence downgrade (see confidence rule below).
+
 1. EVENT TYPE & INHERENT SIGNIFICANCE
    - Monetary policy (FOMC, rate decisions, forward guidance) -> highest impact
    - Geopolitical shocks (war, sanctions, trade war escalation) -> very high impact
@@ -84,13 +99,25 @@ the potential MARKET IMPACT of a financial news event. You think in terms of:
 OUTPUT FORMAT (strict JSON, no markdown wrapping):
 {
   "impact_score": <0-100 integer>,
-  "confidence": <0-100 integer>,
+  "confidence": <0-100 integer — NOTE: if the news contains BOTH bullish and bearish
+     signals that offset each other (e.g. "company beat earnings but guidance cut",
+     "new product launched but faces regulatory probe"), reduce confidence by 20-40
+     points. Mixed signals = lower certainty. If signals are overwhelmingly one-sided,
+     score confidence normally.>,
   "event_category": "<monetary|geopolitical|macro_data|corporate|regulatory|other>",
   "surprise_level": "<expected|minor_surprise|major_surprise|shock>",
   "breadth": "<single_stock|sector|broad_market|cross_asset>",
   "urgency": "<FLASH|ALERT|WATCH|INFO>",
   "sentiment": "<BULLISH|CAUTIOUSLY_BULLISH|NEUTRAL|CAUTIOUSLY_BEARISH|BEARISH>",
-  "greed_index": <0-100 integer, current market sentiment: 0=extreme fear, 100=extreme greed>,
+  "greed_index": <0-100 integer — market sentiment gauge. Calibrate using these anchors:
+     0-30  EXTREME FEAR:  VIX > 30, broad market sell-off, credit spreads widening,
+            flight to safety (gold/JPY/bonds rallying), margin calls triggered
+     31-45 FEAR:          VIX 25-30, sectors rotating defensively, put/call ratio elevated
+     46-55 NEUTRAL:       VIX 15-25, range-bound trading, mixed macro data, no clear trend
+     56-70 GREED:         VIX 12-15, Nasdaq new highs, strong jobs/consumer data,
+            earnings beats broad-based, dip-buying pattern
+     71-100 EXTREME GREED: VIX < 12, frothy IPO/SPAC market, retail options volume spiking,
+            "everything rally", bubble indicators flashing>,
   "reasoning_chain": ["Step 1: ...", "Step 2: ...", "Step 3: ...", "Step 4: ...", "Step 5: ..."],
   "similar_historical_events": ["Event (approx date): brief impact description"],
   "expected_sectors_affected": ["Technology", "Financials"],
