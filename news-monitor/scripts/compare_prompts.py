@@ -123,6 +123,29 @@ def load_test_cases_from_db(limit: int = 10, status_filter: str = None,
     return cases
 
 
+def load_test_cases_from_file(filepath: str, limit: int = 50) -> list[dict]:
+    """从 JSONL 文件加载测试用例。"""
+    cases = []
+    with open(filepath, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            c = json.loads(line)
+            cases.append({
+                "case_id": f"prod-{c.get('id', '?')}",
+                "title": c.get("title", ""),
+                "snippet": c.get("snippet", "")[:500],
+                "source": c.get("source", ""),
+                "captured_at": c.get("captured_at", ""),
+                "note": "",
+                "beneficiaries": [], "losers": [], "linked_sectors": [], "sector_etf": [],
+            })
+            if len(cases) >= limit:
+                break
+    return cases
+
+
 def load_test_cases(limit: int = 12) -> list[dict]:
     """从 catalyst-cases 加载测试新闻。正例+负例各取一半。"""
     cases = []
@@ -202,11 +225,20 @@ def compare_outputs(old: dict | None, new: dict | None, case: dict) -> dict:
 async def main(limit: int = 12, verbose: bool = False, source: str = "training"):
     print("=" * 72)
     print("  Prompt A/B 对比实验")
-    print("  A (线上): impact_v1.txt    B (实验): impact_v1_exp.txt")
+    print("  A (旧版/线上): impact_v1_backup    B (新版/实验): impact_v1.txt")
     print("=" * 72)
 
-    prompt_old = load_prompt("impact_v1.txt")
-    prompt_new = load_prompt("impact_v1_exp.txt")
+    # 新版已合并到 impact_v1.txt，旧版在备份文件
+    prompt_new = load_prompt("impact_v1.txt")
+    # 如果有备份则用备份做旧版，否则回退到 impact_v1.txt (即新旧相同)
+    backup_path = PROMPT_DIR / "impact_v1_backup_20260712.txt"
+    if backup_path.is_file():
+        prompt_old = backup_path.read_text(encoding="utf-8")
+        print("  旧版: impact_v1_backup_20260712.txt (线上原版)")
+        print("  新版: impact_v1.txt (已合并实验版)")
+    else:
+        prompt_old = prompt_new
+        print("  ⚠️  无备份文件，新旧版本相同")
 
     # 验证实验版有 3 个改动标记
     checks = {
@@ -227,6 +259,10 @@ async def main(limit: int = 12, verbose: bool = False, source: str = "training")
     elif source == "tg":
         cases = load_test_cases_from_db(limit, status_filter="pushed", skip_recent=10)
         source_label = "生产 DB 已推送 TG 新闻 (跳过已测10条)"
+    elif source == "prod20":
+        fpath = Path(__file__).resolve().parent.parent.parent / "data" / "training" / "prod-pushed-20260711.jsonl"
+        cases = load_test_cases_from_file(str(fpath), limit)
+        source_label = "ECS生产最近20条推送 (2026-07-11)"
     else:
         cases = load_test_cases(limit)
         source_label = "catalyst-cases 训练集"
@@ -377,8 +413,8 @@ if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser(description="Prompt A/B 对比实验")
     p.add_argument("--limit", type=int, default=12, help="测试条数 (默认 12)")
-    p.add_argument("--source", choices=["training", "db", "tg"], default="training",
-                   help="数据源: training (训练集), db (生产DB最近), tg (已推送TG新闻)")
+    p.add_argument("--source", choices=["training", "db", "tg", "prod20"], default="training",
+                   help="数据源: training (训练集), db (生产DB最近), tg (TG推送), prod20 (ECS生产20条)")
     p.add_argument("--verbose", "-v", action="store_true", help="显示每条完整输出")
     args = p.parse_args()
     asyncio.run(main(limit=args.limit, verbose=args.verbose, source=args.source))
