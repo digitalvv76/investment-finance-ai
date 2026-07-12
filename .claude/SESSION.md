@@ -1,18 +1,44 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-13 凌晨。关机前：V2 完成 CLAUDE.md 合并 + 记忆修复，V1 评审通过。
+> 最后更新: 2026-07-13 凌晨。关机同步。
 
 ## 🟢 当前部署状态
-- **ECS 生产**: V2 (origin/main)，健康 ✅
-- **v1-stable 分支**: 已重置为干净 main + 军事冲突关键词原型 — 已偏离 main
-- **看门狗**: healthy，8条/时采集正常，2.4h uptime
+- **ECS 生产**: V2 (origin/main)，健康 ✅，看门狗 8条/时
+- **v1-stable**: 已偏离 main（军事冲突关键词原型）
+- **LLM 供应商**: DeepSeek 唯一 ✅（GLM 已删除）
 
-## ✅ 上次会话交付(2026-07-12 晚间)
+## ✅ 本次会话交付 (2026-07-13 凌晨)
 
-- **🔧 WSJ Intel 误推诊断+修复** (`bd4246b`→`a691426`): 
-  - 链路追踪：event_driven_v1.txt→催化剂1→few-shot对齐→★5→critical→Pushover
-  - 根因：prompt 不区分「新事件」vs「旧闻新报」
-  - 修复：timeliness 融入 intensity 评分（LLM 原生评估）+ 代码层 cap 兜底
+### 事故处理
+- **误删除 163 个文件恢复**: git restore (40个) + git checkout (18个) + E:\class1 手动拷贝 (105个含 .env/settings/backups/HISTORY.md)
+- **记忆审计**: deployment-state 过时修正、pending-tasks 清已完成、v1-became-v2 标记已决定、credential-architecture 补全 23 key
+
+### CLAUDE.md 重大改造
+- **合并 Karpathy 4 原则**（multica-ai/andrej-karpathy-skills, 191K⭐）
+- **合并 Mnimiy 5 原则**（30代码库实测 41%→3%，改写 Rule 5/6 适配本项目）
+- **清理过时内容**: ANTHROPIC_API_KEY、旧项目结构、快速开始、脚本工具
+- **V1 评审通过** ✅，结构调整（用户期望归位角色分工）
+- **误判恢复**: 7 个技能引用被错误删除→核实后恢复
+
+### GLM 清理
+- .env + settings.json + credential-architecture + pending-tasks **四处删除**
+
+### 金融 Skill 安装
+- **第一梯队**: fed-watch ✅ | insider-tracker ✅ | options-flow ✅（均试跑 PLTR）
+- **第二梯队**: smart-money ✅ | earnings-play ✅（均试跑 PLTR）
+- Skill 位于 `C:\Users\nycr\.claude\skills\`，零额外配置
+
+### PLTR 综合研判
+- fed-watch: 鹰派，通胀 4.2% 抬头，7/28 FOMC 可能加息
+- insider-tracker: 🔴 BEARISH — 零买入，CEO+总裁集群卖出 $1亿
+- options-flow: 待跑
+- smart-money: 🟡 DIVIDED — 高盛/挪威加仓 vs 摩根砍仓+做空上升
+- earnings-play: ⚠️ AVOID — straddle 贵于实际波动
+
+## 📋 下一步
+- **观察生产**: event_driven 时效性修复效果（timeliness 字段分布）
+- **v1-stable 分流**: 军事冲突关键词是否合并进 main
+- **P2 待拍板**: min_impact_for_push:30 + 市场压力路径
 - **📊 R0 event_decisions 落库表** (`9af94d7`): event_driven 评估不再凭空消失
   - EventDecision model + 表 + insert + _persist_event_decision()
   - should_push 推/不推两条路径都落库
