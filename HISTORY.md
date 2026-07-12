@@ -2145,3 +2145,11 @@ pause/resume 往返实测通过, bash -n 语法OK。
 - `docs/prompts-and-skills-reference.md` (`db70a99`)
 - 覆盖: CLAUDE.md 架构设计(角色分工/执行原则/质量把关) + 7个Skill完整工作流 + 11个LLM Prompt详解(三步流水线/few-shot校准/失败朝安全侧) + 6个关键工程模式(对抗式核实/盲测/双评估器/会话持久化) + 7条核心踩坑
 - 给合作方的建议: 从哪里开始 → 可直接复用的模式 → 需自行调整的部分
+
+### 竞品分析 + 实验驱动合并: impact_v1 prompt 3项改进 (commit `297d1f2`)
+
+- **竞品评估** (`news-monitor/docs/sentiment.md`): 原型级 — 三字段选对但有4个致命缺失(无事件vs观点区分/无few-shot/无过滤/无可执行输出)。提取3个可借鉴点: greed_index锚点/快速预判/confidence混合信号降权。
+- **实验流程**: 不改生产 → 创建实验版 → A/B对比脚本 → 44条×2版本=88次LLM调用验证 → 修复唯一退化 → 合并
+- **3项改进**: ①greed_index 5档锚点(0-30恐慌到71-100极端贪婪) ②confidence多空并存降20-40分 ③快速预判(纯事实/中性报道低分通过 + 大佬拒评不升级)
+- **验证结果**: 3个数据源(训练集20+最近新闻10+TG推送14), 0退化。TG推送效果最明显: 市场复盘85→15(-70), 港股事件60→18(-42), confidence降权率71%
+- **回滚**: `git revert 297d1f2` 或 `cp impact_v1_backup_20260712.txt impact_v1.txt`
