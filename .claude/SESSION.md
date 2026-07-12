@@ -1,8 +1,30 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-11 下午。生产未动(仍是上午三改健康运行中)。本次会话=纯卫生+协作(登记表/评审)，无运行时/部署改动。双窗口保留(受 COLLAB-PROTOCOL 约束)。
+> 最后更新: 2026-07-12 下午。impact_v1 3项改进已部署ECS。GLM API已配置待余额到账。
 
-## ✅ 本次会话交付(2026-07-11 下午 · 卫生+V1协作)
+## ✅ 本次会话交付(2026-07-12 · 高产)
+
+- **卫生**: HISTORY.md 补录10条缺失提交 + 工作区清干净 (`387edf9`)
+- **合作方参考手册**: `docs/prompts-and-skills-reference.md` — CLAUDE.md + 7 Skill + 11 Prompt 全量梳理
+- **竞品分析 + 实验驱动合并**: 评估 `news-monitor/docs/sentiment.md` → 提取3个可借鉴点 → 创建实验版 → 64条×2版本=128次LLM调用验证 → 修复tg-810退化 → 合并到 `impact_v1.txt` → 部署ECS (`297d1f2`, 回滚 `rollback-20260712-111737`)
+  - A. greed_index 5档锚点(0-30恐慌~71-100极端贪婪)
+  - B. confidence 混合信号降权(多空并存降20-40分)
+  - C. 快速预判(纯事实低分通过 + 大佬拒评不升级)
+- **ECS生产20条终验**: 旧版漏判伊朗复仇宣言(15/WATCH),新版正确85/FLASH
+- **V2→V1回执**: 军事冲突关键词乘数方案评估 — 方向认同,建议关键词做触发不做乘数 (`34071c4`)
+- **全量 Prompt 参考手册**: `docs/prompts-complete-reference.md` — 11个prompt完整正文+参数+设计理念
+- **GLM API 接入(P0)**: key已配入.env+settings.json, `api.z.ai` 连通, 模型 `glm-5.1` 存在, 待余额到账
+
+## 📋 下一步
+- ⏳ **等 V1 吸收评审**: REQ-training-eval → R0 落库表
+- ⏳ **等用户 GLM 新 key**: 余额到账后继续 P0→P1(GLM对抗核实+Translator/Curator轻量任务)
+- ⏳ **等 V1 吸收军事冲突方案回执**: V2-TO-V1-HANDOFF.md 已提交
+- 📊 **观察生产 1-2 天**: impact_v1 3项改进的推送质量变化
+- 🔧 **GLM 后续**: P1 Translator切GLM → P2 Curator切GLM → P3 对抗式核实用GLM打破同模型盲点
+
+## ⚠️ 上次踩坑(关键教训)
+- **tg-810 Fed拒评被升级**: 实验版把"declines to hint"过度解读→加"prominent figure zero new info"例外修好
+- **GLM API国内URL vs 国际版**: `open.bigmodel.cn` ≠ `api.z.ai`; 国际版key国内URL返回"模型不存在"而非明确报错,浪费5次调用排查
 - **清卫生项**(commit `66046b6`): ①补注册 `eval_framework_holdout.py` 进 __manifest__.json(消未注册警告) ②提交积压 HISTORY(SessionEnd 补账)，工作区干净。
 - **V1交办: deep_lane 登记表误挂修复**(commit `bfbd26a`): `acceptance_test.py` 不 import deep_lane(已核实)却被挂 related_scripts→常报「过时」。**两张表一并清**(旧 module_registry.json 供 session_startup + 新 engine/__manifest__.json 供 pre_commit，只删旧的会从提交路径复发)→ [[two-manifest-tables-sync]]。回执 `.claude/V2-TO-V1-HANDOFF.md`。
 - **V1评审: REQ-training-eval**(commit `fb36f7d` → `REVIEW-REQ-training-eval.md`): 对着 main 真实代码核实(非文档假设)。**头号发现=event_driven 决策完全不落库**(evaluate.py:96-99 命中即 return 不写表;ticker_hint 内存态从不入 news 表)→ R1/R3/G4 自动标注塌方 + R4 噪音负例捞不出 + A2 precision/recall 量不出。建议**新增 R0 落库表(V2 0.5天)排②设计前 + 别回填历史 + 路线 C 先于 A**。方法学(相关≠因果)明确让第三方。**球已发回 origin/main，等 V1 自己读吸收进②产品设计。**
