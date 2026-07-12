@@ -1,8 +1,16 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-12 下午。impact_v1 3项改进已部署ECS。GLM API已配置待余额到账。
+> 最后更新: 2026-07-12 晚间。event_driven 时效性闸门已修复，待部署。
 
-## ✅ 本次会话交付(2026-07-12 · 高产)
+## ✅ 本次会话交付(2026-07-12 晚间)
+
+- **🔧 用户反馈诊断+修复** (`bd4246b`): WSJ Intel 深度报道（描述11个月前政府入股）被 event_driven 误判为 ★5 手机警笛
+  - 完整链路追踪：采集→event_driven_v1.txt→催化剂1→few-shot对齐→★5→critical→Pushover
+  - 根因：prompt 不区分「新事件」vs「旧闻新报」，confirmed 缺时间维度，stale 检查只看采集时间
+  - 修复：Step 1.5 时效性闸门 + confirmed 双重验证 + WSJ Intel 反例 few-shot
+  - 161 tests 绿
+
+## ✅ 上午会话交付(2026-07-12 · 高产)
 
 - **卫生**: HISTORY.md 补录10条缺失提交 + 工作区清干净 (`387edf9`)
 - **合作方参考手册**: `docs/prompts-and-skills-reference.md` — CLAUDE.md + 7 Skill + 11 Prompt 全量梳理
