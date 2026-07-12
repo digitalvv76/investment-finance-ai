@@ -2155,3 +2155,36 @@ pause/resume 往返实测通过, bash -n 语法OK。
 - **回滚**: `git revert 297d1f2` 或 `cp impact_v1_backup_20260712.txt impact_v1.txt`
 - **生产20条A/B验证** (`f4d0951`): 旧版漏判伊朗复仇宣言(15/WATCH),新版正确85/FLASH(+70)。64条全量验证无退化。
 - **已部署 ECS** (`deploy-main.sh`): 回滚镜像 `rollback-20260712-111737`, 容器 healthy
+
+## 2026-07-12T12:58 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 3b12ff3 · 2026-07-12T11:18 · docs(history): impact_v1 已部署ECS — 回滚 rollback-20260712-111737 [skip-tests]
+
+---
+
+### 9f6e9c4 · 2026-07-12T11:31 · @ docs: 全量Prompt参考手册 — 11个prompt完整正文+参数+设计理念+演进历史
+
+覆盖: impact_v1(已部署3项改进)/event_driven_v1/ANALYSIS_PROMPT/
+NO_DATA_PROMPT/ActionabilityReview/CURATOR_PROMPT/EXTRACT_PROMPT/
+TRANSLATE_PROMPT/DEFAULT_PROFILE/动态注入机制/LLM调用汇总/设计原则
+
+@
+
+---
+
+### 34071c4 · 2026-07-12T11:54 · docs(handoff): V2→V1 回执 — 军事冲突关键词乘数方案评估
+
+认同方向(方案B范围对)+保留意见(关键词做触发不做乘数
+prompt可修不需叠规则) [skip-tests]
+
+---
+
+### 5d68375 · 2026-07-12T12:57 · docs(session): 更新 SESSION.md + settings.json GLM key — 7/12收工 [skip-tests]
+
+---
+
+---
+
+## 2026-07-12T19:42+08:00 · 会话开始

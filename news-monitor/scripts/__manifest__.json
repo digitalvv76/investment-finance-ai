@@ -26,12 +26,22 @@
       "related_scripts": [],
       "also_tests": []
     },
+    "scripts/compare_prompts.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
     "scripts/dev_checklist.py": {
       "tests": [],
       "related_scripts": [],
       "also_tests": []
     },
     "scripts/eval_framework_holdout.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "scripts/fetch_recent_news.py": {
       "tests": [],
       "related_scripts": [],
       "also_tests": []
