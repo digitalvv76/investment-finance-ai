@@ -2102,3 +2102,35 @@ pause/resume 往返实测通过, bash -n 语法OK。
 - **根因(已核实)**: `acceptance_test.py` import fast_lane/entity_extractor/sentiment/priority/learner,**唯独不 import deep_lane**; 却被挂在 deep_lane 的 related_scripts → session_startup 每次误报「acceptance_test.py 落后 210h」。
 - **改动(commit bfbd26a 已推)**: 两张登记表 deep_lane 的 related_scripts 均清空 `[]`(旧表 config/module_registry.json 供 session_startup 读; 新表 engine/__manifest__.json 供 pre_commit 读——只删旧表误报会从提交路径再冒)。fast_lane 保留(真 import)。deep_lane 真实覆盖=test_deep_lane.py。
 - V1 只点了旧表,V2 顺手把新表同一误挂一并清,防复发。
+
+## 2026-07-11T16:11 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 4139a71 · 2026-07-11T15:38 · docs(history): 补录 deep_lane 登记表修复说明 (bfbd26a) [skip-tests]
+
+---
+
+### f0e9f94 · 2026-07-11T15:41 · docs(handoff): V2→V1 回执 — deep_lane 登记表误挂已修(bfbd26a)+顺清新表 [skip-tests]
+
+---
+
+### fb36f7d · 2026-07-11T15:50 · docs(review): V2 评审 REQ-training-eval — 头号发现:event_driven决策不落库(R0前置) [skip-tests]
+
+对着 main 真实代码/DB核实(非文档假设):
+- BLOCKER: event 路径 return 前不落库,ticker_hint 内存态从不入表 →
+  R1/R3/G4自动标注塌方 + R4噪音负例捞不出 + A2 precision/recall量不出
+- 建议新增 R0 event_decisions 落库表(V2 0.5天),排在②设计前;别回填历史
+- D1路线应 C(改映射层零成本可逆)先于 A(few-shot per-call常态成本,吝啬补)
+- 6个实现坑: prompt漂移/双评估器并存/时区/yfinance限流/prompt_version分层
+方法学(相关≠因果)明确让第三方,不重复。逐条对应R#/A#/RK#/Q#/D#。
+
+---
+
+### 0ef7cfe · 2026-07-11T16:08 · docs(session): 更新 SESSION.md 本次会话(卫生+V1登记表+REQ评审) + 下一步等V1吸收评审 [skip-tests]
+
+---
+
+---
+
+## 2026-07-12T08:44+08:00 · 会话开始
