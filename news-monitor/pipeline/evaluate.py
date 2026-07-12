@@ -96,6 +96,7 @@ class EvaluateStage:
         if event_assessment is not None and event_assessment.should_push:
             # ── Event-driven path: direct push decision from structured output ──
             self._apply_event_assessment(item, event_assessment)
+            self._persist_event_decision(item, event_assessment)
             return
 
         # ── Path B: Legacy impact evaluation (fallback) ──
@@ -135,6 +136,7 @@ class EvaluateStage:
                 sector_tags=event_assessment.sector_tags,
                 ticker_hint=event_assessment.ticker_hint,
             )
+            self._persist_event_decision(item, event_assessment, level=level)
             return
 
         # Compute signal score (relevance + timeliness for gates)
@@ -380,6 +382,44 @@ class EvaluateStage:
             priority_score=item.priority_score,
             published_at=datetime.now(),
         )
+
+    def _persist_event_decision(self, item: PipelineItem, ea,
+                                level: AlertLevel | None = None) -> None:
+        """Persist event-driven assessment to event_decisions table for audit.
+
+        level is optional: if not provided, uses ea.alert_level for push path.
+        """
+        import json
+        if self._db is None or not item.id:
+            return
+        try:
+            from storage.models import EventDecision
+            lvl = level.value if level else (
+                "critical" if ea.intensity >= 5 else
+                "important" if ea.intensity >= 4 else
+                "notable" if ea.intensity >= 3 else "normal"
+            )
+            ed = EventDecision(
+                news_id=item.id,
+                is_event=ea.is_event,
+                event_types=json.dumps(ea.event_types or []),
+                intensity=ea.intensity,
+                direction=getattr(ea, "direction", "up") or "up",
+                confirmed=bool(getattr(ea, "confirmed", False)),
+                timeliness=getattr(ea, "timeliness", "immediate") or "immediate",
+                sector_tags=json.dumps(ea.sector_tags or [], ensure_ascii=False),
+                headline_signal=ea.headline_signal or "",
+                ticker_hint=json.dumps(ea.ticker_hint or []),
+                risk_snapshot=ea.risk_snapshot or "",
+                notable=bool(getattr(ea, "notable", False)),
+                filter_reason=ea.filter_reason or "",
+                alert_level=lvl,
+                raw_json=getattr(ea, "raw_json", "") or "",
+            )
+            self._db.insert_event_decision(ed)
+        except Exception:
+            logger.exception(
+                "EVALUATE: failed to persist event_decision for #%d", item.id)
 
     async def _run_with_retry(self, item: PipelineItem):
         """Run impact evaluator with exponential backoff. Returns None on failure."""

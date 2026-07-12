@@ -121,6 +121,33 @@ class ImpactOutcome:
 
 
 @dataclass
+class EventDecision:
+    """Event-driven evaluator output — persisted for audit, calibration, and debugging.
+
+    Unlike ImpactAssessment (which records the legacy Path B LLM output), this
+    table records every event_driven evaluation (Path A), whether it pushed or not.
+    This closes the "event_driven 决策完全不落库" gap identified in REQ-training-eval.
+    """
+    id: Optional[int] = None
+    news_id: int = 0
+    is_event: bool = False
+    event_types: str = ""              # JSON array of catalyst codes [1,3]
+    intensity: int = 0                 # 1-5 stars (after code-level caps)
+    direction: str = "up"              # up/down/neutral
+    confirmed: bool = False            # source reliability
+    timeliness: str = "immediate"      # immediate|recent|retrospective_new|retrospective
+    sector_tags: str = ""              # JSON array
+    headline_signal: str = ""          # Chinese push text
+    ticker_hint: str = ""              # JSON array of ticker codes
+    risk_snapshot: str = ""            # Chinese risk note
+    notable: bool = False              # safety-net flag
+    filter_reason: str = ""            # why filtered (if is_event=False)
+    alert_level: str = "normal"        # final channel level (critical/important/notable/normal)
+    raw_json: str = ""                 # raw LLM response for audit
+    created_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
 class CalibrationState:
     id: Optional[int] = None
     category: str = ""                  # event_category or 'global'
