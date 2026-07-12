@@ -244,6 +244,19 @@ class EvaluateStage:
         headline = ea.headline_signal
         escalation_note = ""
 
+        # ── Timeliness cap: code-level safety net ──
+        # Even if the LLM missed the temporal downgrade, cap intensity here.
+        # retrospective → max 2 (never push); retrospective_new → max 3 (silent TG only)
+        timeliness = str(getattr(ea, "timeliness", "immediate") or "immediate").lower()
+        _TIMELINESS_CAPS = {"retrospective": 2, "retrospective_new": 3}
+        cap = _TIMELINESS_CAPS.get(timeliness)
+        if cap is not None and intensity > cap:
+            logger.info(
+                "EVALUATE: timeliness cap applied — %s → intensity %d→%d for #%d: %s",
+                timeliness, ea.intensity, cap, item.id, (item.title or "")[:80],
+            )
+            intensity = cap
+
         # ── Event-line escalation: multi-source confirmation ──
         source_count = self._get_event_source_count(item.id) if item.id else 0
         if source_count >= 3 and intensity < 5:
@@ -276,7 +289,7 @@ class EvaluateStage:
             )
 
         reason = (f"event_driven: catalyst_types={ea.event_types} intensity={intensity} "
-                  f"direction={direction} confirmed={confirmed}")
+                  f"direction={direction} confirmed={confirmed} timeliness={timeliness}")
         if escalation_note:
             reason += f" escalated({source_count}sources)"
 

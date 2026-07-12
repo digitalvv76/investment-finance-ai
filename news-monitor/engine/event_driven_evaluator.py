@@ -49,6 +49,7 @@ class EventAssessment:
     notable: bool = False                                    # non-event but substantive action (safety-net)
     direction: str = "up"                                    # up/down/neutral — decoupled from intensity (SPEC-intensity-scale-bear-bias)
     confirmed: bool = False                                  # True only when LLM affirms official/happened; fail-safe: omitted → not confirmed → no siren
+    timeliness: str = "immediate"                            # immediate|recent|retrospective_new|retrospective — audit trail for temporal assessment
     filter_reason: str = ""                                  # why filtered (non-event)
     raw_json: str = ""                                       # raw LLM response for audit
 
@@ -93,6 +94,10 @@ class EventAssessment:
             # confirmed defaults False (fail-safe): a phone siren for bearish must
             # be affirmatively justified; omitted field → treated as unconfirmed.
             result.confirmed = bool(data.get("confirmed", False))
+            result.timeliness = str(data.get("timeliness", "immediate")).strip().lower()
+            # Normalize: only accept known values, default to "immediate"
+            if result.timeliness not in ("immediate", "recent", "retrospective_new", "retrospective"):
+                result.timeliness = "immediate"
             result.filter_reason = str(data.get("filter_reason", data.get("reason", ""))).strip()
         except (json.JSONDecodeError, TypeError, ValueError) as e:
             logger.warning("EventDrivenEval: JSON parse failed — %s", e)
