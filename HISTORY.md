@@ -2134,3 +2134,14 @@ pause/resume 往返实测通过, bash -n 语法OK。
 ---
 
 ## 2026-07-12T08:44+08:00 · 会话开始
+
+### 卫生: 补录 HISTORY.md 缺失提交 + 工作区清干净
+
+- HISTORY.md 有 10 条提交由 SessionEnd 自动补账写入但未 commit → `387edf9` 提交并 push
+- 工作区从脏变干净
+
+### 合作方参考手册: Prompts & Skills 完整梳理
+
+- `docs/prompts-and-skills-reference.md` (`db70a99`)
+- 覆盖: CLAUDE.md 架构设计(角色分工/执行原则/质量把关) + 7个Skill完整工作流 + 11个LLM Prompt详解(三步流水线/few-shot校准/失败朝安全侧) + 6个关键工程模式(对抗式核实/盲测/双评估器/会话持久化) + 7条核心踩坑
+- 给合作方的建议: 从哪里开始 → 可直接复用的模式 → 需自行调整的部分
