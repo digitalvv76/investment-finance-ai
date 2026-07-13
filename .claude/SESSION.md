@@ -36,21 +36,32 @@
 - earnings-play: ⚠️ AVOID — straddle 贵于实际波动
 
 ## 📋 下一步
-- **观察生产**: event_driven 时效性修复效果（timeliness 字段分布）
+- **🔴 LLM Wiki Phase 1 MVP**: wiki/ 骨架 + SCHEMA.md + INDEX.md + 3 skill + 3 种子页（NVDA/PLTR/fed-policy）
+- **📊 R0 event_decisions 落库表**: event_driven 评估不再凭空消失
+- **观察生产**: event_driven 时效性修复效果
 - **v1-stable 分流**: 军事冲突关键词是否合并进 main
-- **P2 待拍板**: min_impact_for_push:30 + 市场压力路径
-- **📊 R0 event_decisions 落库表** (`9af94d7`): event_driven 评估不再凭空消失
-  - EventDecision model + 表 + insert + _persist_event_decision()
-  - should_push 推/不推两条路径都落库
-- **🚀 两笔待部署**: 时效性闸门 (`bd4246b`) + 模因股收紧
-- **📝 V1 回执已收**: Karpathy Wiki 方案评估 → 先不做，R0 优先
 
-## ✅ 本次会话交付(2026-07-13 凌晨)
+## ✅ 本次会话交付 (2026-07-13 傍晚)
 
-- **文件恢复验证**: 用户误删 D:\class1 文件 → V2 从 git + E:\class1 恢复 → V1 逐项核对（diff + 行数 + 内容），确认完整
-- **全局记忆审计**: 33 条记忆中 2 条关键错误（pending-tasks 系统状态写"ECS跑V1"、v1-became-v2 "待决策"）+ 6 条过时 → V2 修复
-- **CLAUDE.md 合并评审**: V2 合并 Karpathy 4 条 + Mnimiy 5 条行为准则 → V1 评审通过，1 个小调整（"用户期望"位置）
-- **回执提交**: V1→V2 HANDOFF 已 push (`dda84bd`)
+### 突然关机恢复
+- 上次会话突然关机 → 本次启动完整性检查：.env / git fsck / 备份 / 工作区全部完好，无损坏
+
+### Karpathy LLM Wiki 方案
+- **调研**: 拉取 Karpathy 原始 Gist + 10 篇社区分析，深度评估对投资金融场景的适配性
+- **评估结论**: 核心思想 ⭐⭐⭐⭐⭐，深度研究场景极适配，实时新闻流水不适用
+- **方案**: 完整 3 阶段实施计划 → 纯 markdown + git，零基础设施，不改任何现有 skill
+- **状态**: 方案已获批准，待下次会话实施 Phase 1 MVP
+
+## ✅ 上次会话交付 (2026-07-13 凌晨) <details><summary>展开</summary>
+
+- **文件恢复验证**: 误删 163 文件从 git + E 盘手动恢复
+- **全局记忆审计**: 33 条记忆中 2 条关键错误 + 6 条过时修正
+- **CLAUDE.md 合并**: Karpathy 4 条 + Mnimiy 5 条编码准则
+- **GLM 清理**: 四处删除
+- **金融 Skill 安装**: fed-watch/insider-tracker/options-flow/smart-money/earnings-play
+- **PLTR 综合研判**: fed-watch + insider + smart-money + earnings-play 四维分析
+
+</details>
 
 ## 📋 下一步
 - ⏳ **等用户 GLM 新 key**: 余额到账后继续 P0→P1
