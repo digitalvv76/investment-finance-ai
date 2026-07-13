@@ -1,11 +1,19 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-13 傍晚。关机同步。
+> 最后更新: 2026-07-13 20:15。生产事故修复完成。
 
 ## 🟢 当前部署状态
-- **ECS 生产**: V2 (origin/main)，健康 ✅，看门狗 8条/时
+- **ECS 生产**: V2 (origin/main, `c1eb0e3`)，健康 ✅，采集正常 27条/时
 - **v1-stable**: 已偏离 main（军事冲突关键词原型）
-- **LLM 供应商**: DeepSeek 唯一 ✅（GLM 已删除）
+- **LLM 供应商**: DeepSeek 唯一 ✅
+
+## ✅ 本次会话交付 (2026-07-13 晚上)
+
+### 🔴 生产事故：调度器 LLM API 僵死 → 采集停摆 (07:53-08:02)
+- **症状**: 看门狗报警「过去1小时零采集」，stalled 紧急。采集在 06:11 完全停止
+- **根因**: 调度器 `_notify_callbacks` → pipeline → DeepSeek API TCP 僵死 → `await` 永不返回 → scheduler `_run_loop` 卡死
+- **修复**: ① `docker restart` 恢复 (08:02) ② `asyncio.wait_for(timeout=120s)` 兜底 (commit `c1eb0e3`) ③ 部署 ECS 08:09 上线
+- **TROUBLESHOOTING**: `scheduler-callback-stall-20260713`
 
 ## ✅ 上次会话交付 (2026-07-13 凌晨)
 
