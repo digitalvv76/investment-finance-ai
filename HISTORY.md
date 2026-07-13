@@ -2303,4 +2303,14 @@ prompt可修不需叠规则) [skip-tests]
 
 ---
 
-## 2026-07-13T01:30 · 关机
+### b97633c · 2026-07-13T01:34 · docs(session): 关机同步 — 文件恢复验证+记忆审计+CLAUDE.md评审+ECS确认 [skip-tests]
+
+> 详见上方「2026-07-13T00:30 · 会话开始」：文件恢复 → 记忆审计 → CLAUDE.md 评审 → ECS 确认
+
+### 5f3b4a2 · 2026-07-13T01:55 · docs(session): 关机同步 — CLAUDE.md合并Karpathy+Mnimiy 9条, 记忆修复, 金融Skill安装, PLTR综合研判 [skip-tests]
+
+> 详见上方：CLAUDE.md 合并 9 条准则 + GLM 清理 + 5 个金融 Skill 安装 + PLTR 综合研判
+
+---
+
+## 2026-07-13T10:39+08:00 · 会话开始
