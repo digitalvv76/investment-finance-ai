@@ -4,6 +4,23 @@
 
 ---
 
+## scheduler-callback-stall-20260713 — 采集停摆（LLM API 僵死 → 调度器 await 永不返回）
+
+**症状**: 看门狗报警「过去1小时零采集」、`ingest_1h: 0`、错误数0、成功率100%、Docker 容器 healthy、Telegram 轮询正常
+
+**根因**: 调度器 `_notify_callbacks` → `on_news_batch` → `_pipeline.run()` 通过 `await` 同步等待管道完成。管道里 LLM 评估调用 DeepSeek API。当 API TCP 层面僵死（无响应）时，SDK 层 timeout 未必能触发 → `await` 永不返回 → `_run_loop` 的 while 循环卡死 → 所有采集停止。事件循环本身未死（ImpactCollector/Web/Telegram 仍运行），但调度器任务已永久卡住。
+
+**为什么 SDK timeout 不够**: 各阶段有 `SDK_TIMEOUT=20-30s` + `HARD_TIMEOUT=30-45s`，但这些都是 SDK/应用层超时。如果 TCP 连接已建立但服务端不响应也不断连（TCP keepalive 默认 2 小时），底层 socket 永不超时 → SDK timeout 永远等不到触发。
+
+**修复**:
+1. 短期恢复：`docker restart news-monitor`
+2. 长期防护：调度器 `_notify_callbacks` 加 `asyncio.wait_for(cb(items), timeout=120s)` — 120s 是宽松兜底（管道各阶段自有 20-45s timeout）
+3. 部署: `c1eb0e3` → ECS 08:09 上线
+
+**教训**: 任何对外部服务的 `await` 调用链（尤其是 LLM API），每一层都要有自己的超时兜底 — 不能只靠 SDK 的超时。`asyncio.wait_for` 是最后防线。
+
+---
+
 ## ECS / 部署
 
 ### ECS 重启后 SSH 不通

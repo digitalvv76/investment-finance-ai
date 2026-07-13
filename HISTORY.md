@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-13T20:05+08:00 · 🔴 生产事故：调度器LLM API僵死致采集停摆 → 已修复+部署
+
+### 事故
+- 看门狗 07:53 报警「过去1小时零采集」，状态 stalled，紧急
+- 诊断：调度器 `_notify_callbacks` → pipeline → LLM API `await` 永不返回 → `_run_loop` 卡死
+- 最后一次采集 06:10，之后调度器完全沉默。ImpactCollector/Telegram/Web 仍正常（事件循环没死，但调度器任务永久卡住）
+- 根因：DeepSeek API TCP僵死 → SDK timeout 未能触发 → `await` 永久阻塞 → scheduler while 循环卡死
+
+### 修复 (commit `c1eb0e3`)
+- **短期**: `docker restart news-monitor` → 08:02 恢复采集
+- **长期**: `_notify_callbacks` 加 `asyncio.wait_for(cb(items), timeout=120s)` 兜底 — 120s 宽松（管道自有 20-45s timeout）
+- **部署**: `deploy-main.sh` → ECS 08:09 上线，健康 ✅
+
+### 教训
+- 对外部服务的 `await` 调用链，每层都要自己的超时兜底 — 不能只靠 SDK timeout
+- `asyncio.wait_for` 是最后防线
+- TROUBLESHOOTING.md 新增 [[scheduler-callback-stall-20260713]]
+
+---
+
 ## 2026-07-12T21:00+08:00 · 🕐 event_driven 时效性闸门 — WSJ旧闻不再误推手机警笛
 
 ### 用户反馈
