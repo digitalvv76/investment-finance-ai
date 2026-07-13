@@ -2336,3 +2336,23 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 ---
 
 ## 2026-07-13T17:09+08:00 · 会话开始
+
+## 2026-07-13T18:08 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 33f2211 · 2026-07-13T18:07 · docs(session): 关机同步 — V1回执Karpathy Wiki方案评估 + SessionEnd补账 [skip-tests]
+
+---
+
+### 59adfd1 · 2026-07-13T18:08 · docs(session): 关机同步 — 更新 SESSION.md [skip-tests]
+
+---
+
+### 82bf7a2 · 2026-07-13T18:08 · docs(session): 关机同步 — LLM Wiki方案完成+获批,下次实施Phase1 MVP
+
+---
+
+---
+
+## 2026-07-13T19:57+08:00 · 会话开始

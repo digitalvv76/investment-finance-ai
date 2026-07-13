@@ -86,9 +86,22 @@ class NewsScheduler:
         self._callbacks.append(callback)
 
     async def _notify_callbacks(self, items: List[NewsItem]):
+        """Notify all callbacks with a hard timeout to prevent scheduler stall.
+
+        Each callback gets CALLBACK_TIMEOUT seconds. If it hangs (e.g. LLM API
+        TCP stall that bypasses SDK timeout), we cancel it and keep the
+        scheduler alive.  This is the LAST LINE OF DEFENSE — individual stages
+        have their own tighter timeouts.
+        """
+        CALLBACK_TIMEOUT = 120  # generous: pipeline has own per-stage timeouts
         for cb in self._callbacks:
             try:
-                await cb(items)
+                await asyncio.wait_for(cb(items), timeout=CALLBACK_TIMEOUT)
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Callback %s timed out after %ds — scheduler continuing",
+                    getattr(cb, '__name__', str(cb)), CALLBACK_TIMEOUT,
+                )
             except Exception as e:
                 logger.error(f"Callback error: {e}")
 
