@@ -1,13 +1,13 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-13 凌晨。关机同步。
+> 最后更新: 2026-07-13 傍晚。关机同步。
 
 ## 🟢 当前部署状态
 - **ECS 生产**: V2 (origin/main)，健康 ✅，看门狗 8条/时
 - **v1-stable**: 已偏离 main（军事冲突关键词原型）
 - **LLM 供应商**: DeepSeek 唯一 ✅（GLM 已删除）
 
-## ✅ 本次会话交付 (2026-07-13 凌晨)
+## ✅ 上次会话交付 (2026-07-13 凌晨)
 
 ### 事故处理
 - **误删除 163 个文件恢复**: git restore (40个) + git checkout (18个) + E:\class1 手动拷贝 (105个含 .env/settings/backups/HISTORY.md)
@@ -42,7 +42,8 @@
 - **📊 R0 event_decisions 落库表** (`9af94d7`): event_driven 评估不再凭空消失
   - EventDecision model + 表 + insert + _persist_event_decision()
   - should_push 推/不推两条路径都落库
-- **🚀 已部署 ECS**: 三次提交均已上线生产
+- **🚀 两笔待部署**: 时效性闸门 (`bd4246b`) + 模因股收紧
+- **📝 V1 回执已收**: Karpathy Wiki 方案评估 → 先不做，R0 优先
 
 ## ✅ 本次会话交付(2026-07-13 凌晨)
 
