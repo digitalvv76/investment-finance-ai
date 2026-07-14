@@ -73,14 +73,15 @@
 </details>
 
 ## 📋 下一步
-- ⏳ **等用户 GLM 新 key**: 余额到账后继续 P0→P1
-- 📊 **观察生产**: timeliness 字段分布 + 误推是否归零
-- 🔧 **GLM 后续**: P1 Translator切GLM → P2 Curator切GLM → P3 对抗式核实
-- 🟡 **V2 待提交**: main 工作区有 V2 的 6 个未提交文件（CLAUDE.md/HISTORY/SESSION/记忆等），下次 V2 开工需 commit
+- **🔴 LLM Wiki Phase 1 MVP**: wiki/ 骨架 + SCHEMA.md + INDEX.md + 3 skill + 3 种子页（NVDA/PLTR/fed-policy）
+- **观察生产**: 采集器 timeout 修复效果（`e9708ba`），确认不再出现 gather hang
+- **v1-stable 分流**: 军事冲突关键词是否合并进 main
+- 🟢 **deep_lane revert + 时效性重构已在 ECS**，下次看推送质量
 
 ## ⚠️ 本次踩坑
-- **文件恢复不能只看文件名**: 用户指出必须抽检内容，发现 .env + settings.json 不在 git 里需从 E 盘手动恢复
-- **记忆时效性**: `v1-became-v2-pending-decision` 2 天前的内容"待决策"已过时，V2 读到会误判 ECS 状态 — 记忆需要定期审计
+- **`return_exceptions=True` ≠ timeout 保护**: 它只转异常为返回值，对 hang 无效。asyncio 每条 `await` 链都要自己的 `asyncio.wait_for` 兜底
+- **上次修复 (`c1eb0e3`) 不够**: 只修了回调超时，采集器本身 (`asyncio.gather`) 是另一条路径。点状防御不够，要纵深
+- **资源泄漏渐进式故障**: Playwright 跑 11h+ 后怀疑资源耗尽致 fetch 挂起 → 定期重启或连接池上限值得考虑
 
 ## ✅ 上午会话交付(2026-07-12 · 高产)
 
