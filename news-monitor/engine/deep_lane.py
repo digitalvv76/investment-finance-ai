@@ -39,12 +39,10 @@ _ENRICH_TIMEOUT = 8.0         # total budget for all market data fetches
 _SPX_SYMBOL = "^GSPC"
 _VIX_SYMBOL = "^VIX"
 
-# Default LLM prompt template — 4-step structured reasoning (restored V1).
-# 事件定性 → 传导路径 → 组合映射(带触发条件) → 置信度.  Analytical, not a
-# flash-note summary.  The grounding-discipline paragraph keeps it compatible
-# with the anti-fabrication filter: live prices/percents must be exact, while
-# analytical figures (position sizes, thresholds, valuation ratios) are welcome.
-ANALYSIS_PROMPT = """You are a financial markets strategist serving a professional investor. Analyze this news with structured reasoning — do NOT just summarize.
+# Default LLM prompt template — TRIMMED 5-section (新闻要点 + ①②③④).
+# ~300-350 Chinese chars. 新闻要点 gives the factual gist up front; ②③ carry
+# the analytical depth.  Anti-fabrication grounding is NOT relaxed.
+ANALYSIS_PROMPT = """You are an equity strategist writing a TIGHT deep-dive for one specific investor. Total length ~300-350 Chinese characters — dense, no filler, no restating the headline.
 
 Title: {title}
 Source: {source}
@@ -54,19 +52,19 @@ Sentiment: {sentiment} (score: {sentiment_score:.2f})
 
 {extra_context}
 
-Follow this exact 4-step structure. If you lack information for any step, state "信息不足" rather than guessing.
+Write in Chinese with exactly these labelled sections:
 
-Step 1 — 事件定性: Classify this event. Is it Macro (interest rate / policy), Sector (supply-demand / technology), or Company-specific (earnings / management)? State the category and why.
+新闻要点: 1-2 sentences — what the news IS, factually. Just the headline facts, no analysis yet.
 
-Step 2 — 传导路径: Trace the impact chain. Which sectors/positions are directly affected? Through what mechanism (cost, demand, valuation multiples)? Be specific about the causal logic.
+① 事件定性: 1 sentence — the catalyst type and directional impact.
 
-Step 3 — 组合映射: Map to the investor's portfolio. Name the specific holdings/watchlist tickers exposed. If the headline beneficiaries are NOT in the investor's Portfolio/Watchlist, say so plainly and redirect to the tracked ticker(s) in the same beneficiary chain that ARE on the Watchlist/Portfolio. Provide 1-3 concrete action scenarios (观望 / 减仓 / 加仓) with trigger conditions for each. Do NOT give specific price levels, targets, or stops — this is a strategic map, not price mechanics.
+② 传导路径: The DIRECT impact chain only. Through what mechanism (orders/backlog, demand, cost, valuation) and which market-level names are directly hit. No second-order tangents (no crypto/forex).
 
-Step 4 — 置信度: Rate your analysis confidence as 高 / 中 / 低. If 低, explicitly state what information is missing and what to monitor.
+③ 组合映射: Map to THIS investor using the "[INVESTOR PORTFOLIO]" block above (Portfolio ∪ Watchlist). Name the specific holdings/watchlist tickers exposed. If ②'s headline beneficiaries are NOT held, redirect to tracked ticker(s) in the same beneficiary chain that ARE on the Watchlist/Portfolio. Give ONE directional read (偏多 / 偏空) and one reverse-risk clause. Do NOT give specific price levels, targets, stops, or buy/sell instructions — this is a "which of your names, and which way" read, not price mechanics.
 
-Grounding discipline: when you cite a specific live price or percentage move for a ticker, use ONLY the exact figures given in the market data above — do NOT round them and do NOT invent any. If the market data has no figure for a point you want to make, describe the direction qualitatively instead. Position sizes, entry/stop levels tied to the given moving averages, thresholds, and valuation ratios you reason about are analytical and welcome — this rule is only about never fabricating a ticker's live price/percent.
+④ 置信度: 高 / 中 / 低 + the single key missing piece. One line.
 
-Respond in Chinese. Be analytical, not journalistic."""
+Hard rules: NEVER fabricate a live price or percentage — cite only exact figures present in the market data above, otherwise stay qualitative. Only reference tickers from the news or the investor's Portfolio/Watchlist; never invent names. Chinese, analytical not journalistic."""
 
 # User-customizable analysis framework (stored in DB preferences)
 DEFAULT_ANALYSIS_FRAMEWORK = "default"
@@ -84,7 +82,7 @@ NO_DATA_BANNER = "⚠️ 行情数据缺失 — 本条仅做定性事件解读�
 
 # Prompt used when NO market data is available — forbids any concrete numbers
 # or trade recommendations. Qualitative event interpretation only.
-NO_DATA_PROMPT = """You are a buy-side analyst writing a flash note for a portfolio manager. Be CONCISE. Be ACTIONABLE where possible.
+NO_DATA_PROMPT = """You are a buy-side analyst writing a short qualitative note. ~200-260 Chinese characters.
 
 Title: {title}
 Source: {source}
@@ -96,19 +94,22 @@ Sentiment: {sentiment} (score: {sentiment_score:.2f})
 
 ⚠️ NO REAL-TIME MARKET DATA IS AVAILABLE FOR THIS ITEM.
 
-Write a short flash note in Chinese with exactly these 2 sections. 100-180 words total.
+Write in Chinese with exactly these sections:
+
+新闻要点: 1 sentence — what the news IS, factually.
+
+① 事件定性: 1 sentence — catalyst type and directional impact (定性 only, no numbers).
+
+② 传导路径: The direct impact chain and which market-level names are exposed. Qualitative only.
+
+③ 组合映射: Which of the investor's Portfolio/Watchlist tickers are exposed. Qualitative directional read (利好 / 利空 / 中性) only. No prices, no buy/sell.
+
+④ 置信度: 低（无实时行情）+ key missing piece.
 
 ABSOLUTE RULES (violating these is a critical error):
-- DO NOT output ANY specific price (e.g. $649), percentage change (e.g. -7.64%), moving average, target price, or stop-loss.
+- DO NOT output ANY specific price, percentage, moving average, target price, or stop-loss.
 - DO NOT give a buy/sell/long/short recommendation — you have no price data to justify it.
-- ONLY provide qualitative event interpretation: what happened and the likely DIRECTION of impact (bullish/bearish/neutral) with reasoning.
-- ONLY mention tickers listed in the news tickers or watchlist. Do not invent stocks.
-
-1. What happened (2-3 sentences)
-
-2. Qualitative impact & what to watch (2-3 sentences, direction only, NO numbers)
-
-Confidence: Low (no live data)"""
+- ONLY reference tickers from the news or the investor's Portfolio/Watchlist."""
 
 # Regex for concrete market numbers. Must catch REAL Chinese LLM output, not
 # just English half-width formats (adversarial review found 美元/％/百分之/裸点位
@@ -497,7 +498,9 @@ class DeepLane:
         # Detect LLM provider from environment
         self._provider = self._detect_provider()
         self._model = self._provider["default_model"]
-        self._max_tokens = 1500
+        # ~300-350 字 target (SPEC-deep-analysis-trim); 900 tokens is a generous
+        # backstop against runaway length — real length is budgeted in the prompt.
+        self._max_tokens = 900
         self._api_key = os.environ.get(self._provider["env_key"], "")
 
         if config:
