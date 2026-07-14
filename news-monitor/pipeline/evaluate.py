@@ -112,12 +112,20 @@ class EvaluateStage:
                     "EVALUATE: failed to persist assessment for #%d", item.id)
 
         # If event-driven ran but said "no push": default NORMAL (no push),
-        # BUT rescue a NOTABLE action on a tracked name → NOTABLE (silent TG).
+        # BUT two rescue hatches:
+        #   1. watchlist_safety_net: notable action on a tracked name → NOTABLE
+        #   2. high impact score (>=80): event-driven missed a macro/shock →
+        #      NOTABLE (silent TG), so we don't drop 85-point CPI-style events.
         if event_assessment is not None:
             from engine.event_driven_evaluator import watchlist_safety_net
             from engine.relevance import get_tracked_tickers
             rescued = watchlist_safety_net(event_assessment, get_tracked_tickers())
-            level = AlertLevel.NOTABLE if rescued else AlertLevel.NORMAL
+            # Rescue hatch 2: high-impact event that event-driven misclassified
+            impact_score_raw = int(getattr(impact, "impact_score", 0) or 0)
+            high_impact_rescue = (impact_score_raw >= 80)
+            level = (AlertLevel.NOTABLE
+                     if (rescued or high_impact_rescue)
+                     else AlertLevel.NORMAL)
             reason = event_assessment.filter_reason or "no catalyst triggered"
             if rescued:
                 reason = ("watchlist_safety_net: notable action on "
@@ -125,6 +133,11 @@ class EvaluateStage:
                 logger.info("EVALUATE: safety net → silent TG: %s — %s",
                             ",".join(event_assessment.ticker_hint),
                             (item.title or "")[:60])
+            elif high_impact_rescue:
+                reason = (f"high_impact_rescue(score={impact_score_raw}): "
+                          + reason)
+                logger.info("EVALUATE: high-impact rescue → silent TG (score=%d): %s",
+                            impact_score_raw, (item.title or "")[:60])
             item.decision = DispatchDecision(
                 alert_level=level,
                 alert_reason=reason,
