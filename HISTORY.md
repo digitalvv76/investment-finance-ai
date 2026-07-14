@@ -2454,4 +2454,15 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 
 ---
 
-## 2026-07-14T10:01+08:00 · 会话开始
+### 本次会话提交 (4 条，均已部署/同步)
+
+| Commit | 内容 |
+|--------|------|
+| `14119cd` | chore: HISTORY.md 补录 14 条 + SESSION.md 更新 |
+| `e9708ba` | fix: 采集器级 asyncio.wait_for 三层 timeout 纵深防御 |
+| `fed5a6c` | docs: 生产事故 #2 记录 (HISTORY + TROUBLESHOOTING + SESSION) |
+| `9575fbb` | docs: 关机同步 SESSION.md |
+
+---
+
+## 2026-07-14T14:19+08:00 · 会话开始
