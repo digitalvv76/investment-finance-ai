@@ -1,29 +1,142 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-12 20:55。周末例行检查，事件升级模型运行正常。训练评估项目待用户拍板。
+> 最后更新: 2026-07-14 18:05。LLM Wiki Phase 1 MVP 交付 + V1/V2 分工确认。
 
-## ✅ 本次会话交付(2026-07-12 晚上)
-- 多LLM分工方案说明(Agent/Workflow, 四模型可用)
-- GLM Key排查: 系统中不存在
-- DeepSeek Key溯源: commit `8b29469` @ 2026-07-02
-- 事件升级模型健康检查: ECS healthy, 5级管道正常, 昨日推送活跃, 周日低流正常
+## ⚠️ V1/V2 分工（用户 2026-07-14 定）
+- **V1**：投资决策 + 业务方向 + 需求优先级 + 推送验收
+- **V2**：架构 + 代码 + 测试 + 部署（全权）
+- **V1 不能改代码和部署**，发现问题 → 告诉 V2 → V2 动手
+- CLAUDE.md 角色分工表是唯一权威
 
-## 🔴 开机第一件事(本次遗留,需用户拍板)
-**训练评估项目卡在两个决策上,V2评审+我核实已就绪,等你定:**
-1. **优先级**: 现在就推进训练评估项目,还是等生产三改观察完(1-2天)再动?
-2. **接受「数据从落库日往前攒、不回填历史」吗?** — 意味着金标集之外的训练数据要等时间积累,不是马上就有。
-> 定了这两条 → 我采纳R0(决策台账表,V2 0.5天)+升REQ v0.2(C先于A)+写②产品设计文档。
+## 🟢 当前部署状态
+- **ECS 生产**: V2 (origin/main, `28ace28`)，健康 ✅
+- **v1-stable**: 不活跃（V1 已回归 main，不再用 v1-stable 改代码）
+- **LLM 供应商**: DeepSeek 唯一 ✅
 
-## ✅ 本次会话交付(2026-07-11 下午)
-- **4个启动卫生项排查**: 3项(HISTORY补hash/eval_holdout注册)V2已在main主干做过(66046b6)→**v1-stable撤销避免冲突**(单主干原则,不重演漂移); autolabel注册=v1-stable本地(main无此文件)。
-- **deep_lane假依赖**: 我标出→V2已修(bfbd26a@main,含**我漏的第二张表**engine/__manifest__.json)→记忆[[two-manifest-tables-sync]]。**v1-stable未重做**,下次对账继承。
-- **训练评估REQ经V2评审(REVIEW-REQ-training-eval.md,fb36f7d@main)+我独立核实头号BLOCKER属实**:
-  - `[已验代码]` event_driven路径`_apply_event_assessment`只写内存`item.decision`、return前不落库; ticker_hint/intensity/direction从不入表; impact_assessments schema缺全部这些字段; 无event_decisions表。
-  - 后果: R1/R3/G4自动标注塌方 + R4噪音负例捞不出 + A2 precision/recall量不出 → **REQ默认的"从历史库挖训练数据"存储层做不到**。
-  - V2建议(我认同): 加R0决策台账表(硬前置②设计前) + 不回填历史从落库日自增长 + 路线C先于A + 6实现坑。
-- **V2→V1固定信道**: `.claude/V2-TO-V1-HANDOFF.md` @ origin/main(`git show origin/main:...`即见)。
+## ✅ V2 本次会话交付 (2026-07-14 18:00)
 
-## ✅ 上次会话交付(2026-07-11 上午)
+### 🧠 LLM Wiki Phase 1 MVP (commit `1ee9ee2`)
+- wiki/ 骨架：SCHEMA.md + INDEX.md + 3 skill（compile/load/maintain）
+- 3 种子页：NVDA (BUY) / PLTR (HOLD) / fed-policy
+- 纯 markdown + git，零基础设施
+
+### 🧹 卫生清理 (commit `107899e`)
+- HISTORY.md SessionEnd 残留 stub → 提交摘要表
+
+### 📋 V1/V2 分工确认
+- 确认 CLAUDE.md 是唯一分工权威，COLLAB-PROTOCOL 不覆盖
+- 确认时效性重构 + R0 落库表 + deep_lane revert 均已在 ECS
+
+## ✅ V1 下午会话交付 (2026-07-14 16:00)
+
+### ✂️ deep_lane prompt 精简 + 新闻要点 (commit `1ae02bf`)
+- 切回精简版：新闻要点 + ①②③④，~300-350 字
+- ECS 15:57 上线 ✅，58 tests 绿
+
+### COLLAB-PROTOCOL 重申 (commit `9cb7927`)
+- V1 违规复盘：deep_lane 改动直改 main（应走 V1→V2 交接）
+- V1 边界确认：V1 不能改代码和部署
+
+## ✅ 上次会话交付 (2026-07-13 晚上)
+
+### 🔴 生产事故：调度器 LLM API 僵死 → 采集停摆 (07:53-08:02)
+- **症状**: 看门狗报警「过去1小时零采集」，stalled 紧急。采集在 06:11 完全停止
+- **根因**: 调度器 `_notify_callbacks` → pipeline → DeepSeek API TCP 僵死 → `await` 永不返回 → scheduler `_run_loop` 卡死
+- **修复**: ① `docker restart` 恢复 (08:02) ② `asyncio.wait_for(timeout=120s)` 兜底 (commit `c1eb0e3`) ③ 部署 ECS 08:09 上线
+- **TROUBLESHOOTING**: `scheduler-callback-stall-20260713`
+
+### 生产事故收尾 (commits `1759118` `f70f8ce`)
+- HISTORY.md + TROUBLESHOOTING.md 记录完整事故链
+- SESSION.md 更新下一步
+
+### deep_lane 恢复老版4步 (commit `b20478e`)
+- 用户反馈精简版格式不如老版有条理 → 恢复 Step 1-4 + 分类体系 + 操作场景
+
+## ✅ 更早交付 (2026-07-13 凌晨 → 7/12 晚间)
+
+### 7/13 凌晨 — 关机同步恢复
+- 误删 163 文件恢复 + 记忆审计 + CLAUDE.md 合并 Karpathy+Mnimiy 9 条
+- GLM 清理 + 金融 Skill 安装 + PLTR 综合研判
+- LLM Wiki 方案获批，待 Phase 1 MVP
+
+### 7/12 晚间 — R0 落库表 + 时效性重构
+- **R0 event_decisions 落库表** (commit `9af94d7`): 关闭 REQ-training-eval 头号发现
+- **时效性修复→重构** (commits `bd4246b` `a691426`): 硬闸门→融入 intensity + timeliness 字段
+- V1/V2 回执 + 数据源全量清单 + 卫生项
+
+## 📋 下一步
+- **🧪 试用 wiki skill**: 下次 stock-research 前 `wiki-load` → 分析完 `wiki-compile`
+- **🧹 旧会话内容存档**: SESSION.md 尾部积压了大量历史「下一步」和「踩坑」，可清理归档
+- **🔧 修复 v1-stable 工作树**: prunable（可选，V1 已回归 main 不再依赖）
+- **📊 Docker healthcheck 假阳性**: V1 交接了方案 (`e0b208e`)，待 V2 实施
+
+## ⚠️ 本次踩坑
+- **HISTORY.md 过时不等于未部署**: SESSION.md 写「待部署」但 git 祖先检查三条都在 ECS 上——先查再信
+- **V1 动手改代码**: 今天 V1 直接 refine/revert/reapply deep_lane.py，违反了 CLAUDE.md 分工。用户纠正后回归正轨
+- **settings.json 是 gitignored**: wiki 权限改动只在本地，不会随 commit 同步到其他环境
+- **观察生产**: 精简版深度分析推送质量（新闻要点 + ①②③④）
+
+### 突然关机恢复
+- 上次会话突然关机 → 本次启动完整性检查：.env / git fsck / 备份 / 工作区全部完好，无损坏
+
+### Karpathy LLM Wiki 方案
+- **调研**: 拉取 Karpathy 原始 Gist + 10 篇社区分析，深度评估对投资金融场景的适配性
+- **评估结论**: 核心思想 ⭐⭐⭐⭐⭐，深度研究场景极适配，实时新闻流水不适用
+- **方案**: 完整 3 阶段实施计划 → 纯 markdown + git，零基础设施，不改任何现有 skill
+- **状态**: 方案已获批准，待下次会话实施 Phase 1 MVP
+
+## ✅ 上次会话交付 (2026-07-13 凌晨) <details><summary>展开</summary>
+
+- **文件恢复验证**: 误删 163 文件从 git + E 盘手动恢复
+- **全局记忆审计**: 33 条记忆中 2 条关键错误 + 6 条过时修正
+- **CLAUDE.md 合并**: Karpathy 4 条 + Mnimiy 5 条编码准则
+- **GLM 清理**: 四处删除
+- **金融 Skill 安装**: fed-watch/insider-tracker/options-flow/smart-money/earnings-play
+- **PLTR 综合研判**: fed-watch + insider + smart-money + earnings-play 四维分析
+
+</details>
+
+## 📋 下一步
+- **🔴 LLM Wiki Phase 1 MVP**: wiki/ 骨架 + SCHEMA.md + INDEX.md + 3 skill + 3 种子页（NVDA/PLTR/fed-policy）
+- **观察生产**: 采集器 timeout 修复效果（`e9708ba`），确认不再出现 gather hang
+- **v1-stable 分流**: 军事冲突关键词是否合并进 main
+- 🟢 **deep_lane revert + 时效性重构已在 ECS**，下次看推送质量
+
+## ⚠️ 本次踩坑
+- **`return_exceptions=True` ≠ timeout 保护**: 它只转异常为返回值，对 hang 无效。asyncio 每条 `await` 链都要自己的 `asyncio.wait_for` 兜底
+- **上次修复 (`c1eb0e3`) 不够**: 只修了回调超时，采集器本身 (`asyncio.gather`) 是另一条路径。点状防御不够，要纵深
+- **资源泄漏渐进式故障**: Playwright 跑 11h+ 后怀疑资源耗尽致 fetch 挂起 → 定期重启或连接池上限值得考虑
+
+## ✅ 上午会话交付(2026-07-12 · 高产)
+
+- **卫生**: HISTORY.md 补录10条缺失提交 + 工作区清干净 (`387edf9`)
+- **合作方参考手册**: `docs/prompts-and-skills-reference.md` — CLAUDE.md + 7 Skill + 11 Prompt 全量梳理
+- **竞品分析 + 实验驱动合并**: 评估 `news-monitor/docs/sentiment.md` → 提取3个可借鉴点 → 创建实验版 → 64条×2版本=128次LLM调用验证 → 修复tg-810退化 → 合并到 `impact_v1.txt` → 部署ECS (`297d1f2`, 回滚 `rollback-20260712-111737`)
+  - A. greed_index 5档锚点(0-30恐慌~71-100极端贪婪)
+  - B. confidence 混合信号降权(多空并存降20-40分)
+  - C. 快速预判(纯事实低分通过 + 大佬拒评不升级)
+- **ECS生产20条终验**: 旧版漏判伊朗复仇宣言(15/WATCH),新版正确85/FLASH
+- **V2→V1回执**: 军事冲突关键词乘数方案评估 — 方向认同,建议关键词做触发不做乘数 (`34071c4`)
+- **全量 Prompt 参考手册**: `docs/prompts-complete-reference.md` — 11个prompt完整正文+参数+设计理念
+- **GLM API 接入(P0)**: key已配入.env+settings.json, `api.z.ai` 连通, 模型 `glm-5.1` 存在, 待余额到账
+
+## 📋 下一步
+- ⏳ **等 V1 吸收评审**: REQ-training-eval → R0 落库表
+- ⏳ **等用户 GLM 新 key**: 余额到账后继续 P0→P1(GLM对抗核实+Translator/Curator轻量任务)
+- ⏳ **等 V1 吸收军事冲突方案回执**: V2-TO-V1-HANDOFF.md 已提交
+- 📊 **观察生产 1-2 天**: impact_v1 3项改进的推送质量变化
+- 🔧 **GLM 后续**: P1 Translator切GLM → P2 Curator切GLM → P3 对抗式核实用GLM打破同模型盲点
+
+## ⚠️ 上次踩坑(关键教训)
+- **tg-810 Fed拒评被升级**: 实验版把"declines to hint"过度解读→加"prominent figure zero new info"例外修好
+- **GLM API国内URL vs 国际版**: `open.bigmodel.cn` ≠ `api.z.ai`; 国际版key国内URL返回"模型不存在"而非明确报错,浪费5次调用排查
+- **清卫生项**(commit `66046b6`): ①补注册 `eval_framework_holdout.py` 进 __manifest__.json(消未注册警告) ②提交积压 HISTORY(SessionEnd 补账)，工作区干净。
+- **V1交办: deep_lane 登记表误挂修复**(commit `bfbd26a`): `acceptance_test.py` 不 import deep_lane(已核实)却被挂 related_scripts→常报「过时」。**两张表一并清**(旧 module_registry.json 供 session_startup + 新 engine/__manifest__.json 供 pre_commit，只删旧的会从提交路径复发)→ [[two-manifest-tables-sync]]。回执 `.claude/V2-TO-V1-HANDOFF.md`。
+- **V1评审: REQ-training-eval**(commit `fb36f7d` → `REVIEW-REQ-training-eval.md`): 对着 main 真实代码核实(非文档假设)。**头号发现=event_driven 决策完全不落库**(evaluate.py:96-99 命中即 return 不写表;ticker_hint 内存态从不入 news 表)→ R1/R3/G4 自动标注塌方 + R4 噪音负例捞不出 + A2 precision/recall 量不出。建议**新增 R0 落库表(V2 0.5天)排②设计前 + 别回填历史 + 路线 C 先于 A**。方法学(相关≠因果)明确让第三方。**球已发回 origin/main，等 V1 自己读吸收进②产品设计。**
+
+<details><summary>上午会话交付(已存档)</summary>
+
+## ✅ 本次会话交付(2026-07-11)
 - **深度分析恢复老版4步 + 防幻觉升级「认方向」**(deep_lane.py, commit `873d4c9` 已部署): 用户不满→诊断 `afff8b9` 砍成快讯→用户选B回老版
   - ANALYSIS_PROMPT还原4步 + 防幻觉过滤器重构「认方向」(读真实涨跌只拦说反方向,价格选项B宽松)
   - 🛡️ 4轮对抗核实抓到并修我引入的高危洞(交易动作豁免让反向事实+建议同句逃逸)→去豁免改数字紧跟时即则
@@ -36,18 +149,18 @@
   - 验收(news3787防务): 276字③正确从LMT五大改指HII/KTOS等关注股✅ 无价位无买卖✅
 - 525测试全绿; intensity+trim一并 commit+部署(见本次末尾)
 
+</details>
+
 ## 📋 下一步
+- ⏳ **等 V1 吸收评审**: `REVIEW-REQ-training-eval.md` 已发回 origin/main。若 V1 采纳 R0 落库表→**V2 认领实现**(新增 event_decisions 表, evaluate.py 事件路径 return 前落库, ~0.5天)。这是训练评估项目的地基。
 - 📊 **观察生产 1-2 天(三改一起看)**: ①深度分析是否变精简(~250-300字)且③映射到你的持仓/关注股 ②认方向过滤不误删不漏反向 ③利空事件不再误拉手机警笛(看日志 direction/confirmed/渠道)
 - ⚠️ **intensity残留(对抗核实报,已报用户)**: #3 ticker_hint=损失方靠prompt约定无代码强制(LLM若把tracked受益股误放ticker_hint→利空误判); 靠confirmed主动化+prompt缓解,生产出问题再加schema
 - ⚠️ **认方向残留(中低危)**: 复合句双票反向/多票主标的抓取失败裸方向句; 人工审核兜底
-- 🟢 **V1通知②已处理(2/3落地)**: ①门禁漏洞已修(dev_checklist.check_tests改为逐条核实每个ERROR行都是test_vector_store,真error与已知error同现时不再被吞) ②LESSONS.md已从origin/v1-stable拉进main根目录 ③v1-stable漂移决策=**选A·已执行(2026-07-11 V1窗口)**: 归档→`archive/v1-stable-20260711`(d209aee,113提交可恢复,已推origin) + v1-stable `reset`到clean main(a009eac) + 保留在建训练评估项目5文件(REQ×2/HANDOFF-review/autolabel原型+测试, commit `91e695a`)。origin/v1-stable已强推同步。main全程未碰。未提交HISTORY.md WIP存stash。
+- 🟢 **V1通知②已处理(2/3落地)**: ①门禁漏洞已修(dev_checklist.check_tests改为逐条核实每个ERROR行都是test_vector_store,真error与已知error同现时不再被吞) ②LESSONS.md已从origin/v1-stable拉进main根目录 ③v1-stable漂移决策=**选A**(已确认main scheduler 17绿→v1-stable旧scheduler是漂移,应丢弃回归短命应急;**实际重置在V1窗口做,V2不跨窗口碰v1-stable**)
 - 🟡 **待用户定**: sources.yaml request_delay(ECS 3.0/1.5 vs main 1.0/0.3)
 - ⚠️ **遗留时区隐患**: captured_at/created_at 本地 vs 查询UTC不一致([[db-captured-at-timezone]]), digest/api待排查
 
 ## ⚠️ 上次踩坑(关键教训)
-- **两张登记表必须同步**: 依赖登记有旧`module_registry.json`(session_startup读)+新`__manifest__.json`(pre_commit读)两张,修deep_lane只改旧表漏新表→警告从提交路径复发,V2抓到([[two-manifest-tables-sync]])。
-- **同模型盲点铁律再验**: V2评审虽标`[已验代码]`仍属同模型;我没直接采信,自己在v1-stable逐点证伪BLOCKER才确认。跨窗口评审也要落地核实。
-- **卫生项先看V2/main在不在做**: v1-stable启动报的卫生警告多是trunk级,V2会在main处理;直接在v1-stable做=和main重复+冲突。先查再动。
 - **交易动作豁免=高危洞**: 用"句含交易词就豁免方向检查"让反向事实+交易建议同句逃逸(=原事故形态);对抗核实第4轮才抓到。真计划句本身无涨跌方向词,压根不需豁免→只对真条件/触发句豁免
 - **同模型 agent 共享盲点**: 本次深度分析改造对抗核实4轮,每轮都抓到前一轮的漏/误删/高危;必须对着真实代码+真实DeepSeek输出证伪,别信单轮共识
 - **正则近似治标不治本**: 涨跌幅"量级+动词相邻"正则既漏(跌超8%/量级撞库)又误删(触发条件);语义问题(实际涨跌 vs 触发阈值)要「认方向」结构判别不是堆正则

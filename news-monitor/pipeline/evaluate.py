@@ -96,6 +96,7 @@ class EvaluateStage:
         if event_assessment is not None and event_assessment.should_push:
             # ── Event-driven path: direct push decision from structured output ──
             self._apply_event_assessment(item, event_assessment)
+            self._persist_event_decision(item, event_assessment)
             return
 
         # ── Path B: Legacy impact evaluation (fallback) ──
@@ -111,12 +112,20 @@ class EvaluateStage:
                     "EVALUATE: failed to persist assessment for #%d", item.id)
 
         # If event-driven ran but said "no push": default NORMAL (no push),
-        # BUT rescue a NOTABLE action on a tracked name → NOTABLE (silent TG).
+        # BUT two rescue hatches:
+        #   1. watchlist_safety_net: notable action on a tracked name → NOTABLE
+        #   2. high impact score (>=80): event-driven missed a macro/shock →
+        #      NOTABLE (silent TG), so we don't drop 85-point CPI-style events.
         if event_assessment is not None:
             from engine.event_driven_evaluator import watchlist_safety_net
             from engine.relevance import get_tracked_tickers
             rescued = watchlist_safety_net(event_assessment, get_tracked_tickers())
-            level = AlertLevel.NOTABLE if rescued else AlertLevel.NORMAL
+            # Rescue hatch 2: high-impact event that event-driven misclassified
+            impact_score_raw = int(getattr(impact, "impact_score", 0) or 0)
+            high_impact_rescue = (impact_score_raw >= 80)
+            level = (AlertLevel.NOTABLE
+                     if (rescued or high_impact_rescue)
+                     else AlertLevel.NORMAL)
             reason = event_assessment.filter_reason or "no catalyst triggered"
             if rescued:
                 reason = ("watchlist_safety_net: notable action on "
@@ -124,6 +133,11 @@ class EvaluateStage:
                 logger.info("EVALUATE: safety net → silent TG: %s — %s",
                             ",".join(event_assessment.ticker_hint),
                             (item.title or "")[:60])
+            elif high_impact_rescue:
+                reason = (f"high_impact_rescue(score={impact_score_raw}): "
+                          + reason)
+                logger.info("EVALUATE: high-impact rescue → silent TG (score=%d): %s",
+                            impact_score_raw, (item.title or "")[:60])
             item.decision = DispatchDecision(
                 alert_level=level,
                 alert_reason=reason,
@@ -135,6 +149,7 @@ class EvaluateStage:
                 sector_tags=event_assessment.sector_tags,
                 ticker_hint=event_assessment.ticker_hint,
             )
+            self._persist_event_decision(item, event_assessment, level=level)
             return
 
         # Compute signal score (relevance + timeliness for gates)
@@ -244,6 +259,19 @@ class EvaluateStage:
         headline = ea.headline_signal
         escalation_note = ""
 
+        # ── Timeliness cap: code-level safety net ──
+        # Even if the LLM missed the temporal downgrade, cap intensity here.
+        # retrospective → max 2 (never push); retrospective_new → max 3 (silent TG only)
+        timeliness = str(getattr(ea, "timeliness", "immediate") or "immediate").lower()
+        _TIMELINESS_CAPS = {"retrospective": 2, "retrospective_new": 3}
+        cap = _TIMELINESS_CAPS.get(timeliness)
+        if cap is not None and intensity > cap:
+            logger.info(
+                "EVALUATE: timeliness cap applied — %s → intensity %d→%d for #%d: %s",
+                timeliness, ea.intensity, cap, item.id, (item.title or "")[:80],
+            )
+            intensity = cap
+
         # ── Event-line escalation: multi-source confirmation ──
         source_count = self._get_event_source_count(item.id) if item.id else 0
         if source_count >= 3 and intensity < 5:
@@ -276,7 +304,7 @@ class EvaluateStage:
             )
 
         reason = (f"event_driven: catalyst_types={ea.event_types} intensity={intensity} "
-                  f"direction={direction} confirmed={confirmed}")
+                  f"direction={direction} confirmed={confirmed} timeliness={timeliness}")
         if escalation_note:
             reason += f" escalated({source_count}sources)"
 
@@ -367,6 +395,44 @@ class EvaluateStage:
             priority_score=item.priority_score,
             published_at=datetime.now(),
         )
+
+    def _persist_event_decision(self, item: PipelineItem, ea,
+                                level: AlertLevel | None = None) -> None:
+        """Persist event-driven assessment to event_decisions table for audit.
+
+        level is optional: if not provided, uses ea.alert_level for push path.
+        """
+        import json
+        if self._db is None or not item.id:
+            return
+        try:
+            from storage.models import EventDecision
+            lvl = level.value if level else (
+                "critical" if ea.intensity >= 5 else
+                "important" if ea.intensity >= 4 else
+                "notable" if ea.intensity >= 3 else "normal"
+            )
+            ed = EventDecision(
+                news_id=item.id,
+                is_event=ea.is_event,
+                event_types=json.dumps(ea.event_types or []),
+                intensity=ea.intensity,
+                direction=getattr(ea, "direction", "up") or "up",
+                confirmed=bool(getattr(ea, "confirmed", False)),
+                timeliness=getattr(ea, "timeliness", "immediate") or "immediate",
+                sector_tags=json.dumps(ea.sector_tags or [], ensure_ascii=False),
+                headline_signal=ea.headline_signal or "",
+                ticker_hint=json.dumps(ea.ticker_hint or []),
+                risk_snapshot=ea.risk_snapshot or "",
+                notable=bool(getattr(ea, "notable", False)),
+                filter_reason=ea.filter_reason or "",
+                alert_level=lvl,
+                raw_json=getattr(ea, "raw_json", "") or "",
+            )
+            self._db.insert_event_decision(ed)
+        except Exception:
+            logger.exception(
+                "EVALUATE: failed to persist event_decision for #%d", item.id)
 
     async def _run_with_retry(self, item: PipelineItem):
         """Run impact evaluator with exponential backoff. Returns None on failure."""

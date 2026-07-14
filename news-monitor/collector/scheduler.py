@@ -86,9 +86,22 @@ class NewsScheduler:
         self._callbacks.append(callback)
 
     async def _notify_callbacks(self, items: List[NewsItem]):
+        """Notify all callbacks with a hard timeout to prevent scheduler stall.
+
+        Each callback gets CALLBACK_TIMEOUT seconds. If it hangs (e.g. LLM API
+        TCP stall that bypasses SDK timeout), we cancel it and keep the
+        scheduler alive.  This is the LAST LINE OF DEFENSE — individual stages
+        have their own tighter timeouts.
+        """
+        CALLBACK_TIMEOUT = 120  # generous: pipeline has own per-stage timeouts
         for cb in self._callbacks:
             try:
-                await cb(items)
+                await asyncio.wait_for(cb(items), timeout=CALLBACK_TIMEOUT)
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Callback %s timed out after %ds — scheduler continuing",
+                    getattr(cb, '__name__', str(cb)), CALLBACK_TIMEOUT,
+                )
             except Exception as e:
                 logger.error(f"Callback error: {e}")
 
@@ -96,7 +109,8 @@ class NewsScheduler:
         """1-minute heartbeat: Chinese + RSS + Playwright + API + Web scraper.
 
         All five collectors run concurrently via asyncio.gather. Each
-        collector is independently exception-isolated (return_exceptions=True).
+        collector is independently exception-isolated (return_exceptions=True)
+        AND timeout-protected (asyncio.wait_for).
 
         Combined tick ~12s (was ~40s sequential), well under 60s limit.
         """
@@ -107,51 +121,82 @@ class NewsScheduler:
 
         async def _fetch_chinese():
             try:
-                return await self.chinese_fetcher.fetch_all()
+                return await asyncio.wait_for(
+                    self.chinese_fetcher.fetch_all(), timeout=45,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Chinese news fetch timed out after 45s")
+                return []
             except Exception as e:
                 logger.warning("Chinese news fetch failed: %s", e)
                 return []
 
         async def _fetch_rss():
             try:
-                return await self.rss_fetcher.fetch_all()
+                return await asyncio.wait_for(
+                    self.rss_fetcher.fetch_all(), timeout=45,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("RSS fetch timed out after 45s")
+                return []
             except Exception as e:
                 logger.warning("RSS fetch failed: %s", e)
                 return []
 
         async def _fetch_playwright_heartbeat():
-            items = []
-            for source in heartbeat_sources:
-                try:
-                    src_items = await self.playwright_fetcher.fetch_source(source)
-                    items.extend(src_items)
-                except Exception as e:
-                    logger.warning("PW heartbeat %s failed: %s",
-                                   source.get('name', '?'), e)
-            return items
+            try:
+                return await asyncio.wait_for(
+                    self._run_playwright_heartbeat(heartbeat_sources), timeout=50,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("PW heartbeat timed out after 50s")
+                return []
+            except Exception as e:
+                logger.warning("PW heartbeat failed: %s", e)
+                return []
 
         async def _fetch_api():
             try:
-                return await self.api_fetcher.check_all()
+                return await asyncio.wait_for(
+                    self.api_fetcher.check_all(), timeout=30,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("API check timed out after 30s")
+                return []
             except Exception as e:
                 logger.warning("API check failed: %s", e)
                 return []
 
         async def _fetch_web_scraper():
             try:
-                return await self.web_scraper.fetch_all()
+                return await asyncio.wait_for(
+                    self.web_scraper.fetch_all(), timeout=45,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Web scraper timed out after 45s")
+                return []
             except Exception as e:
                 logger.warning("Web scraper failed: %s", e)
                 return []
 
-        results = await asyncio.gather(
-            _fetch_chinese(),
-            _fetch_rss(),
-            _fetch_playwright_heartbeat(),
-            _fetch_api(),
-            _fetch_web_scraper(),
-            return_exceptions=True,
-        )
+        # Defense-in-depth: gather timeout as last line of defense
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(
+                    _fetch_chinese(),
+                    _fetch_rss(),
+                    _fetch_playwright_heartbeat(),
+                    _fetch_api(),
+                    _fetch_web_scraper(),
+                    return_exceptions=True,
+                ),
+                timeout=55,  # heartbeat fires every 60s, leave 5s margin
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "Heartbeat gather timed out after 55s — one or more fetchers hung"
+            )
+            return
 
         items = []
         for result in results:
@@ -164,11 +209,23 @@ class NewsScheduler:
             logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape)")
             await self._notify_callbacks(items)
 
+    async def _run_playwright_heartbeat(self, sources):
+        """Run Playwright heartbeat fetches sequentially (shared browser)."""
+        items = []
+        for source in sources:
+            try:
+                src_items = await self.playwright_fetcher.fetch_source(source)
+                items.extend(src_items)
+            except Exception as e:
+                logger.warning("PW heartbeat %s failed: %s",
+                               source.get('name', '?'), e)
+        return items
+
     async def _tick_5min(self):
         """5-minute tick: Playwright 5min + Twitter + Finnhub.
 
         All three run concurrently via asyncio.gather. Each collector
-        is independently exception-isolated.
+        is independently exception-isolated AND timeout-protected.
 
         Combined tick ~25s (was ~80s sequential), well under 300s.
         """
@@ -178,36 +235,56 @@ class NewsScheduler:
         ]
 
         async def _fetch_playwright_5min():
-            items = []
-            for source in sources:
-                try:
-                    src_items = await self.playwright_fetcher.fetch_source(source)
-                    items.extend(src_items)
-                except Exception as e:
-                    logger.warning("PW 5min %s failed: %s",
-                                   source.get('name', '?'), e)
-            return items
+            try:
+                return await asyncio.wait_for(
+                    self._run_playwright_5min(sources), timeout=120,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("PW 5min timed out after 120s")
+                return []
+            except Exception as e:
+                logger.warning("PW 5min failed: %s", e)
+                return []
 
         async def _fetch_twitter():
             try:
-                return await self.twitter_fetcher.fetch_all()
+                return await asyncio.wait_for(
+                    self.twitter_fetcher.fetch_all(), timeout=60,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Twitter fetch timed out after 60s")
+                return []
             except Exception as e:
                 logger.warning("Twitter fetch failed: %s", e)
                 return []
 
         async def _fetch_finnhub():
             try:
-                return await self.finnhub_fetcher.fetch_all()
+                return await asyncio.wait_for(
+                    self.finnhub_fetcher.fetch_all(), timeout=45,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Finnhub fetch timed out after 45s")
+                return []
             except Exception as e:
                 logger.warning("Finnhub fetch failed: %s", e)
                 return []
 
-        results = await asyncio.gather(
-            _fetch_playwright_5min(),
-            _fetch_twitter(),
-            _fetch_finnhub(),
-            return_exceptions=True,
-        )
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(
+                    _fetch_playwright_5min(),
+                    _fetch_twitter(),
+                    _fetch_finnhub(),
+                    return_exceptions=True,
+                ),
+                timeout=150,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "5min gather timed out after 150s — one or more fetchers hung"
+            )
+            return
 
         items = []
         for result in results:
@@ -218,6 +295,18 @@ class NewsScheduler:
 
         if items:
             await self._notify_callbacks(items)
+
+    async def _run_playwright_5min(self, sources):
+        """Run Playwright 5min fetches sequentially (shared browser)."""
+        items = []
+        for source in sources:
+            try:
+                src_items = await self.playwright_fetcher.fetch_source(source)
+                items.extend(src_items)
+            except Exception as e:
+                logger.warning("PW 5min %s failed: %s",
+                               source.get('name', '?'), e)
+        return items
 
     async def _tick_15min(self):
         """15-minute tier — now a no-op.

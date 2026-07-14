@@ -161,6 +161,29 @@ class Database:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE INDEX IF NOT EXISTS idx_health_type ON health_events(event_type);
+
+                CREATE TABLE IF NOT EXISTS event_decisions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    news_id INTEGER NOT NULL,
+                    is_event INTEGER DEFAULT 0,
+                    event_types TEXT DEFAULT '[]',
+                    intensity INTEGER DEFAULT 0,
+                    direction TEXT DEFAULT 'up',
+                    confirmed INTEGER DEFAULT 0,
+                    timeliness TEXT DEFAULT 'immediate',
+                    sector_tags TEXT DEFAULT '[]',
+                    headline_signal TEXT DEFAULT '',
+                    ticker_hint TEXT DEFAULT '[]',
+                    risk_snapshot TEXT DEFAULT '',
+                    notable INTEGER DEFAULT 0,
+                    filter_reason TEXT DEFAULT '',
+                    alert_level TEXT DEFAULT 'normal',
+                    raw_json TEXT DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_ed_news ON event_decisions(news_id);
+                CREATE INDEX IF NOT EXISTS idx_ed_created ON event_decisions(created_at);
+                CREATE INDEX IF NOT EXISTS idx_ed_alert ON event_decisions(alert_level);
             """)
             # Migrations: add new columns to existing databases (idempotent)
             _migrations = [
@@ -443,6 +466,29 @@ class Database:
                 ORDER BY a.created_at DESC LIMIT ?
             """, (window, limit)).fetchall()
             return [dict(r) for r in rows]
+
+    def insert_event_decision(self, ed) -> int:
+        """Persist an event-driven evaluation result (Path A).
+
+        Unlike ImpactAssessment (Path B legacy), this records every evaluation
+        regardless of push/no-push outcome — closing the audit gap.
+        """
+        with self._get_conn() as conn:
+            c = conn.execute("""
+                INSERT INTO event_decisions
+                (news_id, is_event, event_types, intensity, direction, confirmed,
+                 timeliness, sector_tags, headline_signal, ticker_hint,
+                 risk_snapshot, notable, filter_reason, alert_level, raw_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                ed.news_id, int(ed.is_event), ed.event_types, ed.intensity,
+                ed.direction, int(ed.confirmed), ed.timeliness,
+                ed.sector_tags, ed.headline_signal, ed.ticker_hint,
+                ed.risk_snapshot, int(ed.notable), ed.filter_reason,
+                ed.alert_level, ed.raw_json,
+            ))
+            ed.id = c.lastrowid
+            return c.lastrowid
 
     def insert_outcome(self, o: ImpactOutcome) -> int:
         with self._get_conn() as conn:
