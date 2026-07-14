@@ -29,13 +29,13 @@ _cached_db_ok: bool = True
 async def refresh_cached_db_health(db) -> None:
     """Re-evaluate DB liveness and store the result in ``_cached_db_ok``.
 
-    Called periodically (every 60 s) by the main background loop so that
-    the ``/health`` endpoint always returns an up-to-date DB status without
-    touching SQLite itself.
+    Runs the (blocking) ``get_db_stats()`` call in a thread so that the
+    asyncio event loop is never blocked — even during pipeline bursts
+    when SQLite write-lock contention is high.
     """
     global _cached_db_ok
     try:
-        db.get_db_stats()
+        await asyncio.to_thread(db.get_db_stats)
         _cached_db_ok = True
     except Exception:
         _cached_db_ok = False

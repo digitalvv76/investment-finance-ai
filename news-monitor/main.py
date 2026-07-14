@@ -372,6 +372,9 @@ class NewsMonitor:
         if self.web_dashboard:
             await self.web_dashboard.start()
 
+        # Prime /health cache immediately so there is no 60s "fake-ok" window.
+        await refresh_cached_db_health(self.db)
+
         # Start impact collector loop (background, periodic)
         self._collector_task = asyncio.create_task(self._run_collector_loop())
         self._escalator_task = asyncio.create_task(self._run_escalation_loop())
