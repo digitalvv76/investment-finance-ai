@@ -2357,22 +2357,64 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 
 ## 2026-07-13T17:09+08:00 · 会话开始
 
-## 2026-07-13T18:08 · 🤖 会话结束自动补账
-
-> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
-
-### 33f2211 · 2026-07-13T18:07 · docs(session): 关机同步 — V1回执Karpathy Wiki方案评估 + SessionEnd补账 [skip-tests]
-
----
-
-### 59adfd1 · 2026-07-13T18:08 · docs(session): 关机同步 — 更新 SESSION.md [skip-tests]
-
----
-
-### 82bf7a2 · 2026-07-13T18:08 · docs(session): 关机同步 — LLM Wiki方案完成+获批,下次实施Phase1 MVP
-
----
-
----
-
 ## 2026-07-13T19:57+08:00 · 会话开始
+
+### 生产事故收尾 (commits `1759118` `f70f8ce`)
+- HISTORY.md + TROUBLESHOOTING.md 记录 `scheduler-callback-stall-20260713`
+- SESSION.md 更新：修复完成 + 下一步
+
+### deep_lane 恢复老版4步格式 (commit `b20478e`)
+- 用户反馈精简版(①②③④ + 250-300字)格式不如老版有条理
+- 恢复: Step 1-4 标签 + 事件分类(宏观/行业/公司) + 组合映射1-3个操作场景+触发条件 + Grounding discipline
+- max_tokens 900→1500, NO_DATA_PROMPT 恢复 2-section flash note
+
+---
+
+## 2026-07-13T04:00+08:00 · 🛌 关机同步 — 文件恢复 + LLM Wiki方案
+
+### 文件恢复验证 + 记忆审计 (commits `b97633c` `5f3b4a2`)
+- 上次突然关机 → 完整性检查：.env / git fsck / 备份 / 工作区全部完好
+- 误删 163 文件恢复验证（git restore 40 + checkout 18 + E盘手动 105 含 .env/settings/backups/HISTORY.md）
+- 全局记忆审计：33条记忆中 2条关键错误 + 6条过时修正
+- CLAUDE.md 重大改造：合并 Karpathy 4 原则 + Mnimiy 5 原则（30代码库实测 41%→3%）
+- GLM 清理：.env + settings.json + credential-architecture + pending-tasks 四处删除
+- 金融 Skill 安装：fed-watch / insider-tracker / options-flow / smart-money / earnings-play
+
+### PLTR 综合研判
+- fed-watch: 鹰派，通胀 4.2% 抬头，7/28 FOMC 可能加息
+- insider-tracker: 🔴 BEARISH — 零买入，CEO+总裁集群卖出 $1亿
+- smart-money: 🟡 DIVIDED — 高盛/挪威加仓 vs 摩根砍仓+做空上升
+- earnings-play: ⚠️ AVOID — straddle 贵于实际波动
+
+### LLM Wiki 方案 + 回执 (commits `33f2211` `59adfd1` `82bf7a2`)
+- 调研 Karpathy 原始 Gist + 10 篇社区分析，深度评估对投资金融场景的适配性
+- 评估结论：核心思想 ⭐⭐⭐⭐⭐，深度研究场景极适配，实时新闻流水不适用
+- 方案：完整 3 阶段实施计划 → 纯 markdown + git，零基础设施
+- 状态：方案已获批准，待实施 Phase 1 MVP
+- V1 回执 Karpathy Wiki 方案评估 + CLAUDE.md 合并评审通过
+
+---
+
+## 2026-07-12T18:00+08:00 · 🔧 R0 落库表 + 时效性重构 + V1/V2 回执
+
+### R0 event_decisions 落库表 (commit `9af94d7`)
+- 关闭 REQ-training-eval 头号发现：event_driven 决策完全不落库
+- 新增 EventDecision dataclass (17字段) + event_decisions 表 + _persist_event_decision()
+- should_push 路径和非推路径都落库（safety_net/skip 也记录）
+- 525 tests passed
+
+### 时效性重构 (commits `bd4246b` `f9e3521` `a691426`)
+- **修复 (bd4246b)**: 加 Step 1.5 时效性闸门 + confirmed 双重验证 + WSJ Intel 反例 few-shot — WSJ 旧闻不再误推
+- **重构 (a691426)**: 用户反馈时效性不应硬闸门 → 融入 intensity 评分因素① + 新增 timeliness 字段（immediate/recent/retrospective_new/retrospective）+ cap 机制
+- 161→69 tests, 覆盖 3 个 commit
+
+### V1/V2 回执 + 卫生 (commits `34071c4` `dda84bd` `e4c584b` `0d9e4b0` `6d8a33a` `5d68375`)
+- V2→V1: 军事冲突关键词乘数方案评估 — 方向认同，建议关键词做触发不做乘数
+- V1→V2: CLAUDE.md 合并评审通过（一个小调整：用户期望归位角色分工）
+- 数据源全量清单：46个源分9类，含链接/API/Key申请地址
+- 清卫生项：补注册 compare_prompts.py + fetch_recent_news.py 进 __manifest__.json
+- GLM key 配入 settings.json
+
+---
+
+## 2026-07-14T10:01+08:00 · 会话开始

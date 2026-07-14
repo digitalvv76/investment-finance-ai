@@ -1,13 +1,20 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-13 20:15。生产事故修复完成。
+> 最后更新: 2026-07-14 10:05。卫生项清理完成。
 
 ## 🟢 当前部署状态
 - **ECS 生产**: V2 (origin/main, `c1eb0e3`)，健康 ✅，采集正常 27条/时
+- **main 领先 ECS 3 commits**: `1759118` `f70f8ce` `b20478e`（deep_lane revert + docs），待部署
 - **v1-stable**: 已偏离 main（军事冲突关键词原型）
 - **LLM 供应商**: DeepSeek 唯一 ✅
 
-## ✅ 本次会话交付 (2026-07-13 晚上)
+## ✅ 本次会话交付 (2026-07-14 上午)
+
+### 卫生项清理
+- HISTORY.md 补录 14 条缺失提交（7/12晚间 R0+时效性 + 7/13凌晨关机同步 + 7/13晚间事故收尾+deep_lane）
+- 清理 SessionEnd 自动补账残留 stub
+
+## ✅ 上次会话交付 (2026-07-13 晚上)
 
 ### 🔴 生产事故：调度器 LLM API 僵死 → 采集停摆 (07:53-08:02)
 - **症状**: 看门狗报警「过去1小时零采集」，stalled 紧急。采集在 06:11 完全停止
@@ -15,41 +22,30 @@
 - **修复**: ① `docker restart` 恢复 (08:02) ② `asyncio.wait_for(timeout=120s)` 兜底 (commit `c1eb0e3`) ③ 部署 ECS 08:09 上线
 - **TROUBLESHOOTING**: `scheduler-callback-stall-20260713`
 
-## ✅ 上次会话交付 (2026-07-13 凌晨)
+### 生产事故收尾 (commits `1759118` `f70f8ce`)
+- HISTORY.md + TROUBLESHOOTING.md 记录完整事故链
+- SESSION.md 更新下一步
 
-### 事故处理
-- **误删除 163 个文件恢复**: git restore (40个) + git checkout (18个) + E:\class1 手动拷贝 (105个含 .env/settings/backups/HISTORY.md)
-- **记忆审计**: deployment-state 过时修正、pending-tasks 清已完成、v1-became-v2 标记已决定、credential-architecture 补全 23 key
+### deep_lane 恢复老版4步 (commit `b20478e`)
+- 用户反馈精简版格式不如老版有条理 → 恢复 Step 1-4 + 分类体系 + 操作场景
 
-### CLAUDE.md 重大改造
-- **合并 Karpathy 4 原则**（multica-ai/andrej-karpathy-skills, 191K⭐）
-- **合并 Mnimiy 5 原则**（30代码库实测 41%→3%，改写 Rule 5/6 适配本项目）
-- **清理过时内容**: ANTHROPIC_API_KEY、旧项目结构、快速开始、脚本工具
-- **V1 评审通过** ✅，结构调整（用户期望归位角色分工）
-- **误判恢复**: 7 个技能引用被错误删除→核实后恢复
+## ✅ 更早交付 (2026-07-13 凌晨 → 7/12 晚间)
 
-### GLM 清理
-- .env + settings.json + credential-architecture + pending-tasks **四处删除**
+### 7/13 凌晨 — 关机同步恢复
+- 误删 163 文件恢复 + 记忆审计 + CLAUDE.md 合并 Karpathy+Mnimiy 9 条
+- GLM 清理 + 金融 Skill 安装 + PLTR 综合研判
+- LLM Wiki 方案获批，待 Phase 1 MVP
 
-### 金融 Skill 安装
-- **第一梯队**: fed-watch ✅ | insider-tracker ✅ | options-flow ✅（均试跑 PLTR）
-- **第二梯队**: smart-money ✅ | earnings-play ✅（均试跑 PLTR）
-- Skill 位于 `C:\Users\nycr\.claude\skills\`，零额外配置
-
-### PLTR 综合研判
-- fed-watch: 鹰派，通胀 4.2% 抬头，7/28 FOMC 可能加息
-- insider-tracker: 🔴 BEARISH — 零买入，CEO+总裁集群卖出 $1亿
-- options-flow: 待跑
-- smart-money: 🟡 DIVIDED — 高盛/挪威加仓 vs 摩根砍仓+做空上升
-- earnings-play: ⚠️ AVOID — straddle 贵于实际波动
+### 7/12 晚间 — R0 落库表 + 时效性重构
+- **R0 event_decisions 落库表** (commit `9af94d7`): 关闭 REQ-training-eval 头号发现
+- **时效性修复→重构** (commits `bd4246b` `a691426`): 硬闸门→融入 intensity + timeliness 字段
+- V1/V2 回执 + 数据源全量清单 + 卫生项
 
 ## 📋 下一步
 - **🔴 LLM Wiki Phase 1 MVP**: wiki/ 骨架 + SCHEMA.md + INDEX.md + 3 skill + 3 种子页（NVDA/PLTR/fed-policy）
-- **📊 R0 event_decisions 落库表**: event_driven 评估不再凭空消失
-- **观察生产**: event_driven 时效性修复效果
+- **🚀 部署 main 到 ECS**: b20478e (deep_lane revert) + 时效性重构 (bd4246b/a691426) + R0 落库表 (9af94d7) 未上线
+- **观察生产**: 时效性重构效果（timeliness 字段分发）
 - **v1-stable 分流**: 军事冲突关键词是否合并进 main
-
-## ✅ 本次会话交付 (2026-07-13 傍晚)
 
 ### 突然关机恢复
 - 上次会话突然关机 → 本次启动完整性检查：.env / git fsck / 备份 / 工作区全部完好，无损坏
