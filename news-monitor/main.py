@@ -49,6 +49,7 @@ from engine.watchdog import Watchdog
 from engine.relevance import signal_score, get_portfolio_summary
 from engine.actionability_review import ActionabilityReviewer
 from bot.telegram_bot import NewsBot
+from web.routes import refresh_cached_db_health
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -337,6 +338,19 @@ class NewsMonitor:
             except Exception:
                 logger.exception("EscalationLoop: sweep failed")
 
+    async def _refresh_stats_loop(self):
+        """Refresh the /health DB cache every 60 s.
+
+        Runs DB stats in a background task so Docker HEALTHCHECK never
+        blocks on SQLite COUNT queries during pipeline bursts.
+        """
+        while True:
+            await asyncio.sleep(60)
+            try:
+                await refresh_cached_db_health(self.db)
+            except Exception:
+                logger.exception("StatsRefresh: health cache update failed")
+
     # -----------------------------------------------------------------
     # Lifecycle
     # -----------------------------------------------------------------
@@ -365,6 +379,10 @@ class NewsMonitor:
         # Start the independent liveness watchdog.
         self._watchdog_task = asyncio.create_task(self.watchdog.run_loop())
 
+        # Keep the /health DB cache fresh without blocking Docker HEALTHCHECK
+        # on SQLite COUNT queries during pipeline bursts.
+        self._stats_refresh_task = asyncio.create_task(self._refresh_stats_loop())
+
         logger.info("News Monitor running")
 
     async def stop(self) -> None:
@@ -377,6 +395,8 @@ class NewsMonitor:
         if hasattr(self, '_watchdog_task'):
             self.watchdog.stop()
             self._watchdog_task.cancel()
+        if hasattr(self, '_stats_refresh_task'):
+            self._stats_refresh_task.cancel()
         if self.web_dashboard:
             await self.web_dashboard.stop()
         if self.bot:
