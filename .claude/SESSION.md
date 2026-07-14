@@ -1,32 +1,41 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-14 16:15。V1/V2 分工明确：V1 只诊断+方案+交接，V2 负责代码+部署。
+> 最后更新: 2026-07-14 18:05。LLM Wiki Phase 1 MVP 交付 + V1/V2 分工确认。
 
-## ⚠️ V1 边界（用户 2026-07-14 定）
-- **V1 能做**：诊断问题、观察生产、出语义方案（SPEC/HANDOFF）、写交接文档
-- **V1 不能做**：改代码（任何文件）、git commit 代码改动、部署 ECS
-- **V1 产出**：交接文档（V1→V2 HANDOFF），V2 读后实施
-- **🚨 用户忘时**：如果用户让 V1 改代码或部署 → 反复提醒"改代码和部署都由 V2 执行"，直到用户纠正，不执行
+## ⚠️ V1/V2 分工（用户 2026-07-14 定）
+- **V1**：投资决策 + 业务方向 + 需求优先级 + 推送验收
+- **V2**：架构 + 代码 + 测试 + 部署（全权）
+- **V1 不能改代码和部署**，发现问题 → 告诉 V2 → V2 动手
+- CLAUDE.md 角色分工表是唯一权威
 
 ## 🟢 当前部署状态
-- **ECS 生产**: V2 (origin/main, `9cb7927`)，健康 ✅
-- **v1-stable**: ⚠️ 工作树损坏（prunable，缺 .git），需 V2 修复
+- **ECS 生产**: V2 (origin/main, `28ace28`)，健康 ✅
+- **v1-stable**: 不活跃（V1 已回归 main，不再用 v1-stable 改代码）
 - **LLM 供应商**: DeepSeek 唯一 ✅
 
-## ✅ 本次会话交付 (2026-07-14 下午)
+## ✅ V2 本次会话交付 (2026-07-14 18:00)
 
-### ✂️ deep_lane prompt 精简 + 新闻要点 (commit `1ae02bf`, 部署 `1106337`)
-- 用户反馈 NVDA 深度分析变回冗长的 Step 1/2/3/4 格式（~1000+字）
+### 🧠 LLM Wiki Phase 1 MVP (commit `1ee9ee2`)
+- wiki/ 骨架：SCHEMA.md + INDEX.md + 3 skill（compile/load/maintain）
+- 3 种子页：NVDA (BUY) / PLTR (HOLD) / fed-policy
+- 纯 markdown + git，零基础设施
+
+### 🧹 卫生清理 (commit `107899e`)
+- HISTORY.md SessionEnd 残留 stub → 提交摘要表
+
+### 📋 V1/V2 分工确认
+- 确认 CLAUDE.md 是唯一分工权威，COLLAB-PROTOCOL 不覆盖
+- 确认时效性重构 + R0 落库表 + deep_lane revert 均已在 ECS
+
+## ✅ V1 下午会话交付 (2026-07-14 16:00)
+
+### ✂️ deep_lane prompt 精简 + 新闻要点 (commit `1ae02bf`)
 - 切回精简版：新闻要点 + ①②③④，~300-350 字
 - ECS 15:57 上线 ✅，58 tests 绿
-- **症状**: 看门狗告警「采集停摆」，容器 alive 但 3h 零采集，日志最终完全静默
-- **根因**: 上次修复 (`c1eb0e3`) 只保护了回调超时，采集器 `asyncio.gather` 没有超时 — 任一采集器 hang → 整个心跳永久阻塞
-- **修复**: 三层 timeout 纵深防御 — 采集器级 (30-120s) + gather 级 (55-150s) + 回调级 (120s)，commit `e9708ba`
-- **部署**: ECS 10:20 上线 ✅，518 tests 绿
 
-### 卫生项清理 (commit `14119cd`)
-- HISTORY.md 补录 14 条缺失提交 + SESSION.md 更新
-- 清理 SessionEnd 自动补账残留 stub
+### COLLAB-PROTOCOL 重申 (commit `9cb7927`)
+- V1 违规复盘：deep_lane 改动直改 main（应走 V1→V2 交接）
+- V1 边界确认：V1 不能改代码和部署
 
 ## ✅ 上次会话交付 (2026-07-13 晚上)
 
@@ -56,8 +65,15 @@
 - V1/V2 回执 + 数据源全量清单 + 卫生项
 
 ## 📋 下一步
-- **🔴 LLM Wiki Phase 1 MVP**: wiki/ 骨架 + SCHEMA.md + INDEX.md + 3 skill + 3 种子页（NVDA/PLTR/fed-policy）
-- **🔧 修复 v1-stable 工作树**: prunable，缺 .git 链接
+- **🧪 试用 wiki skill**: 下次 stock-research 前 `wiki-load` → 分析完 `wiki-compile`
+- **🧹 旧会话内容存档**: SESSION.md 尾部积压了大量历史「下一步」和「踩坑」，可清理归档
+- **🔧 修复 v1-stable 工作树**: prunable（可选，V1 已回归 main 不再依赖）
+- **📊 Docker healthcheck 假阳性**: V1 交接了方案 (`e0b208e`)，待 V2 实施
+
+## ⚠️ 本次踩坑
+- **HISTORY.md 过时不等于未部署**: SESSION.md 写「待部署」但 git 祖先检查三条都在 ECS 上——先查再信
+- **V1 动手改代码**: 今天 V1 直接 refine/revert/reapply deep_lane.py，违反了 CLAUDE.md 分工。用户纠正后回归正轨
+- **settings.json 是 gitignored**: wiki 权限改动只在本地，不会随 commit 同步到其他环境
 - **观察生产**: 精简版深度分析推送质量（新闻要点 + ①②③④）
 
 ### 突然关机恢复
