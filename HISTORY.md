@@ -2483,4 +2483,23 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 
 ---
 
-## 2026-07-14T14:19+08:00 · 会话开始
+## 2026-07-14T14:19+08:00 · 🧠 LLM Wiki Phase 1 MVP 上线
+
+### 产出 (commit `1ee9ee2`)
+- **wiki/ 骨架**: SCHEMA.md (格式规范) + INDEX.md (导航索引)
+- **3 个 skill**: wiki-compile (蒸馏) / wiki-load (加载) / wiki-maintain (维护)
+- **3 个种子页**: NVDA (BUY, PEG 0.59) / PLTR (HOLD, 内幕疑虑) / fed-policy (暂停, CPI 再加速)
+- 纯 markdown + git，零基础设施，不改任何已有 skill
+
+### 决策
+- V1 此前反对（R0 优先/过时风险/token 成本），用户驳回
+- R0 已上线（过时理由不成立）；wiki 是一次性蒸馏成本，省的是重复研究 token
+- 本会话卫生清理: HISTORY.md SessionEnd stub → 提交摘要表 (`107899e`)
+
+### 确认
+- 时效性重构 + R0 落库表 + deep_lane revert 均已在 ECS 运行
+- V1 分工重申：V1 不管代码和部署（CLAUDE.md），V2 全权执行
+
+---
+
+## 2026-07-14T18:00+08:00 · 会话继续
