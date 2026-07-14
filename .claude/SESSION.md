@@ -1,12 +1,29 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-14 18:05。LLM Wiki Phase 1 MVP 交付 + V1/V2 分工确认。
+> 最后更新: 2026-07-14 22:45。Docker healthcheck 假阳性修复已部署。
 
-## ⚠️ V1/V2 分工（用户 2026-07-14 定）
-- **V1**：投资决策 + 业务方向 + 需求优先级 + 推送验收
-- **V2**：架构 + 代码 + 测试 + 部署（全权）
-- **V1 不能改代码和部署**，发现问题 → 告诉 V2 → V2 动手
-- CLAUDE.md 角色分工表是唯一权威
+## 🟢 当前部署状态
+- **ECS 生产**: V2 (origin/main, `bd76df0`)，健康 ✅
+- **v1-stable**: 工作树已重建（a17a70c），但 V1 需重启会话
+- **LLM 供应商**: DeepSeek 唯一 ✅
+
+## ✅ 本会话交付 (2026-07-14 22:30)
+
+### 🔧 Docker healthcheck 假阳性修复 (commits `70f5175` `bd76df0`)
+- `/health` 8 次 COUNT → 60s 内存缓存，asyncio.to_thread 非阻塞
+- Dockerfile 不动，deploy-main.sh 直接同步
+- 5 个新测试 (`test_health_cache.py`)，523 passed
+- 已部署 ECS ✅
+
+### 📋 V1/V2 身份澄清 (commits `95a73d0` `b6a1245`)
+- V1=v1-stable 工作树，V2=main（不是「V1 回归 main」）
+- 记忆新增 `v1-v2-identity.md`
+- v1-stable 工作树重建
+
+## 📋 下一步
+- 📊 **观察 ECS**: Docker healthcheck 是否还有 unhealthy 误报
+- 🧪 **试用 wiki skill**: 下次 stock-research 前 wiki-load → wiki-compile
+- 🧹 **SESSION.md 归档**: 尾部仍积压历史内容
 
 ## 🟢 当前部署状态
 - **ECS 生产**: V2 (origin/main, `28ace28`)，健康 ✅

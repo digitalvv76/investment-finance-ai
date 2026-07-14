@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-07-14T22:30+08:00 · 🔧 Docker healthcheck 假阳性修复 — 已部署
+
+### 背景
+- V1 交接：Deploy 后 Docker healthcheck 间歇超时 → 容器 unhealthy → restart
+- 根因：`/health` 每次 ping 跑 8 次 `SELECT COUNT(*)`，管道高峰期 SQLite 写锁竞争 → 超 10s
+- V1 出方案 C（放宽 Dockerfile 参数），V2 评估 + 提案 → 对抗核实 → 选定最终方案
+
+### 过程
+1. V2 评估 V1 方案 C：同意方向，但发现 deploy-main.sh 不同步 docker/，改 Dockerfile 到不了 ECS
+2. V2 提案「独立线程 HTTP :8081 + 心跳」→ 对抗 agent 否决（3 致命缺陷：重启循环 / 部署不达 / 治标不治本）
+3. 最终方案：只改 routes.py，watchdog 每 60s 刷新内存缓存，/health 不碰 SQLite
+4. 对抗核实第二轮 → 发现 2 致命缺陷（同步调用未用 asyncio.to_thread / 零测试）→ 修复
+5. 5 道门禁全过 → 部署 ECS (bd76df0) ✅
+
+### 其他
+- V1/V2 身份澄清：V1=v1-stable 工作树，V2=main。之前 V2 误读 SESSION.md 把「v1-stable reset 对齐 main」理解成「V1 搬到 main」
+- v1-stable 工作树两次重建（prunable → clean → 再次损坏 → 再次修复）
+- 记忆新增 `v1-v2-identity.md`（权威身份定义）
+- V1→V2 交接文件已同步到 v1-stable 分支
+- 新测试 5 个 (`test_health_cache.py`)，全量 523 passed
+
+---
+
+## 2026-07-14T21:52+08:00 · 🛡️ CPI 宏观事件漏推修复 — 已部署
+
+### 用户反馈
+- 美国 6 月 CPI 3.5% 远低于预期 3.8%，重要宏观新闻未推送
+
+### 诊断（双层故障）
+1. **event_driven prompt**：把 CPI 判为"纯宏观数据，无公司催化剂"，`is_event=false`
+2. **evaluate.py 代码 bug**：`is_event=false` 时强制 NORMAL，impact 评的 85 分被完全丢弃
+
+### 修复 (commit `ceeb86b`, 部署 `deploy-main.sh`)
+- **代码**：`is_event=false` 但 impact ≥ 80 → 救回 NOTABLE（静默 TG），不再强制静音
+- **Prompt**：`event_driven_v1.txt` 反过滤例外新增宏观数据（CPI/非农/GDP/FOMC/ISM）
+- 518 tests 绿（7 个已有路径问题无关），ECS 21:52 上线 ✅
+
+---
+
 ## 2026-07-14T15:55+08:00 · ✂️ deep_lane prompt 精简 + 新闻要点 — 已部署
 
 ### 背景
@@ -2503,3 +2542,23 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 ---
 
 ## 2026-07-14T18:00+08:00 · 会话继续
+
+## 2026-07-14T18:09 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 28ace28 · 2026-07-14T18:01 · @ docs: LLM Wiki Phase 1 MVP 交付记录 — HISTORY+SESSION 更新 [skip-tests]
+
+---
+
+### e11914d · 2026-07-14T18:07 · docs(session): 关机同步 — V1 边界确认 + Docker healthcheck 方案交接 [skip-tests]
+
+---
+
+### 4bb9002 · 2026-07-14T18:08 · @ docs: 关机同步 — LLM Wiki MVP 交付 + V1/V2 分工确认 [skip-tests]
+
+---
+
+---
+
+## 2026-07-14T21:00+08:00 · 会话开始
