@@ -4,6 +4,26 @@
 
 ---
 
+## collector-gather-hang-20260714 — 采集停摆（采集器 hang → asyncio.gather 永久阻塞）
+
+**症状**: 看门狗报警「过去1小时零采集」、容器 alive、health 端响应 200、Telegram 轮询正常（持续3h后才停）、零错误日志、零 traceback、最后心跳 3h 前、日志最终完全静默
+
+**根因**: 上次修复 (`c1eb0e3`) 只给 `_notify_callbacks` 的回调加了 `asyncio.wait_for`，但采集器本身 (`_heartbeat_tick` 的 `asyncio.gather`) 没有超时保护。`return_exceptions=True` 只能捕获**异常**，不能捕获**hang**。任一采集器（怀疑 Playwright 运行 11h+ 后资源耗尽）`await` 永不返回 → `asyncio.gather` 永久阻塞 → `_run_loop` 卡死在 `await _heartbeat_tick()`。
+
+**为什么上次修复不够**: `asyncio.wait_for` 是点状防御。上次修了回调链，但采集器 `asyncio.gather` 是另一条路径。asyncio 中每条 `await` 链都需要自己的超时兜底 — 不能假设「上层会保护」。
+
+**修复**:
+1. 短期恢复：`docker restart news-monitor`
+2. 长期防护：三层 timeout 纵深防御
+   - 每个采集器: `asyncio.wait_for(fetcher, timeout=30-120s)`
+   - gather 总体: `asyncio.wait_for(gather, timeout=55s/150s)`
+   - 回调级: `asyncio.wait_for(cb, timeout=120s)` (上次已修)
+3. 部署: `e9708ba` → ECS 10:20 上线，518 tests 绿
+
+**教训**: `return_exceptions=True` ≠ timeout 保护。asyncio 每条 `await` 链都要自己的超时。资源泄漏（Playwright 11h+）导致渐进式故障 → 定期重启或连接池上限值得考虑。
+
+---
+
 ## scheduler-callback-stall-20260713 — 采集停摆（LLM API 僵死 → 调度器 await 永不返回）
 
 **症状**: 看门狗报警「过去1小时零采集」、`ingest_1h: 0`、错误数0、成功率100%、Docker 容器 healthy、Telegram 轮询正常

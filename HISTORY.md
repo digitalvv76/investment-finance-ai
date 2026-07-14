@@ -2418,3 +2418,40 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 ---
 
 ## 2026-07-14T10:01+08:00 · 会话开始
+
+### 卫生项清理 (commit `14119cd`)
+- HISTORY.md 补录 14 条缺失提交 + SESSION.md 更新
+- 清理 SessionEnd 自动补账残留 stub
+
+---
+
+## 2026-07-14T10:15+08:00 · 🔴 生产事故 #2：采集器 hang 致调度器再次卡死 → 已修复+部署
+
+### 事故
+- 用户收到看门狗告警「采集停摆」
+- 诊断：调度器 7/13 19:02 (EDT) 心跳停止，之后 3 小时零采集
+- 容器 alive (Up 14h)，health 端点响应 200，但无任何采集日志
+- 最后日志 22:09 EDT → 之后完全静默（连 Telegram 轮询也停了）
+
+### 根因
+- **上次修复 (`c1eb0e3`) 加的是 `_notify_callbacks` 的回调超时，不是采集器本身的超时**
+- `_heartbeat_tick` 用 `asyncio.gather(5个采集器, return_exceptions=True)` — `return_exceptions` 只能捕获异常，**不能捕获 hang**
+- 任一采集器 `await` 永不返回 → `asyncio.gather` 永久阻塞 → `_run_loop` 卡死
+- 怀疑是 Playwright 浏览器资源耗尽（运行 11h+ 后某次 fetch 挂起）
+
+### 修复 (commit `e9708ba`)
+- **三层 timeout 纵深防御**:
+  1. 每个采集器 `asyncio.wait_for(fetcher, timeout=N)` — 30~120s 不等
+  2. `asyncio.gather` 总体 `asyncio.wait_for(gather, timeout=55s/150s)`
+  3. 回调级 `asyncio.wait_for(cb, timeout=120s)` (上次已修)
+- Playwright 心跳提取为 `_run_playwright_heartbeat()` 独立方法便于 timeout 包裹
+- 部署 ECS → 采集恢复 ✅，518 tests 绿
+
+### 教训
+- `return_exceptions=True` ≠ timeout 保护 — 它只转异常为返回值，对 hang 无效
+- asyncio 每条 `await` 链都要自己的超时兜底 — 不能假设"上层会保护"
+- 资源泄漏导致渐进式故障 → 定期重启或资源池上限值得考虑
+
+---
+
+## 2026-07-14T10:01+08:00 · 会话开始
