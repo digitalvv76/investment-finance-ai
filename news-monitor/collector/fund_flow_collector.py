@@ -76,18 +76,22 @@ def _load_prompt_v2() -> str:
 
 @dataclass
 class FundFlowSignal:
-    """Computed signal from a ticker's fund flow data."""
+    """Computed signal from a ticker's fund flow data.
+
+    Primary metric (V2.1): main_net = 特大单 + 大单 (防机构拆单).
+    """
     ticker: str
     continuity: str          # "continuous_inflow" | "continuous_outflow" | "mixed"
     participation: str       # "extreme" | "strong" | "normal" | "low"
-    cum_super_big_3d: float  # 3-day cumulative super-big net (CNY)
-    cum_main_3d: float       # 3-day cumulative main net (CNY)
-    latest_main_pct: float   # latest day main_pct
+    cum_main_3d: float       # 3-day cumulative main net = 特大单+大单 (CNY)
+    cum_super_big_3d: float  # 3-day cumulative super-big net (reference only)
+    latest_main_pct: float   # latest day main_pct = (特大单+大单)/成交额
     price_change_3d: float = 0.0       # 3-day cumulative price change (%)
     price_data: list[dict] = field(default_factory=list)  # [{date, close}]
     fund_flow_days: list = field(default_factory=list)    # FundFlowDay objects
     analysis_summary: str = ""         # LLM 主要观点
     analysis_full: str = ""            # LLM 完整报告
+    silenced: bool = False             # true = 财报静默期内，仅入库不推送
 
 
 # ---------------------------------------------------------------------------
@@ -194,10 +198,10 @@ class FundFlowCollector:
         for s in all_signals:
             if s.participation in ("extreme", "strong"):
                 await self._analyze_signal(s)
+                await self._check_earnings_silence(s)
 
         pushed = await self._push_signals(all_signals)
         self._mark_done(self.WINDOW_POST)
-        # Reset for next run
         self._batch_index = 0
         self._batch_signals = []
         return pushed
@@ -228,6 +232,7 @@ class FundFlowCollector:
         for s in all_signals:
             if s.participation in ("extreme", "strong"):
                 await self._analyze_signal(s)
+                await self._check_earnings_silence(s)
 
         pushed = await self._push_signals(all_signals, window=self.WINDOW_PRE)
         self._mark_done(self.WINDOW_PRE)
@@ -260,6 +265,66 @@ class FundFlowCollector:
     async def close(self):
         """Release the underlying aiohttp session."""
         await self._fetcher.close()
+
+    # ------------------------------------------------------------------
+    # Earnings quiet-period check (P0-3: V2.1)
+    # ------------------------------------------------------------------
+
+    async def _check_earnings_silence(self, signal: FundFlowSignal):
+        """Mark signal as silenced if within 3 trading days post-earnings."""
+        try:
+            ticker = signal.ticker
+            stock = await asyncio.to_thread(lambda: yf.Ticker(ticker))
+            cal = await asyncio.to_thread(lambda: stock.calendar)
+            if cal is None or not isinstance(cal, dict):
+                return
+
+            # yfinance calendar: earnings dates as list of dicts or timestamps
+            earnings_dates = []
+            for key in ("Earnings Date", "Earnings High", "Earnings Low"):
+                val = cal.get(key)
+                if val is not None:
+                    if isinstance(val, list):
+                        earnings_dates.extend(val)
+                    else:
+                        earnings_dates.append(val)
+
+            if not earnings_dates:
+                return
+
+            # Get the most recent past earnings date
+            from datetime import date as date_type
+            today = date_type.today()
+            recent_earnings = None
+            for ed in earnings_dates:
+                if isinstance(ed, datetime):
+                    ed_date = ed.date()
+                elif hasattr(ed, "date"):
+                    ed_date = ed.date()
+                elif isinstance(ed, str):
+                    ed_date = datetime.fromisoformat(ed[:10]).date()
+                else:
+                    continue
+                if ed_date <= today:
+                    if recent_earnings is None or ed_date > recent_earnings:
+                        recent_earnings = ed_date
+
+            if recent_earnings is None:
+                return
+
+            # Count trading days since earnings
+            days_since = (today - recent_earnings).days
+            # Approximate: if within 5 calendar days (~3 trading days)
+            if days_since <= 5:
+                signal.silenced = True
+                logger.info(
+                    "FundFlow: %s silenced — earnings %s (%d days ago)",
+                    ticker, recent_earnings, days_since,
+                )
+
+        except Exception:
+            # Earnings check failure should not block the signal
+            pass
 
     # ------------------------------------------------------------------
     # Re-analysis from DB (pre-market window)
@@ -425,8 +490,8 @@ class FundFlowCollector:
             ticker=result.ticker,
             continuity=details.get("continuity", "mixed"),
             participation=details.get("participation", "low"),
-            cum_super_big_3d=details.get("cum_super_big_3d", 0.0),
-            cum_main_3d=details.get("cum_main_3d", 0.0),
+            cum_main_3d=details.get("cum_main_3d", 0.0),          # V2.1 primary
+            cum_super_big_3d=details.get("cum_super_big_3d", 0.0),  # reference
             latest_main_pct=details.get("latest_main_pct", 0.0),
             fund_flow_days=result.days,
         )]
@@ -438,9 +503,15 @@ class FundFlowCollector:
     async def _push_signals(
         self, signals: list[FundFlowSignal], window: str = WINDOW_POST,
     ) -> int:
-        """Push strong signals. Returns count of pushed signals."""
+        """Push strong signals. Skips silenced signals (earnings quiet period).
+
+        Returns count of pushed signals.
+        """
         pushed = 0
         for s in signals:
+            if s.silenced:
+                logger.info("FundFlow: %s silenced (earnings quiet period)", s.ticker)
+                continue
             if s.participation == "extreme":
                 await self._push_extreme(s, window)
                 pushed += 1
@@ -450,14 +521,29 @@ class FundFlowCollector:
         return pushed
 
     async def _push_extreme(self, s: FundFlowSignal, window: str = WINDOW_POST):
-        """Extreme participation → Pushover + Telegram (loud)."""
-        direction = "流入" if s.cum_super_big_3d > 0 else "流出"
-        emoji = "🟢" if s.cum_super_big_3d > 0 else "🔴"
+        """★★★ 强背离 → Pushover + Telegram.
+
+        V2.1 semantics: 底背离=重点关注, 顶背离=风险预警 (not 买入/卖出).
+        """
+        inflow = s.cum_main_3d > 0
+        emoji = "🔵" if inflow else "⚠️"
         label = "盘前更新" if window == self.WINDOW_PRE else "收盘分析"
-        title = f"{emoji} {label} {s.ticker} 主力持续{direction}"
+        signal_type = "重点观察" if inflow else "风险预警"
+
+        # Determine if it's a divergence (price vs flow direction mismatch)
+        price_down = s.price_change_3d < 0
+        price_up = s.price_change_3d > 0
+        if price_down and inflow:
+            tag = "底背离"
+        elif price_up and not inflow:
+            tag = "顶背离"
+        else:
+            tag = "量价同向"
+
+        title = f"{emoji} [{signal_type}] {s.ticker} {tag}"
 
         pushover_body = (
-            f"3日超大单净{direction} ¥{abs(s.cum_super_big_3d)/1e8:.1f}亿, "
+            f"{'流入' if inflow else '流出'} ¥{abs(s.cum_main_3d)/1e8:.1f}亿, "
             f"主力占比 {s.latest_main_pct:.1f}%"
         )
         if s.analysis_summary:
@@ -473,7 +559,7 @@ class FundFlowCollector:
 
         if self._bot:
             try:
-                tg_text = self._format_tg_message(s, emoji, direction, window)
+                tg_text = self._format_tg_message(s, emoji, tag, signal_type, window)
                 await self._bot.send_message(
                     chat_id=self._bot._primary_chat_id,
                     text=tg_text,
@@ -484,13 +570,15 @@ class FundFlowCollector:
                 logger.exception("FundFlow: Telegram push failed for %s", s.ticker)
 
     async def _push_strong(self, s: FundFlowSignal, window: str = WINDOW_POST):
-        """Strong participation → Telegram only (silent)."""
-        direction = "流入" if s.cum_super_big_3d > 0 else "流出"
-        emoji = "📊"
-
+        """★★ 标准背离 → Telegram only (silent)."""
         if self._bot:
             try:
-                tg_text = self._format_tg_message(s, emoji, direction, window)
+                inflow = s.cum_main_3d > 0
+                tag = "底背离" if s.price_change_3d < 0 and inflow else \
+                      "顶背离" if s.price_change_3d > 0 and not inflow else "量价信号"
+                tg_text = self._format_tg_message(
+                    s, "📊", tag, "跟踪观察", window,
+                )
                 await self._bot.send_message(
                     chat_id=self._bot._primary_chat_id,
                     text=tg_text,
@@ -501,15 +589,17 @@ class FundFlowCollector:
                 logger.exception("FundFlow: Telegram silent push failed for %s", s.ticker)
 
     def _format_tg_message(
-        self, s: FundFlowSignal, emoji: str, direction: str,
+        self, s: FundFlowSignal, emoji: str, tag: str, signal_type: str,
         window: str = WINDOW_POST,
     ) -> str:
-        """Format Telegram message with signal summary + 主要观点."""
+        """Format Telegram message with V2.1 semantics."""
+        inflow = s.cum_main_3d > 0
+        direction = "流入" if inflow else "流出"
         label = "🔔 盘前更新" if window == self.WINDOW_PRE else "📈 收盘分析"
         lines = [
-            f"{emoji} <b>{s.ticker} 主力持续{direction}</b>  <i>{label}</i>",
+            f"{emoji} <b>[{signal_type}] {s.ticker} {tag}</b>  <i>{label}</i>",
             "",
-            f"📊 3日超大单净{direction} ¥{abs(s.cum_super_big_3d)/1e8:.1f}亿，"
+            f"📊 主力净{direction} ¥{abs(s.cum_main_3d)/1e8:.1f}亿, "
             f"主力占比 {s.latest_main_pct:.1f}%",
         ]
 

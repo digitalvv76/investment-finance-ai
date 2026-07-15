@@ -546,11 +546,11 @@ class EastMoneyFundFlowFetcher:
 def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
     """Apply the v2 Prompt divergence analysis to fund flow data.
 
-    Returns a dict with signal type, strength, and supporting evidence.
+    Uses main_net (= 特大单 + 大单) as the primary metric, per V2.1
+    revision: merging super_big + big prevents institutions from hiding
+    behind order-splitting.
 
-    Calibration note: East Money data shows 2-5x larger absolute values than
-    Futu Niumoo for the same stock/day.  Thresholds here are calibrated to
-    match Futu-consistent signal strength (conservative → fewer false alarms).
+    Returns a dict with signal type, strength, and supporting evidence.
     """
     if len(days) < 3:
         return {"signal": "insufficient_data", "strength": 0}
@@ -558,26 +558,20 @@ def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
     latest = days[-1]
     recent = days[-3:]
 
-    # Cumulative super_big_net over last 3 days
-    cum_super_big = sum(d.super_big_net for d in recent)
+    # Main force = 特大单 + 大单 (V2.1: 防机构拆单)
     cum_main = sum(d.main_net for d in recent)
+    cum_super_big = sum(d.super_big_net for d in recent)
 
     signal = {"signal": "none", "strength": 0, "details": {}}
 
-    signal["details"]["cum_super_big_3d"] = cum_super_big
-    signal["details"]["cum_main_3d"] = cum_main
+    signal["details"]["cum_main_3d"] = cum_main             # primary metric (V2.1)
+    signal["details"]["cum_super_big_3d"] = cum_super_big   # retained for reference
     signal["details"]["latest_main_pct"] = latest.main_pct
-    signal["details"]["latest_super_big_net"] = latest.super_big_net
+    signal["details"]["latest_main_net"] = latest.main_net
 
     # ------------------------------------------------------------------
-    # Calibrated thresholds (adjusted for East Money 2-5x overcount)
-    #
-    #   Futu baseline      →  East Money calibrated
-    #   ─────────────      →  ─────────────────────
-    #   < 1%  = low        →  < 2%  = low
-    #   1-5%  = normal     →  2-8%  = normal
-    #   5-10% = strong     →  8-15% = strong
-    #   > 10% = extreme    →  > 15% = extreme
+    # Participation thresholds — main_pct = (特大单+大单)/成交额
+    # (V2.1: same threshold bands, now applied to the broader metric)
     # ------------------------------------------------------------------
     abs_pct = abs(latest.main_pct)
     if abs_pct < 2:
@@ -589,11 +583,11 @@ def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
     else:
         signal["details"]["participation"] = "extreme"
 
-    # Continuity: require 3+ consecutive days (stricter than default 2)
-    super_big_directions = [1 if d.super_big_net > 0 else -1 for d in recent]
-    if all(d == 1 for d in super_big_directions):
+    # Continuity: main_net direction over 3 days (V2.1: 特大单+大单合计)
+    main_directions = [1 if d.main_net > 0 else -1 for d in recent]
+    if all(d == 1 for d in main_directions):
         signal["details"]["continuity"] = "continuous_inflow"
-    elif all(d == -1 for d in super_big_directions):
+    elif all(d == -1 for d in main_directions):
         signal["details"]["continuity"] = "continuous_outflow"
     else:
         signal["details"]["continuity"] = "mixed"
