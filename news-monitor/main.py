@@ -385,7 +385,7 @@ class NewsMonitor:
                     continue
 
                 if window == "post":
-                    pushed = await self.fund_flow_collector.collect_once()
+                    pushed = await self.fund_flow_collector.collect_batch()
                     if pushed:
                         logger.info("FundFlowLoop[post]: %d signals pushed", pushed)
                 elif window == "pre":

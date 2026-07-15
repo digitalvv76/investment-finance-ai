@@ -132,6 +132,11 @@ class FundFlowCollector:
         # Track which windows have already run today (ET date → set of windows)
         self._completed: dict[str, set[str]] = {}  # {"2026-07-15": {"post", "pre"}}
 
+        # Batching — process N tickers per window to avoid rate limits
+        self._batch_size = 20        # tickers per batch
+        self._batch_index = 0        # next batch start position in watchlist
+        self._batch_signals: list[FundFlowSignal] = []  # accumulated signals
+
         # LLM client (lazy init)
         self._llm_client = None
         self._llm_model = "deepseek-chat"
@@ -140,18 +145,27 @@ class FundFlowCollector:
     # Public API
     # ------------------------------------------------------------------
 
-    async def collect_once(self) -> int:
-        """Post-market: fetch fresh data, persist, analyze, push.
+    async def collect_batch(self) -> int:
+        """Post-market: fetch ONE batch of tickers, persist, analyze.
 
-        Returns the number of strong signals pushed.
+        Called repeatedly by the main loop until all tickers are done.
+        Each batch is ~20 tickers; 71 tickers ≈ 4 batches over 2 hours.
+
+        Returns the number of strong signals accumulated after the final batch,
+        or 0 for intermediate batches.
         """
-        tickers = self._watchlist
-        logger.info("FundFlow[post]: collecting for %d tickers (days=%d)",
-                     len(tickers), self._days)
+        start = self._batch_index
+        end = min(start + self._batch_size, len(self._watchlist))
+        batch = self._watchlist[start:end]
+        is_last_batch = (end >= len(self._watchlist))
 
-        results = await self._fetcher.fetch_multi(tickers, days=self._days)
+        logger.info("FundFlow[post]: batch %d/%d — %d tickers (%s → %s)",
+                     start // self._batch_size + 1,
+                     (len(self._watchlist) + self._batch_size - 1) // self._batch_size,
+                     len(batch), batch[0] if batch else "?", batch[-1] if batch else "?")
 
-        all_signals: list[FundFlowSignal] = []
+        results = await self._fetcher.fetch_multi(batch, days=self._days)
+
         persisted = 0
         for ticker, result in results.items():
             if result is None:
@@ -159,18 +173,33 @@ class FundFlowCollector:
             await self._persist_result(result)
             persisted += 1
             signals = self._compute_signals(result)
-            all_signals.extend(signals)
+            self._batch_signals.extend(signals)
 
-        logger.info("FundFlow[post]: persisted %d tickers, %d signals",
-                     persisted, len(all_signals))
+        logger.info("FundFlow[post]: batch persisted %d tickers, signals so far %d",
+                     persisted, len(self._batch_signals))
+
+        self._batch_index = end
+
+        if is_last_batch:
+            return await self._finalize_collect()
+        return 0
+
+    async def _finalize_collect(self) -> int:
+        """Run LLM analysis on all accumulated signals, push, and mark done."""
+        all_signals = self._batch_signals
+        logger.info("FundFlow[post]: finalizing — %d total signals from %d batches",
+                     len(all_signals),
+                     (len(self._watchlist) + self._batch_size - 1) // self._batch_size)
 
         for s in all_signals:
             if s.participation in ("extreme", "strong"):
                 await self._analyze_signal(s)
 
         pushed = await self._push_signals(all_signals)
-        if persisted > 0:
-            self._mark_done(self.WINDOW_POST)
+        self._mark_done(self.WINDOW_POST)
+        # Reset for next run
+        self._batch_index = 0
+        self._batch_signals = []
         return pushed
 
     async def analyze_stored(self) -> int:
@@ -207,8 +236,10 @@ class FundFlowCollector:
     def get_pending_window(self) -> Optional[str]:
         """Return which window should run now, or None.
 
-        Post-market window: 17:00–23:59 ET on trading days.
-        Pre-market window:  05:00–09:29 ET on trading days.
+        Post-market: 17:00–23:59 ET on trading days. Runs in batches — returns
+        "post" repeatedly until all tickers are done, then stops.
+
+        Pre-market: 05:00–09:29 ET on trading days. Single pass from DB.
         """
         if not self._is_trading_day():
             return None

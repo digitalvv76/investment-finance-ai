@@ -198,27 +198,28 @@ def test_get_pending_window_none_midday(monkeypatch):
 # ------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_collect_once_empty_watchlist(db):
+@pytest.mark.asyncio
+async def test_collect_batch_empty_watchlist(db):
     collector = FundFlowCollector(db=db, watchlist=[])
     collector._fetcher = MagicMock()
     collector._fetcher.fetch_multi = AsyncMock(return_value={})
-    pushed = await collector.collect_once()
-    assert pushed == 0
+    pushed = await collector.collect_batch()
+    assert pushed == 0  # empty watchlist → 0 accumulated signals, finalize returns 0
 
 
 @pytest.mark.asyncio
-async def test_collect_once_fetcher_returns_none(db):
+async def test_collect_batch_fetcher_returns_none(db):
     """Fetcher returns None for all tickers → no crash, no push."""
     collector = FundFlowCollector(db=db, watchlist=["AAPL"])
     collector._fetcher = MagicMock()
     collector._fetcher.fetch_multi = AsyncMock(return_value={"AAPL": None})
-    pushed = await collector.collect_once()
-    assert pushed == 0
+    pushed = await collector.collect_batch()
+    assert pushed == 0  # None returned, but is_last_batch → finalize with 0 signals
 
 
 @pytest.mark.asyncio
-async def test_collect_once_persists_and_pushes(db):
-    """Full cycle: fetch → persist → signal → push."""
+async def test_collect_batch_single_ticker(db):
+    """Single ticker in one batch → finalize immediately, push."""
     collector = FundFlowCollector(db=db, watchlist=["AAPL"])
     collector._fetcher = MagicMock()
     collector._fetcher.fetch_multi = AsyncMock(return_value={
@@ -227,13 +228,38 @@ async def test_collect_once_persists_and_pushes(db):
     collector._dispatcher = MagicMock()
     collector._dispatcher.send_system_alert = AsyncMock(return_value=True)
 
-    pushed = await collector.collect_once()
-    assert pushed == 1  # extreme signal pushed
+    pushed = await collector.collect_batch()
+    assert pushed == 1  # single batch = last batch → pushes
     assert collector._dispatcher.send_system_alert.called
 
 
 @pytest.mark.asyncio
-async def test_collect_once_push_failure_does_not_crash(db):
+async def test_collect_batch_multi_batch(db):
+    """3 tickers, batch_size=2 → first batch returns 0, second pushes."""
+    collector = FundFlowCollector(db=db, watchlist=["AAPL", "NVDA", "TSLA"])
+    collector._batch_size = 2
+    collector._fetcher = MagicMock()
+    collector._fetcher.fetch_multi = AsyncMock(return_value={
+        "AAPL": _make_result("AAPL"),
+    })
+    collector._dispatcher = MagicMock()
+    collector._dispatcher.send_system_alert = AsyncMock(return_value=True)
+
+    # Batch 1: AAPL, NVDA (fetcher only returns AAPL in mock)
+    p1 = await collector.collect_batch()
+    assert p1 == 0  # not the last batch → 0
+    assert collector._batch_index == 2
+    assert len(collector._batch_signals) == 1  # AAPL signal accumulated
+
+    # Batch 2: TSLA (last batch) → finalize and push
+    p2 = await collector.collect_batch()
+    assert p2 == 2  # 2 signals accumulated (mock returns AAPL each time)
+    assert collector._batch_index == 0  # reset
+    assert len(collector._batch_signals) == 0  # cleared
+
+
+@pytest.mark.asyncio
+async def test_collect_batch_push_failure_does_not_crash(db):
     """Push failure is logged, not raised."""
     collector = FundFlowCollector(db=db, watchlist=["AAPL"])
     collector._fetcher = MagicMock()
@@ -244,9 +270,8 @@ async def test_collect_once_push_failure_does_not_crash(db):
     collector._dispatcher.send_system_alert = AsyncMock(
         side_effect=RuntimeError("push failed"),
     )
-    # Should not raise
-    pushed = await collector.collect_once()
-    assert pushed == 1  # attempted push counted, even though it failed
+    pushed = await collector.collect_batch()
+    assert pushed == 1  # attempted push counted
 
 
 # ------------------------------------------------------------------
