@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-07-15T11:27+08:00 · 📱 event_type 3 机构资金 → TG only
+
+### 用户反馈
+- ARK增持OKLO/XE（event_type=3, ★4）不应响手机
+- 原则: 别人的操作/观点 → TG only, 硬事实 → phone OK
+
+### 修复 (commit `392820c`, 已部署)
+- `event_channel_level`: event_type 3→notable (TG静默)，★5 豁免
+- 混合类型 [1,3] 不受限 — 有硬事件照样正常推
+- +6 tests, 58 passed, ECS 11:27 上线 ✅
+
+---
+
+## 2026-07-15T11:20+08:00 · 📱 同主题去重 — CPI 重复推送修复
+
+### 用户反馈
+- CPI 同一事件 3 小时内推了 3 条到手机（均为 ★4 important）
+- 要求: 同主题只推第一篇，后续除非强度升级否则不推
+
+### 修复 (commit `ee9b671`, 已部署)
+- `dispatch.py`: 6h 窗口内同主题去重，只限 Pushover (手机)，TG 全量
+- 主题键: ticker 优先 + macro 关键词归一化 (CPI/通胀/inflation → inflation)
+- 8 组 macro 正则 + 强度升级豁免 + 方向分离
+- 新增 23 tests (`test_dispatch_dedup.py`), 538 passed
+- ECS 11:20 上线 ✅
+
+---
+
 ## 2026-07-14T22:30+08:00 · 🔧 Docker healthcheck 假阳性修复 — 已部署
 
 ### 背景
@@ -2562,3 +2590,21 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 ---
 
 ## 2026-07-14T21:00+08:00 · 会话开始
+
+## 2026-07-14T22:52 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 429c3a9 · 2026-07-14T22:50 · docs: 关机同步 — Docker healthcheck 修复部署 + V1/V2 身份澄清
+
+本会话交付：
+- /health 零 DB 阻塞已部署 ECS
+- V1/V2 身份记忆已纠正
+- v1-stable 工作树已重建
+- 5 个新测试
+
+---
+
+---
+
+## 2026-07-15T10:54+08:00 · 会话开始
