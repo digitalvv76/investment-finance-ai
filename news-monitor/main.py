@@ -169,7 +169,7 @@ class NewsMonitor:
             db=self.db,
             alert_dispatcher=self.alert_dispatcher,
             bot=None,  # wired after bot creation below
-            proxy=os.environ.get("HTTP_PROXY", os.environ.get("HTTPS_PROXY", "")),
+            proxy=os.environ.get("FUND_FLOW_PROXY", os.environ.get("HTTP_PROXY", os.environ.get("HTTPS_PROXY", ""))),
             watchlist=ff_cfg.get("tickers") or None,
             days_to_fetch=ff_cfg.get("days_to_fetch", 20),
         )
