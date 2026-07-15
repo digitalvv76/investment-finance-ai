@@ -56,15 +56,17 @@ _USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
 ]
 
-# Minimum seconds between API requests (East Money blocks at ~30 req/min)
-MIN_REQUEST_INTERVAL = 6.0
+# Minimum seconds between API requests (East Money rate limit is aggressive;
+# Server-disconnect errors suggest ~20 req/min before temporary IP ban)
+MIN_REQUEST_INTERVAL = 12.0
 
 # Cache TTL: fund flow data only changes once per day (after US market close)
 CACHE_TTL_SECONDS = 3600  # 1 hour
 
-# Retry config
-MAX_RETRIES = 3
-BASE_BACKOFF = 2.0  # seconds
+# Retry config — connection failures skip retries (not transient);
+# only 429/403 trigger the full backoff.
+MAX_RETRIES = 2
+BASE_BACKOFF = 3.0  # seconds
 
 
 # ---------------------------------------------------------------------------
@@ -342,9 +344,17 @@ class EastMoneyFundFlowFetcher:
                         logger.debug(
                             "East Money returned %d for %s", resp.status, secid,
                         )
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            except aiohttp.ClientError as e:
                 logger.warning(
                     "East Money request failed for %s (attempt %d/%d): %s",
+                    secid, attempt + 1, MAX_RETRIES, e,
+                )
+                # Server-disconnect = IP throttling; retrying makes it worse
+                if "Server disconnected" in str(e):
+                    break
+            except asyncio.TimeoutError as e:
+                logger.warning(
+                    "East Money timeout for %s (attempt %d/%d): %s",
                     secid, attempt + 1, MAX_RETRIES, e,
                 )
 
