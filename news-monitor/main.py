@@ -367,15 +367,18 @@ class NewsMonitor:
     async def _run_fund_flow_loop(self):
         """Fund flow collection — two windows per trading day.
 
-        Post-market (~17:00 ET): fetch fresh data → persist → analyze → push.
-        Pre-market  (~08:00 ET): re-analyze yesterday's DB data with updated
-            pre-market prices, push if signals are still strong.
+        Post-market (~17:00 ET): batches of 20 tickers, 5 min cooldown
+            between batches. ~71 tickers = 4 batches × (4 min fetch + 5 min
+            wait) ≈ 36 minutes total. Fits well within a 2-hour battery window.
+
+        Pre-market (~08:00 ET): single-pass re-analysis from DB.
         """
         ff_cfg = self.config.load_settings().get("fund_flow", {})
         if not ff_cfg.get("enabled", True):
             logger.info("FundFlowLoop: disabled in config, skipping")
             return
         check_interval = ff_cfg.get("check_interval_minutes", 30) * 60
+        batch_cooldown = ff_cfg.get("batch_cooldown_minutes", 5) * 60
 
         while True:
             await asyncio.sleep(check_interval)
@@ -388,6 +391,11 @@ class NewsMonitor:
                     pushed = await self.fund_flow_collector.collect_batch()
                     if pushed:
                         logger.info("FundFlowLoop[post]: %d signals pushed", pushed)
+                    else:
+                        # Not done yet — more batches to go, shorten the wait
+                        logger.debug("FundFlowLoop[post]: batch done, cooldown %ds",
+                                     batch_cooldown)
+                        await asyncio.sleep(batch_cooldown)
                 elif window == "pre":
                     pushed = await self.fund_flow_collector.analyze_stored()
                     if pushed:
