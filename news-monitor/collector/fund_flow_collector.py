@@ -1,7 +1,7 @@
 """Fund flow collector — daily post-market capital flow data pipeline.
 
 Wires the EastMoneyFundFlowFetcher into the system: fetch → persist →
-compute divergence signal → push extreme signals.
+compute divergence signal → LLM analysis (Prompt v2) → push.
 
 This is NOT part of NewsScheduler because fund flow data is daily
 (post-market close), not real-time news. It runs as a separate
@@ -10,11 +10,15 @@ background loop in main.py, following the ImpactCollector pattern.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+
+import yfinance as yf
 
 from collector.eastmoney_fetcher import (
     EastMoneyFundFlowFetcher,
@@ -36,6 +40,39 @@ _FALLBACK_WATCHLIST = [
     "LRCX", "MRVL", "ARM", "AVGO", "ASML", "RGTI", "NBIS", "SPCX",
 ]
 
+# ---------------------------------------------------------------------------
+# Prompt v2 — the divergence analysis framework
+# ---------------------------------------------------------------------------
+_PROMPT_V2_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "config", "prompts", "fund_flow_v2.txt",
+)
+
+
+def _load_prompt_v2() -> str:
+    """Load Prompt v2 from disk; fall back to inline copy."""
+    try:
+        p = os.path.normpath(_PROMPT_V2_PATH)
+        if os.path.exists(p):
+            return open(p, encoding="utf-8").read()
+    except Exception:
+        pass
+    # Inline fallback — short version of the key instructions
+    return (
+        "你是一位拥有15年美股/港股市场经验的专业资金流分析师。\n"
+        "核心信念：不看单日涨跌，看涨跌与特大单流向是否一致。"
+        "一致 = 趋势延续；背离 = 拐点临近。\n\n"
+        "## 背离框架\n"
+        "底背离（买入信号）：股价暴跌 + 特大单逆势净流入 = 主力吸筹\n"
+        "顶背离（卖出信号）：股价大涨 + 特大单逆势净流出 = 主力出货\n\n"
+        "## 输出要求\n"
+        "先输出「核心信号」1-2句（有/无背离，方向，强度），"
+        "再输出完整分析（趋势定位→背离细节→辅助确认→情景推演→验证条件）。"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Data types
+# ---------------------------------------------------------------------------
 
 @dataclass
 class FundFlowSignal:
@@ -46,13 +83,22 @@ class FundFlowSignal:
     cum_super_big_3d: float  # 3-day cumulative super-big net (CNY)
     cum_main_3d: float       # 3-day cumulative main net (CNY)
     latest_main_pct: float   # latest day main_pct
+    price_change_3d: float = 0.0       # 3-day cumulative price change (%)
+    price_data: list[dict] = field(default_factory=list)  # [{date, close}]
+    fund_flow_days: list = field(default_factory=list)    # FundFlowDay objects
+    analysis_summary: str = ""         # LLM 主要观点
+    analysis_full: str = ""            # LLM 完整报告
 
+
+# ---------------------------------------------------------------------------
+# FundFlowCollector
+# ---------------------------------------------------------------------------
 
 class FundFlowCollector:
-    """Daily post-market fund flow collection + signal dispatch.
+    """Daily post-market fund flow collection + LLM analysis + signal dispatch.
 
     Owns an EastMoneyFundFlowFetcher instance and wires it into the
-    storage + alerting subsystems.  Designed to be called once per
+    storage + alerting + LLM subsystems.  Designed to be called once per
     trading day (after US market close, ~5pm ET).
     """
 
@@ -78,6 +124,10 @@ class FundFlowCollector:
             self._watchlist = [t.upper() for t in self._load_watchlist_from_memory()]
 
         self._last_run_date: Optional[str] = None  # "YYYY-MM-DD" in ET
+
+        # LLM client (lazy init)
+        self._llm_client = None
+        self._llm_model = "deepseek-chat"
 
     # ------------------------------------------------------------------
     # Public API
@@ -107,9 +157,12 @@ class FundFlowCollector:
         logger.info("FundFlow: persisted %d tickers, %d signals",
                      persisted, len(all_signals))
 
+        # Run LLM analysis on strong signals before pushing
+        for s in all_signals:
+            if s.participation in ("extreme", "strong"):
+                await self._analyze_signal(s)
+
         pushed = await self._push_signals(all_signals)
-        # Only mark today as "done" if we actually got data — otherwise
-        # the next 30-min check will retry (tunnel might have come up).
         if persisted > 0:
             self._last_run_date = self._et_today_str()
         return pushed
@@ -141,7 +194,106 @@ class FundFlowCollector:
         await self._fetcher.close()
 
     # ------------------------------------------------------------------
-    # Internal
+    # LLM Analysis
+    # ------------------------------------------------------------------
+
+    async def _analyze_signal(self, s: FundFlowSignal):
+        """Run Prompt v2 LLM analysis on a signal. Populates s.analysis_summary
+        and s.analysis_full in-place."""
+        try:
+            # Fetch price data via yfinance
+            price_data = await asyncio.to_thread(
+                lambda: _fetch_price_data(s.ticker, period="1mo"),
+            )
+            if price_data:
+                s.price_data = price_data
+                recent = price_data[-3:]
+                if len(recent) >= 2:
+                    s.price_change_3d = (
+                        (recent[-1]["close"] - recent[0]["close"])
+                        / recent[0]["close"] * 100
+                    )
+
+            # Build prompt with fund flow + price data
+            prompt = self._build_analysis_prompt(s)
+
+            # Call LLM
+            response = await self._call_llm(prompt)
+
+            # Extract 核心信号 (主要观点) vs full report
+            s.analysis_full = response
+            s.analysis_summary = _extract_core_signal(response)
+
+            logger.info("FundFlow: LLM analysis done for %s (%d chars)",
+                         s.ticker, len(response))
+
+        except Exception:
+            logger.exception("FundFlow: LLM analysis failed for %s", s.ticker)
+            s.analysis_summary = "（AI 分析暂时不可用）"
+
+    def _build_analysis_prompt(self, s: FundFlowSignal) -> str:
+        """Build the analysis prompt with fund flow data + price context."""
+        # Format fund flow table
+        rows = []
+        for day in s.fund_flow_days:
+            rows.append(
+                f"| {day.date} | {getattr(day, 'change_pct', 0):.1f}% | "
+                f"{day.main_net/1e4:.0f}万 | {day.super_big_net/1e4:.0f}万 | "
+                f"{day.big_net/1e4:.0f}万 | {day.mid_net/1e4:.0f}万 | "
+                f"{day.small_net/1e4:.0f}万 | {day.main_pct:.1f}% |"
+            )
+
+        header = (
+            "| 日期 | 涨跌幅% | 主力净流入(万) | 特大单净流入(万) | "
+            "大单净流入(万) | 中单净流入(万) | 小单净流入(万) | 主力净占比% |"
+        )
+        table = "\n".join([header, *rows]) if rows else "（无数据）"
+
+        # Price info
+        price_info = ""
+        if s.price_data:
+            closes = [d["close"] for d in s.price_data[-10:]]
+            price_info = f"近10日收盘价: {', '.join(f'{c:.2f}' for c in closes)}"
+
+        system_prompt = _load_prompt_v2()
+        user_prompt = (
+            f"标的名称：{s.ticker}\n"
+            f"数据周期：最近{s._days if hasattr(s, '_days') else 20}个交易日\n"
+            f"{price_info}\n\n"
+            f"{table}\n\n"
+            f"请根据以上数据和分析框架，以「背离信号」为核心，"
+            f"输出一份完整的专业资金流分析报告。"
+        )
+
+        return f"{system_prompt}\n\n---\n\n{user_prompt}"
+
+    async def _call_llm(self, prompt: str) -> str:
+        """Call DeepSeek LLM. Returns response text."""
+        if self._llm_client is None:
+            api_key = os.environ.get("DEEPSEEK_API_KEY", "")
+            if not api_key:
+                return "（DeepSeek API Key 未配置）"
+            from openai import OpenAI
+            self._llm_client = OpenAI(
+                api_key=api_key,
+                base_url="https://api.deepseek.com",
+            )
+            self._llm_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+
+        resp = await asyncio.wait_for(
+            asyncio.to_thread(
+                self._llm_client.chat.completions.create,
+                model=self._llm_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=2000,
+            ),
+            timeout=120,
+        )
+        return resp.choices[0].message.content.strip()
+
+    # ------------------------------------------------------------------
+    # Internal: persistence + signal computation
     # ------------------------------------------------------------------
 
     async def _persist_result(self, result: FundFlowResult):
@@ -175,7 +327,12 @@ class FundFlowCollector:
             cum_super_big_3d=details.get("cum_super_big_3d", 0.0),
             cum_main_3d=details.get("cum_main_3d", 0.0),
             latest_main_pct=details.get("latest_main_pct", 0.0),
+            fund_flow_days=result.days,
         )]
+
+    # ------------------------------------------------------------------
+    # Push
+    # ------------------------------------------------------------------
 
     async def _push_signals(self, signals: list[FundFlowSignal]) -> int:
         """Push strong signals. Returns count of pushed signals."""
@@ -187,7 +344,6 @@ class FundFlowCollector:
             elif s.participation == "strong":
                 await self._push_strong(s)
                 pushed += 1
-            # normal/low: DB only, no push
         return pushed
 
     async def _push_extreme(self, s: FundFlowSignal):
@@ -195,27 +351,32 @@ class FundFlowCollector:
         direction = "流入" if s.cum_super_big_3d > 0 else "流出"
         emoji = "🟢" if s.cum_super_big_3d > 0 else "🔴"
         title = f"{emoji} 主力持续{direction} {s.ticker}"
-        body = (
+
+        # Pushover — concise, no markdown
+        pushover_body = (
             f"3日超大单净{direction} ¥{abs(s.cum_super_big_3d)/1e8:.1f}亿, "
             f"主力占比 {s.latest_main_pct:.1f}%"
         )
+        if s.analysis_summary:
+            pushover_body += f"\n\n💡 {s.analysis_summary}"
 
-        # Pushover
         if self._dispatcher:
             try:
                 await self._dispatcher.send_system_alert(
-                    title, body, emergency=False, quiet=False,
+                    title, pushover_body, emergency=False, quiet=False,
                 )
             except Exception:
                 logger.exception("FundFlow: Pushover push failed for %s", s.ticker)
 
-        # Telegram
+        # Telegram — richer format
         if self._bot:
             try:
+                tg_text = self._format_tg_message(s, emoji, direction)
                 await self._bot.send_message(
                     chat_id=self._bot._primary_chat_id,
-                    text=f"{title}\n{body}",
+                    text=tg_text,
                     disable_notification=False,
+                    parse_mode="HTML",
                 )
             except Exception:
                 logger.exception("FundFlow: Telegram push failed for %s", s.ticker)
@@ -223,33 +384,62 @@ class FundFlowCollector:
     async def _push_strong(self, s: FundFlowSignal):
         """Strong participation → Telegram only (silent)."""
         direction = "流入" if s.cum_super_big_3d > 0 else "流出"
-        text = (
-            f"📊 主力持续{direction} {s.ticker}\n"
-            f"3日超大单净{direction} ¥{abs(s.cum_super_big_3d)/1e8:.1f}亿, "
-            f"主力占比 {s.latest_main_pct:.1f}%"
-        )
+        emoji = "📊"
+
         if self._bot:
             try:
+                tg_text = self._format_tg_message(s, emoji, direction)
                 await self._bot.send_message(
                     chat_id=self._bot._primary_chat_id,
-                    text=text,
+                    text=tg_text,
                     disable_notification=True,
+                    parse_mode="HTML",
                 )
             except Exception:
                 logger.exception("FundFlow: Telegram silent push failed for %s", s.ticker)
 
+    def _format_tg_message(self, s: FundFlowSignal, emoji: str, direction: str) -> str:
+        """Format Telegram message with signal summary + 主要观点."""
+        lines = [
+            f"{emoji} <b>{s.ticker} 主力持续{direction}</b>",
+            "",
+            f"📊 3日超大单净{direction} ¥{abs(s.cum_super_big_3d)/1e8:.1f}亿，"
+            f"主力占比 {s.latest_main_pct:.1f}%",
+        ]
+
+        if s.price_change_3d != 0:
+            pct_str = f"{s.price_change_3d:+.1f}%"
+            lines.append(f"📉 3日涨跌幅：{pct_str}")
+
+        if s.analysis_summary:
+            lines.append("")
+            lines.append(f"💡 <b>主要观点</b>")
+            lines.append(s.analysis_summary)
+
+        # Deep analysis hint
+        if s.analysis_full:
+            lines.append("")
+            lines.append(
+                f"<i>💬 发送 /ff {s.ticker} 查看完整分析报告</i>"
+            )
+
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # Watchlist + helpers
+    # ------------------------------------------------------------------
+
     @staticmethod
     def _load_watchlist_from_memory() -> list[str]:
-        """Load watchlist from .claude/memory/watchlist-state.md.
-
-        Mirrors the pattern in NewsScheduler._load_watchlist().
-        """
+        """Load watchlist from .claude/memory/watchlist-state.md."""
         try:
             from pathlib import Path
-            import re
             module_file = Path(__file__).resolve()
             for offset in (2, 3):
-                candidate = module_file.parents[offset] / ".claude" / "memory" / "watchlist-state.md"
+                candidate = (
+                    module_file.parents[offset]
+                    / ".claude" / "memory" / "watchlist-state.md"
+                )
                 if candidate.exists():
                     content = candidate.read_text()
                     found = re.findall(r'\|\s*([A-Z]{1,5})\s*\|', content)
@@ -268,19 +458,55 @@ class FundFlowCollector:
         return (now_utc - offset).strftime("%Y-%m-%d")
 
 
-def _et_offset_hours() -> int:
-    """Quick US Eastern Time offset from UTC (standard=-5, daylight=-4).
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    Accurate enough for the daily post-market check — we don't need
-    full zoneinfo here.
+def _fetch_price_data(ticker: str, period: str = "1mo") -> list[dict]:
+    """Fetch daily closing prices via yfinance. Returns [{date, close}, ...]."""
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period=period)
+        if hist.empty:
+            return []
+        return [
+            {"date": str(idx.date()), "close": round(row["Close"], 2)}
+            for idx, row in hist.iterrows()
+        ]
+    except Exception:
+        return []
+
+
+def _extract_core_signal(text: str) -> str:
+    """Extract the 核心信号 / ultimate conclusion from the LLM response.
+
+    Looks for the first meaningful paragraph after section headers like
+    「核心信号」「1. 核心信号」「## 核心信号」. Falls back to first 300 chars.
     """
+    patterns = [
+        r'(?:核心信号|1\.\s*核心信号|##\s*核心信号)[：:\s]*\n?(.{10,500}?)(?=\n\n|\n#|\n\d\.|\Z)',
+        r'(?:终极结论|主要结论)[：:\s]*\n?(.{10,500}?)(?=\n\n|\n#|\n\d\.|\Z)',
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.DOTALL)
+        if m:
+            return m.group(1).strip()
+    # Fallback: first meaningful paragraph (skip blank/separator lines)
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if len(stripped) > 30 and not stripped.startswith("#") and not stripped.startswith("-"):
+            return stripped[:500]
+    return text[:300]
+
+
+def _et_offset_hours() -> int:
+    """Quick US Eastern Time offset from UTC (standard=-5, daylight=-4)."""
     now = datetime.now(timezone.utc)
     year = now.year
-    # US DST: second Sunday March → first Sunday November
     mar = datetime(year, 3, 14, tzinfo=timezone.utc)
     nov = datetime(year, 11, 7, tzinfo=timezone.utc)
-    dst_start = 14 - ((mar.weekday() + 1) % 7)  # second Sunday
-    dst_end = 7 - ((nov.weekday() + 1) % 7)      # first Sunday
+    dst_start = 14 - ((mar.weekday() + 1) % 7)
+    dst_end = 7 - ((nov.weekday() + 1) % 7)
     if (now.month > 3 and now.month < 11) or \
        (now.month == 3 and now.day >= dst_start) or \
        (now.month == 11 and now.day < dst_end):
