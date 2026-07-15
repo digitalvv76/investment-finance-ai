@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-07-15T19:50+08:00 · 🔧 东财 Collector 管线集成 — 已接入，待部署
+
+### 集成内容
+- **新建** `fund_flow_collector.py` (~230行) — 每日美东 17:00 自动采集 22 只关注股资金流
+- **新建** `fund_flow` DB 表 — ticker+date 唯一索引，upsert 幂等
+- **接入 main.py** — 独立后台循环 `_run_fund_flow_loop()`，每 30min 检查
+- **信号推送**: extreme 参与度 → Pushover 铃声 + TG；strong → TG 静默
+- **配置**: settings.yaml `fund_flow` 段 (22 tickers)；manifest 注册 2 模块
+- **docker**: 移除 compose 中 HTTP_PROXY 硬覆盖，ECS 端由 .env 控制 `HTTP_PROXY=http://172.17.0.1:9999`
+- **测试**: +33 tests (18 collector + 7 DB + 8 基础设施)，全量 576 pass / 7 预存 fail
+
+### 部署待办
+- commit + push → deploy-main.sh
+- ECS 手动: settings.yaml 加 `fund_flow` 段 + .env 设 HTTP_PROXY
+- 用户启动 `tools\start.bat` (代理 + SSH 隧道)
+
+---
+
+## 2026-07-15T19:31+08:00 · 🔄 富途 OpenD 取消 — 东财长期化
+
+### 用户决策
+- 不安装富途 OpenD
+- 东财 collector 从临时方案升级为永久方案
+- 代理/隧道方案成为长期基础设施
+
+### 影响
+- 不需要写富途版 collector
+- `tools/` 下代理脚本从临时变为长期维护
+- SESSION.md 已更新
+
+---
+
 ## 2026-07-15T17:00+08:00 · 📊 资金流分析系统 — Prompt v2 + 东财 Collector
 
 ### 用户需求
@@ -2658,3 +2690,24 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 ---
 
 ## 2026-07-15T13:04+08:00 · 会话开始
+
+## 2026-07-15T17:42 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 5f9c490 · 2026-07-15T13:59 · docs: 会话同步 — 补录关机提交 + 新会话开始
+
+---
+
+### 4a4765e · 2026-07-15T17:20 · feat: 资金流分析系统 — Prompt v2 + 东财 Collector + 代理工具
+
+- Prompt v2: 背离信号锚点架构，噪音过滤，主力占比阈值，验证条件强化
+- eastmoney_fetcher.py: 250行，push2his + ff fallback，反爬全栈
+- tools/: 本地代理 + SSH 隧道自动重连
+- 信号强度已校准（东财 vs 富途 2-5x 差异）
+
+---
+
+---
+
+## 2026-07-15T19:31+08:00 · 会话开始

@@ -163,3 +163,20 @@ class HealthEvent:
     news_id: int = 0
     detail: str = ""
     created_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class FundFlowRecord:
+    """Single day of capital flow data from East Money per ticker."""
+    id: Optional[int] = None
+    ticker: str = ""
+    date: str = ""                     # "YYYY-MM-DD"
+    main_net: float = 0.0              # 主力净流入 (CNY)
+    super_big_net: float = 0.0         # 超大单净流入
+    big_net: float = 0.0               # 大单净流入
+    mid_net: float = 0.0               # 中单净流入
+    small_net: float = 0.0             # 小单净流入
+    main_pct: float = 0.0              # 主力净占比 (%)
+    source: str = ""                   # "push2his" | "ff"
+    fetched_at: float = 0.0            # unix timestamp
+    created_at: datetime = field(default_factory=datetime.now)

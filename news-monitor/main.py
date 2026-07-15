@@ -48,6 +48,7 @@ from engine.event_matcher import EventMatcher
 from engine.watchdog import Watchdog
 from engine.relevance import signal_score, get_portfolio_summary
 from engine.actionability_review import ActionabilityReviewer
+from collector.fund_flow_collector import FundFlowCollector
 from bot.telegram_bot import NewsBot
 from web.routes import refresh_cached_db_health
 
@@ -162,6 +163,17 @@ class NewsMonitor:
         logger.info("EventDrivenEvaluator initialized (prompt v1, temperature=0)")
         logger.info("Portfolio/Relevance: %s", get_portfolio_summary())
 
+        # ---- fund flow collector (daily post-market) -----------------
+        ff_cfg = settings.get("fund_flow", {})
+        self.fund_flow_collector = FundFlowCollector(
+            db=self.db,
+            alert_dispatcher=self.alert_dispatcher,
+            bot=None,  # wired after bot creation below
+            proxy=os.environ.get("HTTP_PROXY", os.environ.get("HTTPS_PROXY", "")),
+            watchlist=ff_cfg.get("tickers") or None,
+            days_to_fetch=ff_cfg.get("days_to_fetch", 20),
+        )
+
         # ---- Telegram bot -------------------------------------------
         token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
         if not token:
@@ -169,6 +181,7 @@ class NewsMonitor:
             self.bot = None
         else:
             self.bot = NewsBot(token, self.db, self.config, self.deep_lane, self.learner, self.curator, self.trainer)
+            self.fund_flow_collector._bot = self.bot
 
         # ---- web dashboard (optional) --------------------------------
         web_port = int(os.environ.get("WEB_PORT", "0"))
@@ -351,6 +364,30 @@ class NewsMonitor:
             except Exception:
                 logger.exception("StatsRefresh: health cache update failed")
 
+    async def _run_fund_flow_loop(self):
+        """Daily post-market fund flow collection.
+
+        Checks every 30 min whether it should run today (trading day +
+        past 5pm ET).  On trigger, fetches fund flow for all watchlist
+        tickers, persists to DB, computes divergence signals, and pushes
+        extreme signals via Pushover + Telegram.
+        """
+        ff_cfg = self.config.load_settings().get("fund_flow", {})
+        if not ff_cfg.get("enabled", True):
+            logger.info("FundFlowLoop: disabled in config, skipping")
+            return
+        check_interval = ff_cfg.get("check_interval_minutes", 30) * 60
+
+        while True:
+            await asyncio.sleep(check_interval)
+            try:
+                if self.fund_flow_collector.should_run_today():
+                    pushed = await self.fund_flow_collector.collect_once()
+                    if pushed:
+                        logger.info("FundFlowLoop: %d strong signals pushed", pushed)
+            except Exception:
+                logger.exception("FundFlowLoop: collect failed")
+
     # -----------------------------------------------------------------
     # Lifecycle
     # -----------------------------------------------------------------
@@ -378,6 +415,7 @@ class NewsMonitor:
         # Start impact collector loop (background, periodic)
         self._collector_task = asyncio.create_task(self._run_collector_loop())
         self._escalator_task = asyncio.create_task(self._run_escalation_loop())
+        self._fund_flow_task = asyncio.create_task(self._run_fund_flow_loop())
 
         # Start the independent liveness watchdog.
         self._watchdog_task = asyncio.create_task(self.watchdog.run_loop())
@@ -400,6 +438,9 @@ class NewsMonitor:
             self._watchdog_task.cancel()
         if hasattr(self, '_stats_refresh_task'):
             self._stats_refresh_task.cancel()
+        if hasattr(self, '_fund_flow_task'):
+            self._fund_flow_task.cancel()
+            await self.fund_flow_collector.close()
         if self.web_dashboard:
             await self.web_dashboard.stop()
         if self.bot:

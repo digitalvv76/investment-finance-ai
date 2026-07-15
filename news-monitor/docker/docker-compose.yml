@@ -50,9 +50,6 @@ services:
       # ${VAR} against the compose-dir .env (which does not exist), producing an
       # EMPTY value that overrides env_file and silently disables Basic Auth.
       - TZ=America/New_York
-      # ECS has direct internet — override dev proxy from .env
-      - HTTPS_PROXY=
-      - HTTP_PROXY=
 
     # ---- Persistent Volumes ----
     # Survives container restarts & image rebuilds

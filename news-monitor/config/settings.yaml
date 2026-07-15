@@ -87,3 +87,33 @@ web:
   enabled: true         # Set to true or set WEB_PORT env var
   port: 8080
   host: "0.0.0.0"
+
+# Fund flow collector — daily post-market capital flow data
+fund_flow:
+  enabled: true
+  run_hour_et: 17                # 5pm ET, 1 hour after US market close
+  check_interval_minutes: 30     # how often to check "should I run today?"
+  days_to_fetch: 20              # trading days of history per ticker
+  tickers:                       # explicit list overrides watchlist-state.md
+    - AAPL
+    - NVDA
+    - TSLA
+    - MSFT
+    - AMZN
+    - META
+    - GOOGL
+    - AMD
+    - PLTR
+    - RKLB
+    - ASTS
+    - SMR
+    - OKLO
+    - SOXL
+    - LRCX
+    - MRVL
+    - ARM
+    - AVGO
+    - ASML
+    - RGTI
+    - NBIS
+    - SPCX
