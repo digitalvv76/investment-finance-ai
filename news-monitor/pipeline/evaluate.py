@@ -74,6 +74,9 @@ class EvaluateStage:
             return []
 
         for item in items:
+            # Macro-routed items already have a decision — skip re-evaluation
+            if getattr(item, "_macro_routed", False):
+                continue
             try:
                 await self._evaluate_one(item)
             except Exception:

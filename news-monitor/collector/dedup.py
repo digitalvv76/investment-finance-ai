@@ -5,12 +5,19 @@ Four-tier dedup:
 2. Near-duplicate: normalized content hash match (prefix-stripped)
 3. Within-batch: Jaccard title similarity against current batch
 4. Semantic: ChromaDB vector similarity (rephrased duplicates)
+
+Macro news exemption: titles matching macro_indicators.yaml whitelist
+bypass dedup to prevent critical releases (CPI, FOMC, etc.) from being
+silently dropped as duplicates of preview/forecast articles.
 """
 import hashlib
 import logging
+import os
 import re
 from collections import deque
 from typing import List, Optional
+
+import yaml
 
 from storage.models import NewsItem
 
@@ -56,13 +63,14 @@ class DedupManager:
     BATCH_JACCARD_THRESHOLD = 0.65
 
     def __init__(self, max_cache_size: int = 10000, vector_store=None):
-        # Use deque with maxlen for automatic FIFO eviction instead of
-        # the old set+clear-all approach that lost all dedup memory at once.
         self._seen_urls: deque[str] = deque(maxlen=max_cache_size)
         self._seen_hashes: deque[str] = deque(maxlen=max_cache_size)
-        # Fast O(1) lookup alongside the deque
         self._url_set: set[str] = set()
         self._hash_set: set[str] = set()
+
+        # Macro indicator whitelist — loaded once at startup
+        self._macro_patterns: list[tuple[str, re.Pattern]] = []
+        self._load_macro_whitelist()
         self._max_cache = max_cache_size
         self._vector_store = vector_store
         # Tracks items accepted in the current batch for within-batch dedup
@@ -206,6 +214,12 @@ class DedupManager:
 
         new_items = []
         for item in items:
+            # Macro indicators (CPI, FOMC, NFP, etc.) bypass dedup entirely.
+            # A PPI release is NOT a duplicate of a PPI preview — the real data
+            # must always reach the pipeline.  (MacroAgent V2.1 design, §1)
+            if self.is_macro_title(item.title or ""):
+                new_items.append(item)
+                continue
             if not self.is_duplicate(item, existing_urls, batch_items=new_items,
                                      embed_cache=embed_cache):
                 new_items.append(item)
@@ -213,6 +227,41 @@ class DedupManager:
         if skipped:
             logger.info("Dedup: skipped %d/%d duplicates (T1-3 + batch)", skipped, len(items))
         return new_items
+
+    # ------------------------------------------------------------------
+    # Macro whitelist — titles matching these patterns bypass dedup
+    # ------------------------------------------------------------------
+
+    def _load_macro_whitelist(self):
+        """Load macro indicator keywords from config/macro_indicators.yaml."""
+        try:
+            config_dir = os.path.join(
+                os.path.dirname(__file__), "..", "config",
+            )
+            path = os.path.join(config_dir, "macro_indicators.yaml")
+            if not os.path.exists(path):
+                logger.debug("Dedup: macro_indicators.yaml not found, skipping")
+                return
+            with open(path, encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            for entry in data.get("indicators", []):
+                for kw in entry.get("keywords", []):
+                    self._macro_patterns.append((
+                        entry["id"],
+                        re.compile(re.escape(kw), re.IGNORECASE),
+                    ))
+            logger.info("Dedup: loaded %d macro keyword patterns", len(self._macro_patterns))
+        except Exception:
+            logger.warning("Dedup: failed to load macro whitelist", exc_info=True)
+
+    def is_macro_title(self, title: str) -> bool:
+        """Return True if the title matches a macro indicator keyword."""
+        if not title or not self._macro_patterns:
+            return False
+        for _ind_id, pattern in self._macro_patterns:
+            if pattern.search(title):
+                return True
+        return False
 
     def _cached_embed(self, text: str, embed_cache: dict | None):
         """Fetch an embedding from the per-batch cache, encoding on miss."""

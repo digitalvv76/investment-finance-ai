@@ -1,0 +1,194 @@
+# Macro indicators whitelist — used by DedupManager (dedup exemption) and
+# MacroAgent (tiered evaluation).  Each entry has Chinese + English keyword
+# variants for title matching.
+#
+# Tier definitions:
+#   A — policy-rate / employment / inflation (market-moving every release)
+#   B — growth / consumption / Fed minutes (significant on large surprise)
+#   C — sentiment / regional / single-speaker (context-dependent)
+
+indicators:
+  # ---- Tier A ----------------------------------------------------------
+  - id: CPI
+    tier: A
+    keywords:
+      - CPI
+      - 消费者价格指数
+      - 居民消费价格
+      - consumer price index
+      - inflation data
+      - 通胀数据
+      - 通货膨胀
+
+  - id: FOMC_RATE
+    tier: A
+    keywords:
+      - FOMC
+      - 美联储利率决议
+      - 联邦公开市场委员会
+      - Fed rate decision
+      - federal reserve rate
+      - 加息
+      - 降息
+      - rate hike
+      - rate cut
+      - 联邦基金利率
+      - fed funds rate
+
+  - id: NFP
+    tier: A
+    keywords:
+      - 非农
+      - 非农就业
+      - nonfarm payrolls
+      - NFP
+      - jobs report
+      - 就业报告
+      - unemployment claims
+      - 初请失业金
+      - 续请失业金
+
+  - id: FED_CHAIR
+    tier: A
+    keywords:
+      - 美联储主席
+      - Fed Chair
+      - Powell speech
+      - 鲍威尔讲话
+      - 鲍威尔证词
+      - Powell testimony
+      - Warsh speech
+      - Warsh讲话
+      - Fed chair speech
+      - 联储主席
+      - Jackson Hole
+
+  # ---- Tier B ----------------------------------------------------------
+  - id: PPI
+    tier: B
+    keywords:
+      - PPI
+      - 生产者价格指数
+      - 工业品出厂价格
+      - producer price index
+      - 批发物价
+
+  - id: GDP
+    tier: B
+    keywords:
+      - GDP
+      - 国内生产总值
+      - gross domestic product
+      - 经济增速
+      - GDP growth
+      - GDPNow
+      - GDP Now
+
+  - id: RETAIL
+    tier: B
+    keywords:
+      - 零售销售
+      - retail sales
+      - 零售数据
+      - consumer spending
+      - 消费支出
+
+  - id: FOMC_MINUTES
+    tier: B
+    keywords:
+      - 会议纪要
+      - FOMC minutes
+      - Fed minutes
+      - 美联储纪要
+      - 联储会议纪要
+
+  - id: ISM
+    tier: B
+    keywords:
+      - ISM制造业
+      - ISM服务业
+      - ISM manufacturing
+      - ISM services
+      - PMI
+      - 采购经理人指数
+      - 制造业PMI
+      - 服务业PMI
+
+  # ---- Tier C ----------------------------------------------------------
+  - id: CONFIDENCE
+    tier: C
+    keywords:
+      - 消费者信心
+      - consumer confidence
+      - 密歇根大学
+      - U of Michigan
+      - 消费者情绪
+      - consumer sentiment
+
+  - id: HOUSING
+    tier: C
+    keywords:
+      - 新屋开工
+      - 成屋销售
+      - housing starts
+      - existing home sales
+      - 房价指数
+      - home price index
+
+  - id: TRADE
+    tier: C
+    keywords:
+      - 贸易逆差
+      - 贸易顺差
+      - trade deficit
+      - trade surplus
+      - 贸易余额
+      - trade balance
+      - 经常账户
+      - current account
+
+  - id: INDUSTRIAL
+    tier: C
+    keywords:
+      - 工业产出
+      - industrial production
+      - 产能利用率
+      - capacity utilization
+      - 耐用品订单
+      - durable goods
+
+  - id: FED_SPEAKER
+    tier: C
+    keywords:
+      - 联储官员
+      - Fed official
+      - 地方联储
+      - Fed president
+      - 投票委员
+      - voting member
+      - 鹰派
+      - 鸽派
+      - hawkish
+      - dovish
+
+# Preview / forward-looking keywords — titles containing these are downgraded:
+# the event has not happened yet, data is a forecast not a release.
+preview_keywords:
+  - 预览
+  - 前瞻
+  - 展望
+  - preview
+  - outlook
+  - ahead of
+  - expect
+  - anticipate
+  - eye
+  - will watch
+  - 关注
+  - what to watch
+  - consensus
+  - 共识预期
+  - estimate
+  - 预估
+  - survey
+  - 调查
