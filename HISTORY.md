@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-07-15T17:00+08:00 · 📊 资金流分析系统 — Prompt v2 + 东财 Collector
+
+### 用户需求
+- 在已有资金流分析 Prompt（docx）基础上，评估并集成到 news-monitor
+- 核心信号：股价涨跌与特大单流向是否一致（背离 = 拐点）
+
+### Prompt 改进 (v1→v2)
+- 重构为"背离信号"锚点架构——先找背离，再看辅助确认
+- 新增第〇步（噪音日过滤：财报/FOMC/CPI）、趋势定位、主力占比阈值
+- 强化验证条件格式（证实/证伪 + 量化指标 + T+N 窗口）
+- 保存到 `E:\分析报告\美股港股资金流分析专家 Prompt.md`
+
+### 东财 Collector (`news-monitor/collector/eastmoney_fetcher.py`)
+- 250 行，push2his API + ff.eastmoney.com HTTP 备用
+- 反爬措施：UA 池 / Referer / ut token / 6s 限速 / 指数退避 / 缓存
+- **网络问题**：ECS HK IP 被封 + 本地 GFW SSL 封锁 → 写代理方案解决
+- **代理方案**：本地 Python HTTP 代理 + SSH 反向隧道 → ECS 可走用户住宅 IP
+
+### 富途 OpenAPI 对比
+- 富途 `get_capital_flow` 提供完全一致的资金流字段，无 IP 封禁
+- 用户手动分析用的是富途数据 → 一致性更好
+- 暂用东财，待用户安装 OpenD 后切换
+- **东财 vs 富途数据差异**：方向一致（6/7 天），金额东财大 2-5x → 信号阈值已上调校准
+
+### 提交流程
+- 首次分析 NBIS 资金流：底背离信号确认，两份数据源结论一致
+- NBIS 07/14：-7.8% 跌 + 特大单逆势净流入 → 机构吸筹
+
+### 工具脚本 (`tools/`)
+- `eastmoney_proxy.py` — 本地 HTTPS 正向代理（仅放行 *.eastmoney.com）
+- `eastmoney_tunnel.bat` — SSH 反向隧道自动重连
+- `start.bat` — 一键启动代理 + 隧道
+
+---
 ## 2026-07-15T11:27+08:00 · 📱 event_type 3 机构资金 → TG only
 
 ### 用户反馈
