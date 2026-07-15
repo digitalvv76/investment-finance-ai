@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-15+07-16 · V1 会话 — PPI 未推送诊断 + MacroAgent 设计 + 推送复核
+
+### 诊断
+- **Docker healthcheck**: 确认已修复 (`70f5175` + `bd76df0`)，非待办
+- **Buffett Alphabet 推送**: type 3 机构资金流向，`392820c` 修复（type 3 → TG only）
+- **推送延迟 240 分钟**: 诊断发现是时区假象 — `captured_at` 用 EDT (Python now())，`created_at` 用 UTC (SQLite CURRENT_TIMESTAMP)，差 4h。真实延迟仅秒级
+- **published_at 不准**: `ingest.py:108` 覆写为采集时间，非原始发布时间。决定不修（无推送门禁依赖）
+- **PPI 7/15 未推送**: 诊断发现 ZeroHedge PPI 被去重误杀（213/214 条 deduped）；Benzinga 2h 后发的股票综述反因含 ticker 突围上了手机
+- **ECS 报警**: 部署重启 → SentenceTransformer 模型加载慢 → 健康检查超时 blip，已恢复
+
+### 产出
+- **MacroAgent 设计方案** (`bd53d0c`): spec 写定 `docs/superpowers/specs/2026-07-15-macro-agent-design.md`，V1 设计 → V2 实现
+  - 宏观新闻独立管道（Ingest 之后、Screen 之前），Tier(A/B/C) × 偏离(轻微/显著/极端) 矩阵
+  - 检测用白名单不靠 LLM，评估接新闻正文取实际 vs 共识，Fed 类走定性
+- **推送复核**: Benzinga PPI 综述 — 晚 2h + B 级指标 + 非数据本身，MacroAgent 上线后会被拦住
+- **铁律**: 给建议先论证必要性 (`argue-necessity-first`)
+- **SESSION.md**: 更新 MacroAgent 进行中状态
+
+### V2 交接
+- MacroAgent 设计方案已交 V2 审核通过，执行中
+
 ## 2026-07-14T15:55+08:00 · ✂️ deep_lane prompt 精简 + 新闻要点 — 已部署
 
 ### 背景

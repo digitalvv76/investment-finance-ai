@@ -65,10 +65,11 @@
 - V1/V2 回执 + 数据源全量清单 + 卫生项
 
 ## 📋 下一步
+- **🔨 MacroAgent 实现中**: V2 已审核设计方案并开始执行 (spec: `docs/superpowers/specs/2026-07-15-macro-agent-design.md`)
 - **🧪 试用 wiki skill**: 下次 stock-research 前 `wiki-load` → 分析完 `wiki-compile`
 - **🧹 旧会话内容存档**: SESSION.md 尾部积压了大量历史「下一步」和「踩坑」，可清理归档
 - **🔧 修复 v1-stable 工作树**: prunable（可选，V1 已回归 main 不再依赖）
-- **📊 Docker healthcheck 假阳性**: V1 交接了方案 (`e0b208e`)，待 V2 实施
+- **✅ Docker healthcheck 假阳性**: 已修复 — `70f5175` (60s 内存缓存替代 8×SELECT COUNT(*)) + `bd76df0` (asyncio.to_thread + 启动预刷新 + 5 测试)
 
 ## ⚠️ 本次踩坑
 - **HISTORY.md 过时不等于未部署**: SESSION.md 写「待部署」但 git 祖先检查三条都在 ECS 上——先查再信
