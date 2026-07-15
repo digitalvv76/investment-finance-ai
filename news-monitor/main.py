@@ -365,12 +365,11 @@ class NewsMonitor:
                 logger.exception("StatsRefresh: health cache update failed")
 
     async def _run_fund_flow_loop(self):
-        """Daily post-market fund flow collection.
+        """Fund flow collection — two windows per trading day.
 
-        Checks every 30 min whether it should run today (trading day +
-        past 5pm ET).  On trigger, fetches fund flow for all watchlist
-        tickers, persists to DB, computes divergence signals, and pushes
-        extreme signals via Pushover + Telegram.
+        Post-market (~17:00 ET): fetch fresh data → persist → analyze → push.
+        Pre-market  (~08:00 ET): re-analyze yesterday's DB data with updated
+            pre-market prices, push if signals are still strong.
         """
         ff_cfg = self.config.load_settings().get("fund_flow", {})
         if not ff_cfg.get("enabled", True):
@@ -381,12 +380,20 @@ class NewsMonitor:
         while True:
             await asyncio.sleep(check_interval)
             try:
-                if self.fund_flow_collector.should_run_today():
+                window = self.fund_flow_collector.get_pending_window()
+                if window is None:
+                    continue
+
+                if window == "post":
                     pushed = await self.fund_flow_collector.collect_once()
                     if pushed:
-                        logger.info("FundFlowLoop: %d strong signals pushed", pushed)
+                        logger.info("FundFlowLoop[post]: %d signals pushed", pushed)
+                elif window == "pre":
+                    pushed = await self.fund_flow_collector.analyze_stored()
+                    if pushed:
+                        logger.info("FundFlowLoop[pre]: %d signals pushed", pushed)
             except Exception:
-                logger.exception("FundFlowLoop: collect failed")
+                logger.exception("FundFlowLoop: failed")
 
     # -----------------------------------------------------------------
     # Lifecycle

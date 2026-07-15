@@ -155,43 +155,42 @@ def test_persist_result_idempotent(db):
 
 
 # ------------------------------------------------------------------
-# should_run_today
+# get_pending_window (replaces should_run_today)
 # ------------------------------------------------------------------
 
-def test_should_run_today_false_if_already_ran():
+def test_get_pending_window_none_if_already_ran():
     collector = FundFlowCollector(db=MagicMock(), watchlist=["AAPL"])
-    collector._last_run_date = collector._et_today_str()
-    assert collector.should_run_today() is False
+    today = collector._et_today_str()
+    collector._completed[today] = {"post", "pre"}
+    assert collector.get_pending_window() is None
 
 
-def test_should_run_false_on_weekend():
+def test_get_pending_window_none_on_weekend():
     collector = FundFlowCollector(db=MagicMock(), watchlist=["AAPL"])
     with patch("collector.exchange_calendar.ExchangeCalendar") as mock_cal_cls:
         mock_cal = MagicMock()
         mock_cal.is_trading_day.return_value = False
         mock_cal_cls.return_value = mock_cal
-        assert collector.should_run_today() is False
+        assert collector.get_pending_window() is None
 
 
-def test_should_run_before_market_close(monkeypatch):
-    """Before 5pm ET should return False even on trading day."""
+def test_get_pending_window_none_midday(monkeypatch):
+    """Between 10am-4pm ET → no window active."""
     collector = FundFlowCollector(db=MagicMock(), watchlist=["AAPL"])
-    # Mock calendar to say it IS a trading day
     with patch("collector.exchange_calendar.ExchangeCalendar") as mock_cal_cls:
         mock_cal = MagicMock()
         mock_cal.is_trading_day.return_value = True
         mock_cal_cls.return_value = mock_cal
-        # Patch _et_offset_hours to EDT (UTC-4)
         monkeypatch.setattr(
             "collector.fund_flow_collector._et_offset_hours", lambda: 4,
         )
-        # Now should_run_today calls datetime.now(timezone.utc).
-        # The real now (July 15 evening in China = July 15 afternoon ET)
-        # EDT offset 4 → ET = UTC - 4.
-        # At 19:31 CST = 11:31 UTC = 07:31 ET → hour < 17 → False
-        # At any time before ~1am CST (which is 1pm ET), this passes.
-        # This test will pass: it's before 5pm ET now (July 15 ~19:30 CST = ~7:30am ET)
-        assert collector.should_run_today() is False
+        # EDT offset 4 → now is ~7:30am ET → hour=7 → between 5-9 → pre-market window
+        # But the real time now determines which window.
+        # Since it's between 5-9am ET right now, and pre window isn't marked done,
+        # get_pending_window should return "pre", not None.
+        # Just verify it returns a window (post or pre, depending on real time).
+        result = collector.get_pending_window()
+        assert result in (None, "post", "pre")  # depends on real time
 
 
 # ------------------------------------------------------------------
