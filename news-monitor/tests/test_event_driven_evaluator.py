@@ -188,3 +188,41 @@ class TestDirectionAwareChannel:
         ea = EventAssessment(is_event=False, filter_reason="noise")
         assert ea.should_push is False
         assert ea.alert_level == "normal"
+
+    # ── Opinion-based event type cap ──
+
+    def test_institutional_flow_4_notable(self):
+        """ARK增持/基金调仓等 event_type 3 ★4 → notable, no phone.
+        User policy: 别人的操作/观点 → TG only."""
+        from engine.event_driven_evaluator import event_channel_level
+        assert event_channel_level(4, "up", event_types=[3]) == "notable"
+        assert event_channel_level(4, "up", confirmed=True, event_types=[3]) == "notable"
+
+    def test_institutional_flow_5_critical(self):
+        """Event type 3 ★5 → critical (phone siren) — massive flow still gets through."""
+        from engine.event_driven_evaluator import event_channel_level
+        assert event_channel_level(5, "up", event_types=[3]) == "critical"
+
+    def test_institutional_flow_3_notable(self):
+        """★3 is already notable; event_type 3 doesn't change that."""
+        from engine.event_driven_evaluator import event_channel_level
+        assert event_channel_level(3, "up", event_types=[3]) == "notable"
+
+    def test_mixed_event_types_not_capped(self):
+        """Event types [1, 3] (earnings + flow) → NOT pure opinion → normal rules apply."""
+        from engine.event_driven_evaluator import event_channel_level
+        # Mixed: includes hard event type 1, so opinion cap doesn't trigger
+        assert event_channel_level(4, "up", event_types=[1, 3]) == "important"
+
+    def test_hard_event_types_unchanged(self):
+        """Event types 1, 2, 4 (earnings, policy, macro) unchanged by opinion cap."""
+        from engine.event_driven_evaluator import event_channel_level
+        assert event_channel_level(4, "up", event_types=[1]) == "important"
+        assert event_channel_level(4, "up", event_types=[2]) == "important"
+        assert event_channel_level(4, "up", event_types=[4]) == "important"
+        assert event_channel_level(5, "up", event_types=[1]) == "critical"
+
+    def test_no_event_types_backward_compat(self):
+        """event_types=None (legacy path) → normal rules, no opinion cap."""
+        from engine.event_driven_evaluator import event_channel_level
+        assert event_channel_level(4, "up") == "important"

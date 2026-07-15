@@ -106,6 +106,12 @@ class EventAssessment:
         return result
 
 
+# Event types that are opinion/action-based rather than hard facts.
+# These cap at NOTABLE (silent TG, no phone) unless intensity=5.
+# User policy: 别人的操作/观点 → TG only, 硬事实 → phone OK.
+_OPINION_EVENT_TYPES = {3}  # 3 = institutional flow / capital movement
+
+
 def event_channel_level(
     intensity: int,
     direction: str,
@@ -113,6 +119,7 @@ def event_channel_level(
     confirmed: bool = False,
     losers: set[str] | None = None,
     tracked: set[str] | None = None,
+    event_types: list[int] | None = None,
 ) -> str:
     """Direction-aware channel mapping (SPEC-intensity-scale-bear-bias §4/§4b).
 
@@ -132,6 +139,10 @@ def event_channel_level(
                          watchlist).
       neutral / unknown direction → capped at important (no siren).
 
+    Opinion-based events (event_type 3 = institutional flow): capped at
+    NOTABLE (silent TG, no phone) unless ★5 — user policy that fund manager
+    moves / analyst ratings are "别人的观点" not hard facts.
+
     ``confirmed`` defaults False: a phone SIREN for a bearish event must be
     affirmatively justified by the LLM, not assumed when the field is omitted.
     """
@@ -140,6 +151,14 @@ def event_channel_level(
         return "normal"
     if intensity == 3:
         return "notable"  # silent TG, no phone (phone threshold raised to ≥4)
+
+    # ── Opinion-based event cap ──
+    # Institutional flow / analyst actions → TG only unless ★5 critical.
+    if event_types and set(event_types) <= _OPINION_EVENT_TYPES:
+        if intensity >= 5:
+            return "critical"
+        return "notable"  # ★4 institutional flow → silent TG, no phone
+
     # intensity >= 4
     if direction == "down":
         if not confirmed:

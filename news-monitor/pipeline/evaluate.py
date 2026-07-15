@@ -294,6 +294,7 @@ class EvaluateStage:
         tracked = get_tracked_tickers()
         level = AlertLevel(event_channel_level(
             intensity, direction, confirmed=confirmed, losers=losers, tracked=tracked,
+            event_types=getattr(ea, "event_types", None),
         ))
         if direction == "down":
             escalated = level == AlertLevel.CRITICAL
