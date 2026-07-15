@@ -108,7 +108,10 @@ class FundFlowCollector:
                      persisted, len(all_signals))
 
         pushed = await self._push_signals(all_signals)
-        self._last_run_date = self._et_today_str()
+        # Only mark today as "done" if we actually got data — otherwise
+        # the next 30-min check will retry (tunnel might have come up).
+        if persisted > 0:
+            self._last_run_date = self._et_today_str()
         return pushed
 
     def should_run_today(self) -> bool:
