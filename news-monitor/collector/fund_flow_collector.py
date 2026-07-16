@@ -565,15 +565,14 @@ class FundFlowCollector:
             except Exception:
                 logger.exception("FundFlow: Pushover push failed for %s", s.ticker)
 
-        if self._bot:
+        if self._bot and self._bot._app:
             try:
                 tg_text = self._format_tg_message(s, prefix, tag, "重点关注", window)
-                await self._bot.send_message(
-                    chat_id=self._bot._primary_chat_id,
-                    text=tg_text,
-                    disable_notification=False,
-                    parse_mode="HTML",
-                )
+                for cid in self._bot._get_chat_ids():
+                    await self._bot._app.bot.send_message(
+                        chat_id=cid, text=tg_text,
+                        disable_notification=False,
+                    )
             except Exception:
                 logger.exception("FundFlow: Telegram push failed for %s", s.ticker)
 
@@ -587,12 +586,11 @@ class FundFlowCollector:
                 tg_text = self._format_tg_message(
                     s, "📊", tag, "跟踪观察", window,
                 )
-                await self._bot.send_message(
-                    chat_id=self._bot._primary_chat_id,
-                    text=tg_text,
-                    disable_notification=True,
-                    parse_mode="HTML",
-                )
+                for cid in self._bot._get_chat_ids():
+                    await self._bot._app.bot.send_message(
+                        chat_id=cid, text=tg_text,
+                        disable_notification=True,
+                    )
             except Exception:
                 logger.exception("FundFlow: Telegram silent push failed for %s", s.ticker)
 
@@ -600,12 +598,12 @@ class FundFlowCollector:
         self, s: FundFlowSignal, emoji: str, tag: str, signal_type: str,
         window: str = WINDOW_POST,
     ) -> str:
-        """Format Telegram message with V2.1 semantics."""
+        """Format Telegram message — V2.5 compact card."""
         inflow = s.cum_main_3d > 0
         direction = "流入" if inflow else "流出"
         label = "🔔 盘前更新" if window == self.WINDOW_PRE else "📈 收盘分析"
         lines = [
-            f"{emoji} <b>[{signal_type}] {s.ticker} {tag}</b>  <i>{label}</i>",
+            f"{emoji} <b>{s.ticker}</b>  <i>{label}</i>",
             "",
             f"📊 主力净{direction} ¥{abs(s.cum_main_3d)/1e8:.1f}亿, "
             f"主力占比 {s.latest_main_pct:.1f}%",
