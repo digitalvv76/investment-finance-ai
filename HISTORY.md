@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-07-16 续 · MacroAgent 推送空洞诊断 + V1 流程自检
+
+### 诊断
+- **MacroAgent 推送内容空洞** (`d17018c`): 宏观 (CPI/FOMC) 推送只有标题+分数，没有分析师正文
+  - 根因: `evaluate.py:141-151` 救援舱构造 `DispatchDecision` 时只从 `event_assessment` 取字段，`impact` 的 `analyst_note`/`flash_note` 被丢弃
+  - 修复: Site 1 加 10 行从 `impact` 提取字段，对齐 Site 2。改动 1 文件 ~15 行 → 交接 V2
+
+### 流程纠正
+- **确认偏误自检**: 用户说「工作流程被违背」→ AI 直接找证据认罪，`git log --all` 混排误判 main 提交为 v1-stable 违规。实际 v1-stable 只有 docs。→ 存入 memory [[verify-before-escalating]]
+
+### 产出
+- **Spec 5**: MacroAgent 推送空洞修复 (`d17018c`)
+
+---
+
 ## 2026-07-16 · V1 高产日 — 4 诊断 + 4 Spec + Wiki 试用
 
 ### 诊断
