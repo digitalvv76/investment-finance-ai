@@ -221,6 +221,12 @@ class NewsMonitor:
             host=futu_host, port=futu_port,
         )
 
+        # ---- sector rotation collector (post-market daily) -------------
+        from collector.sector_rotation import SectorRotationCollector
+        self.sector_collector = SectorRotationCollector(
+            host=futu_host, port=futu_port,
+        )
+
         # ── Build Phase 3 Pipeline ──
         from pipeline import Pipeline
         from pipeline.ingest import IngestStage
@@ -419,10 +425,11 @@ class NewsMonitor:
                 logger.exception("FundFlowLoop: failed")
 
     async def _run_snapshot_loop(self):
-        """Pre-market + intraday snapshots via Futu get_market_snapshot.
+        """Time-window loop: pre-market snapshot + intraday snapshot + sector rotation.
 
         Pre-market  09:25 ET — full scan, push movers >±2% to TG + Pushover extreme
         Intraday    14:30 ET — re-scan, push extreme >±5%+volume to Pushover phone
+        Post-market 16:30 ET — sector rotation ranking, push to TG
         """
         while True:
             await asyncio.sleep(120)  # check every 2 minutes
@@ -438,7 +445,6 @@ class NewsMonitor:
                     summary = await self.snapshot_collector.pre_market_snapshot()
                     if summary and summary.movers:
                         msg = MarketSnapshotCollector.format_pre_market_summary(summary)
-                        # Push to TG
                         if self.bot and self.bot._app:
                             for cid in self.bot._get_chat_ids():
                                 try:
@@ -448,22 +454,18 @@ class NewsMonitor:
                                     )
                                 except Exception:
                                     pass
-                        # Push extreme to phone
                         if summary.extreme and self.alert_dispatcher:
                             extreme_msg = MarketSnapshotCollector.format_intraday_alert(summary)
                             await self.alert_dispatcher.send_system_alert(
-                                title="⚡ 盘前极端异动",
-                                body=extreme_msg,
-                                priority=1,
+                                title="⚡ 盘前极端异动", body=extreme_msg, priority=1,
                             )
-                        logger.info("SnapshotLoop[pre]: %d movers pushed", len(summary.movers))
+                        logger.info("Window[pre]: %d movers pushed", len(summary.movers))
 
                 # Intraday window: 14:30-14:40 ET
                 if hour == 14 and 30 <= minute <= 40:
                     summary = await self.snapshot_collector.intraday_snapshot()
                     if summary and summary.extreme:
                         msg = MarketSnapshotCollector.format_intraday_alert(summary)
-                        # Push to TG
                         if self.bot and self.bot._app:
                             for cid in self.bot._get_chat_ids():
                                 try:
@@ -473,17 +475,31 @@ class NewsMonitor:
                                     )
                                 except Exception:
                                     pass
-                        # Push to phone
                         if self.alert_dispatcher:
                             await self.alert_dispatcher.send_system_alert(
-                                title="⚡ 盘中极端异动",
-                                body=msg,
-                                priority=2,
+                                title="⚡ 盘中极端异动", body=msg, priority=2,
                             )
-                        logger.info("SnapshotLoop[intra]: %d extreme pushed", len(summary.extreme))
+                        logger.info("Window[intra]: %d extreme pushed", len(summary.extreme))
+
+                # Sector rotation: 16:30-16:40 ET (post-market)
+                if hour == 16 and 30 <= minute <= 40:
+                    from collector.sector_rotation import SectorRotationCollector
+                    s_summary = await self.sector_collector.collect_post_market()
+                    if s_summary and s_summary.top5:
+                        msg = SectorRotationCollector.format_summary(s_summary)
+                        if self.bot and self.bot._app:
+                            for cid in self.bot._get_chat_ids():
+                                try:
+                                    await self.bot._app.bot.send_message(
+                                        chat_id=cid, text=msg,
+                                        disable_notification=True,  # silent
+                                    )
+                                except Exception:
+                                    pass
+                        logger.info("Window[sector]: %d plates pushed", len(s_summary.top5))
 
             except Exception:
-                logger.exception("SnapshotLoop: failed")
+                logger.exception("WindowLoop: failed")
 
     # -----------------------------------------------------------------
     # Lifecycle
