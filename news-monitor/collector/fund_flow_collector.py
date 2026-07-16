@@ -578,7 +578,7 @@ class FundFlowCollector:
 
     async def _push_strong(self, s: FundFlowSignal, window: str = WINDOW_POST):
         """★★ 标准背离 → Telegram only (silent)."""
-        if self._bot:
+        if self._bot and self._bot._app:
             try:
                 if s.signal_type == "bearish_divergence":
                     tag = "顶背离"
