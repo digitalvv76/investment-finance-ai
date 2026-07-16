@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-07-16 21:03-21:20 · 📋 开工 + manifest 注册 + 资金流检查
+- 4 个 Futu 模块注册到 collector/__manifest__.json (`cb852b2`)
+- 资金流全链路检查：OpenD ✅ → 容器连通 ✅ → 数据采集 ✅ → DB 存储 ✅ → 盘前分析 ✅
+- 发现 OpenD systemd 重启循环 (2231次)，不影响功能但需修复
+- 创建 cron 任务 06:00 CST 收盘后自动修复 OpenD systemd
+
+---
+
 ## 2026-07-16 21:03-21:10 · 📋 开工 + manifest 注册修复
 - futu_fetcher / futu_news_fetcher / market_snapshot / sector_rotation 注册到 collector/__manifest__.json，消除启动警告
 
