@@ -12,7 +12,7 @@ updated: 2026-07-14
 | 页面 | 类型 | 状态 | 置信度 | 更新 | 核心论题 |
 |------|------|------|--------|------|----------|
 | [[NVDA]] | stock | active | high | 2026-07-01 | AI GPU 垄断，PEG 0.59 低估，恐惧=买点 |
-| [[PLTR]] | stock | active | medium | 2026-07-13 | 国防 AI 护城河但内幕卖出悬空，HOLD |
+| [[PLTR]] | stock | active | medium | 2026-07-16 | 业务改善+宏观转鸽，但内幕卖出+极端估值，HOLD |
 | [[fed-policy]] | macro | active | high | 2026-07-01 | 降息暂停 6.5 月，CPI 再加速，Warsh 时代 |
 
 ## 按类型
