@@ -167,14 +167,27 @@ class FutuFundFlowFetcher:
         futu_code = _to_futu_code(ticker)
         market = prefer_market or _ticker_to_market(ticker)
 
-        try:
-            result = await asyncio.to_thread(self._fetch_sync, futu_code, ticker, days, market)
-            if result is not None:
-                self._cache.set(cache_key, result)
-                return result
-        except Exception as e:
-            logger.error("Futu fetch failed for %s (%s): %s", ticker, futu_code, e)
+        # Retry transient failures (network jitter, OpenD restart) with backoff.
+        # 3 attempts: immediate → 1s → 2s.  Graceful — a single retry rescues
+        # most transient errors without slowing the 71-ticker batch meaningfully.
+        last_err = None
+        for attempt in range(3):
+            try:
+                result = await asyncio.to_thread(self._fetch_sync, futu_code, ticker, days, market)
+                if result is not None:
+                    self._cache.set(cache_key, result)
+                    return result
+                # _fetch_sync returned None (e.g. empty data) — not retry-worthy
+                return None
+            except Exception as e:
+                last_err = e
+                if attempt < 2:
+                    delay = [0, 1, 2][attempt]
+                    if delay:
+                        await asyncio.sleep(delay)
+                    logger.debug("Futu fetch retry %d/3 for %s: %s", attempt + 1, ticker, e)
 
+        logger.error("Futu fetch failed after 3 retries for %s: %s", ticker, last_err)
         return None
 
     def _fetch_sync(
