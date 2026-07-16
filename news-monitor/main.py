@@ -422,7 +422,11 @@ class NewsMonitor:
 
         # Start the Telegram bot (polling mode).
         if self.bot:
-            await self.bot.start()
+            try:
+                await self.bot.start()
+            except Exception as e:
+                logger.warning("Telegram bot failed to start (%s) — continuing without bot", e)
+                self.bot = None
 
         # Start the collection scheduler.
         await self.scheduler.start()
