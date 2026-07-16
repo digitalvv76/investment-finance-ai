@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SCREEN_THRESHOLD = 0.15  # Low bar: filters only garbage; event-driven evaluator is the real gate
+SCREEN_THRESHOLD = 0.22  # Raised from 0.15: Futu news + Chinese pipeline doubled volume
 
 
 class ScreenStage:

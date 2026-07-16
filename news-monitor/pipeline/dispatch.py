@@ -145,17 +145,20 @@ class DispatchStage:
             "reason": getattr(d, "alert_reason", ""),
         })
 
+    # Per-cycle TG push cap: prevent flooding when new sources add volume.
+    # Phone (Pushover) is already deduped by topic; TG is the flood risk.
+    _MAX_TG_PER_CYCLE = 5
+
     async def process(self, items: list[PipelineItem]) -> list[PipelineItem]:
         if not items:
             return []
 
+        tg_pushed = 0
         for item in items:
             decision = item.decision
             level = decision.alert_level
 
-            # NORMAL = not worth a push. Skip ALL push channels (dashboard/DB
-            # still have it). This is the "少而精" tightening: non-events no
-            # longer flood Telegram. NOTABLE (watchlist safety net) → silent TG.
+            # NORMAL = skip all push channels
             if level == AlertLevel.NORMAL:
                 continue
             silent = level == AlertLevel.NOTABLE
@@ -166,30 +169,34 @@ class DispatchStage:
                 continue
 
             for channel in self._channels:
-                # ── Same-topic phone dedup ──
-                # 同一宏观主题短时间内只推第一条到手机，后续除非强度升级才重推。
-                # 只影响 Pushover，Telegram/WebSSE 不受限。
+                # ── Phone dedup ──
                 if channel.name == "pushover" and level != AlertLevel.CRITICAL:
                     skip, reason = self._phone_should_skip(item)
                     if skip:
                         logger.info(
-                            "DISPATCH: phone dedup SKIP #%d (intensity=%d): %s — %s",
-                            item.id, getattr(decision, "intensity", 0),
-                            reason, (item.title or "")[:60],
+                            "DISPATCH: phone dedup SKIP #%d: %s",
+                            item.id, reason,
                         )
                         continue
+
+                # ── TG rate limit ──
+                if channel.name == "telegram" and tg_pushed >= self._MAX_TG_PER_CYCLE:
+                    continue
 
                 try:
                     success = await channel.send(item, decision, disable_notification=silent)
                     if success:
+                        if channel.name == "telegram":
+                            tg_pushed += 1
                         logger.debug("DISPATCH: %d sent to %s", item.id, channel.name)
                 except Exception:
                     logger.exception("DISPATCH: channel %s failed for id=%d",
                                      channel.name, item.id)
 
-        logger.info("DISPATCH: processed %d items through %d channels%s",
-                     len(items), len(self._channels), " [DRY_RUN]" if _DRY_RUN else "")
-        return items  # Items always pass through
+        logger.info("DISPATCH: %d items, %d→TG (cap=%d)%s",
+                     len(items), tg_pushed, self._MAX_TG_PER_CYCLE,
+                     " [DRY_RUN]" if _DRY_RUN else "")
+        return items
 
     @staticmethod
     def _log_push(item: PipelineItem, decision, silent: bool) -> None:
