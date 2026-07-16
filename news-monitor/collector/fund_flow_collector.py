@@ -566,7 +566,7 @@ class FundFlowCollector:
 
         if self._bot:
             try:
-                tg_text = self._format_tg_message(s, emoji, tag, signal_type, window)
+                tg_text = self._format_tg_message(s, prefix, tag, "重点关注", window)
                 await self._bot.send_message(
                     chat_id=self._bot._primary_chat_id,
                     text=tg_text,
