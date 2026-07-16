@@ -671,8 +671,8 @@ class FundFlowCollector:
             f"主力净{direction} {amount_str} | 占比 {s.latest_main_pct:.1f}%",
         ]
 
-        if s.price_change_3d != 0:
-            lines[-1] += f" | 3日 {s.price_change_3d:+.1f}%"
+        if s.cum_price_3d != 0:
+            lines[-1] += f" | 3日 {s.cum_price_3d:+.1f}%"
 
         if s.analysis_summary:
             lines.append("")
