@@ -4,6 +4,58 @@
 
 ---
 
+## 2026-07-16T08:30+08:00 · 🚀 Futu OpenD 全栈迁移 + V2.5 生产级模型
+
+### Futu OpenD 替代东财（完整迁移）
+- OpenD 安装 ECS `/opt/Futu_OpenD_10.9.6908_Ubuntu18.04/`，systemd 自启
+- 安全配置：纯行情权限 + 设备锁 + 富途令牌
+- `futu_fetcher.py` -- 同 FundFlowDay/FundFlowResult 接口，底层换 `get_capital_flow` + `request_history_kline`
+- 东财 API 全线被封（push2his/push2/ff），已废弃
+- DeepSeek 连接修复：ECS `.env` 残留本地 Clash 代理 `127.0.0.1:7897`→已注释
+
+### 模型演进 V2.3→V2.5
+- 新增法则 D(合力) E(散户陷阱) F(黄金坑) — 训练资料驱动
+- V2.5 生产级定稿：推送强制首位标定 `🔴【顶背离·风险】`/`🟢【底背离·机会】`
+- 信号强度标准化 STRONG/STANDARD/WEAK
+- 开发铁律 P0：严禁金额硬编码，完全信任富途分类标准
+
+### 富途数据挖掘 (V1 Spec 实施)
+- P0 防限流：semaphore 5→1，sleep 0.3s→1.0s
+- P1 实时快照：盘前 09:25 + 盘中 14:30 ET 双窗口
+- P2 板块轮动：20 个 US 板块资金流排名，每日 16:30 ET
+- P3 经纪商队列：不可用（需 LV2）
+
+### 中文管道 + 富途新闻 + TG 优化
+- 华尔街见闻中文管道：entity_extractor + priority + prompt + keywords 全覆盖
+- 富途新闻 `get_search_news` 接入调度器，35 关键词轮转
+- TG 卡片重构：三段式 `📌要点 + 📊分析 + 💥冲击`
+- TG 限流：单轮 ≤5 条，屏阈 0.15→0.22
+- 移除 TG 反馈按钮（保留深度分析 + 原文链接）
+- 移除 🇨🇳 前缀
+
+### 对抗性核实
+- 6 个运行时 bug 修复（时区 UTC→ET、send_system_alert 参数、NaN crash、bottom5 重叠等）
+
+### 关键 commit
+```
+e7bdc90 fix: TG推送 — send_message→app.bot.send_message + 格式去冗余
+0b4e9f5 fix: 对抗性核实 — 6个运行时bug修复
+f6ffa4d feat: 代码对齐 V2.5 生产级模型
+e2b0e52 feat: 板块轮动接入调度
+edb3a3b feat: P0防封禁 + P1实时快照
+965fa36 feat: 华尔街见闻中文管道适配
+8a945ca feat: 富途牛牛新闻采集
+2b7e064 feat: Futu OpenD fund flow — 替代东财采集器
+```
+
+### 待办
+- P1: ATR 波动率阈值 / 因子有效性回测
+- 新模块注册 module_registry.json
+- 新采集器补测试覆盖
+- 板块轮动 US. 前缀验证
+
+---
+
 ## 2026-07-16T00:07+08:00 · 🎯 V2.1 综合方案 P0 落地
 
 ### 来源
