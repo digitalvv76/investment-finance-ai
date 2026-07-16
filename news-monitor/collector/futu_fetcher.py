@@ -38,14 +38,13 @@ class FundFlowDay:
       中单/小单 — Retail sentiment confirmation (reverse indicator).
 
     Futu raw fields are mapped as follows:
-      Futu super_in_flow → super_big_net  (the anchor)
+      Futu main_in_flow  → main_net (★ 主力 = Futu官方"主力大单", 回退super+big)
+      Futu super_in_flow → super_big_net  (the anchor — 特大单)
       Futu big_in_flow   → big_net
       Futu mid_in_flow   → mid_net
       Futu sml_in_flow   → sml_net
-      Futu main_in_flow  → NOT used directly. Futu's algorithmic "main" is
-                           informative but NOT the framework anchor.
 
-    main_net is COMPUTED: super_big_net + big_net (our definition of 主力).
+    main_net = Futu main_in_flow (historical) or super+big (intraday fallback).
     """
 
     date: str
