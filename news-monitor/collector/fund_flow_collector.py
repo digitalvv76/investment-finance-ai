@@ -427,11 +427,20 @@ class FundFlowCollector:
 
     def _build_analysis_prompt(self, s: FundFlowSignal) -> str:
         """Build the analysis prompt with fund flow data + price context."""
+        # Backfill missing change_pct from close_prices (DB reconstruction path
+        # only stores close_price, not the per-day change rate).
+        days = s.fund_flow_days
+        for i, d in enumerate(days):
+            if d.change_pct == 0 and d.close_price != 0 and i > 0:
+                prev = days[i - 1].close_price
+                if prev != 0:
+                    d.change_pct = (d.close_price - prev) / prev * 100
+
         # Format fund flow table
         rows = []
-        for day in s.fund_flow_days:
+        for day in days:
             rows.append(
-                f"| {day.date} | {getattr(day, 'change_pct', 0):.1f}% | "
+                f"| {day.date} | {day.change_pct:.1f}% | "
                 f"{day.main_net/1e4:.0f}万 | {day.super_big_net/1e4:.0f}万 | "
                 f"{day.big_net/1e4:.0f}万 | {day.mid_net/1e4:.0f}万 | "
                 f"{day.small_net/1e4:.0f}万 | {day.main_pct:.1f}% |"
