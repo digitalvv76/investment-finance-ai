@@ -309,6 +309,15 @@ class Database:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def get_all_urls(self, limit: int = 20000) -> List[str]:
+        """Return all known URLs for seeding the dedup in-memory cache at startup."""
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT url FROM news ORDER BY captured_at DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+            return [r["url"] for r in rows if r["url"]]
+
     def get_news_by_id(self, news_id: int) -> Optional[dict]:
         with self._get_conn() as conn:
             row = conn.execute("SELECT * FROM news WHERE id = ?", (news_id,)).fetchone()

@@ -122,6 +122,13 @@ class NewsMonitor:
 
         # ---- dedup (with semantic tier) -----------------------------
         self.dedup = DedupManager(vector_store=self.vector_store)
+        # Seed in-memory URL cache from DB so restarts don't weaken Tier-1 dedup.
+        try:
+            existing = self.db.get_all_urls(limit=20000)
+            if existing:
+                self.dedup.load_existing_urls(existing)
+        except Exception as e:
+            logger.warning("Failed to seed dedup URL cache: %s", e)
 
         # ---- scheduler ----------------------------------------------
         self.scheduler = NewsScheduler(self.config, self.db, self.dedup)

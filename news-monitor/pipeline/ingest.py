@@ -54,10 +54,17 @@ class IngestStage:
             return []
 
         # Step 2: Insert into DB (per-item isolation)
+        # news_id == 0 means INSERT OR IGNORE skipped a duplicate — do NOT
+        # pipeline these items or they will be re-pushed to Telegram.
         results: list[PipelineItem] = []
+        skipped_dup = 0
         for news in new_items:
             try:
                 news_id = self._db.insert_news(news)
+                if not news_id:
+                    skipped_dup += 1
+                    continue
+                news.id = news_id  # set on the model so index_item works
                 item = PipelineItem(
                     id=news_id,
                     title=news.title,
@@ -76,18 +83,27 @@ class IngestStage:
 
                 if self._cluster is not None:
                     try:
-                        news.id = news_id
                         self._cluster.find_or_create_event(news)
                     except Exception:
                         logger.debug("INGEST: clustering failed for id=%d", news_id)
             except Exception:
                 logger.exception("INGEST: DB insert failed for %s", news.title[:60])
 
+        if skipped_dup:
+            logger.info("INGEST: skipped %d DB-level duplicates (INSERT OR IGNORE)", skipped_dup)
+
         # Step 3: Index in vector store
         if self._vector and results:
-            for item, news in zip(results, new_items):
+            for item in results:
                 try:
-                    self._dedup.index_item(news)
+                    # Index the pipeline item directly — its title+snippet is
+                    # sufficient for embedding without a full NewsItem round-trip.
+                    self._vector.add_article(
+                        item.id,
+                        f"{item.title or ''} {item.snippet or ''}",
+                        metadata={"source": item.source or "",
+                                  "tickers": ",".join(item.raw_tickers) if item.raw_tickers else ""},
+                    )
                 except Exception:
                     logger.debug("INGEST: vector index failed for id=%d", item.id)
 
