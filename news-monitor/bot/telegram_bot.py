@@ -140,7 +140,7 @@ class NewsBot:
             cn_title = await self._translator.translate(title)
 
         if cn_title:
-            cn_parts = [f"\U0001f1e8\U0001f1f3 {cn_title}"]
+            cn_parts = [cn_title]
 
             # Impact score + confidence
             if impact_score > 0:
