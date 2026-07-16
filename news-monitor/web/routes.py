@@ -20,6 +20,26 @@ logger = logging.getLogger(__name__)
 
 _APP_START_TIME = time.time()
 
+# Cached DB health — refreshed every 60s by a background asyncio task.
+# This prevents Docker HEALTHCHECK from running 8× SELECT COUNT(*) against
+# SQLite during pipeline bursts, which caused false-positive timeouts.
+_cached_db_ok: bool = True
+
+
+async def refresh_cached_db_health(db) -> None:
+    """Re-evaluate DB liveness and store the result in ``_cached_db_ok``.
+
+    Runs the (blocking) ``get_db_stats()`` call in a thread so that the
+    asyncio event loop is never blocked — even during pipeline bursts
+    when SQLite write-lock contention is high.
+    """
+    global _cached_db_ok
+    try:
+        await asyncio.to_thread(db.get_db_stats)
+        _cached_db_ok = True
+    except Exception:
+        _cached_db_ok = False
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -170,22 +190,16 @@ def _watchdog_snapshot(wd) -> Dict[str, Any]:
 
 
 async def health_check(request: web.Request) -> web.Response:
-    """Lightweight health check, excluded from auth.
+    """Health check for Docker HEALTHCHECK + UptimeRobot (no auth required).
 
-    Returns HTTP 200 with status/uptime/DB info.  Uptime monitors and
-    Docker HEALTHCHECK can hit this endpoint without credentials.
+    DB liveness is read from a 60 s memory cache (refreshed by a background
+    task) so this handler never blocks on SQLite queries, even during
+    pipeline bursts.
     """
-    db = _get_db(request)
-    try:
-        db.get_db_stats()
-        db_ok = True
-    except Exception:
-        db_ok = False
-
     return _json({
-        "status": "ok" if db_ok else "degraded",
+        "status": "ok" if _cached_db_ok else "degraded",
         "uptime_seconds": int(time.time() - _APP_START_TIME),
-        "db": "ok" if db_ok else "error",
+        "db": "ok" if _cached_db_ok else "error",
         "sse_clients": _get_sse(request).client_count,
         "watchdog": _watchdog_snapshot(_get_watchdog(request)),
     })

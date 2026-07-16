@@ -111,7 +111,10 @@ class TelegramChannel:
         try:
             await self._bot.push_alert(
                 alert_dict,
-                analyst_note=decision.flash_note or decision.analyst_note,
+                # 📌 headline_signal: Path A uses LLM trading signal, Path B falls back to flash_note
+                headline_signal=decision.headline_signal or decision.flash_note,
+                # 📊 analyst_note: always the detailed analysis (NOT flash_note — that's for Pushover)
+                analyst_note=decision.analyst_note,
                 event_category=decision.event_category,
                 impact_score=decision.impact_score,
                 confidence=80,

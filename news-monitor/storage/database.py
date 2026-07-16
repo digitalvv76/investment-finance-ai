@@ -5,7 +5,7 @@ from datetime import datetime, date
 from typing import List, Optional
 from contextlib import contextmanager
 from .models import NewsItem, EventLine, FeedbackRecord, UserPreference, \
-    ImpactAssessment, ImpactOutcome, CalibrationState, HealthEvent
+    ImpactAssessment, ImpactOutcome, CalibrationState, HealthEvent, FundFlowRecord
 
 
 def _adapt_datetime(val):
@@ -184,6 +184,24 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_ed_news ON event_decisions(news_id);
                 CREATE INDEX IF NOT EXISTS idx_ed_created ON event_decisions(created_at);
                 CREATE INDEX IF NOT EXISTS idx_ed_alert ON event_decisions(alert_level);
+
+                CREATE TABLE IF NOT EXISTS fund_flow (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticker TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    main_net REAL DEFAULT 0.0,
+                    super_big_net REAL DEFAULT 0.0,
+                    big_net REAL DEFAULT 0.0,
+                    mid_net REAL DEFAULT 0.0,
+                    small_net REAL DEFAULT 0.0,
+                    main_pct REAL DEFAULT 0.0,
+                    source TEXT DEFAULT '',
+                    fetched_at REAL DEFAULT 0.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_fund_flow_ticker_date ON fund_flow(ticker, date);
+                CREATE INDEX IF NOT EXISTS idx_fund_flow_ticker ON fund_flow(ticker);
+                CREATE INDEX IF NOT EXISTS idx_fund_flow_date ON fund_flow(date);
             """)
             # Migrations: add new columns to existing databases (idempotent)
             _migrations = [
@@ -290,6 +308,15 @@ class Database:
                 (status, limit)
             ).fetchall()
             return [dict(r) for r in rows]
+
+    def get_all_urls(self, limit: int = 20000) -> List[str]:
+        """Return all known URLs for seeding the dedup in-memory cache at startup."""
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT url FROM news ORDER BY captured_at DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+            return [r["url"] for r in rows if r["url"]]
 
     def get_news_by_id(self, news_id: int) -> Optional[dict]:
         with self._get_conn() as conn:
@@ -599,6 +626,47 @@ class Database:
             return {"total": total, "with_outcomes": with_outcomes, "pending": pending}
 
     # ------------------------------------------------------------------
+    # Fund flow
+    # ------------------------------------------------------------------
+
+    def upsert_fund_flow(self, record: FundFlowRecord) -> int:
+        """Insert or replace a fund flow row. Returns row id."""
+        with self._get_conn() as conn:
+            c = conn.execute("""
+                INSERT OR REPLACE INTO fund_flow
+                    (ticker, date, main_net, super_big_net, big_net, mid_net,
+                     small_net, main_pct, source, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                record.ticker.upper(), record.date,
+                record.main_net, record.super_big_net, record.big_net,
+                record.mid_net, record.small_net, record.main_pct,
+                record.source, record.fetched_at,
+            ))
+            if c.lastrowid:
+                record.id = c.lastrowid
+            return c.lastrowid if c.lastrowid else 0
+
+    def get_fund_flow(self, ticker: str, days: int = 20) -> list[dict]:
+        """Return the last N trading days of fund flow for a ticker."""
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM fund_flow WHERE ticker = ? "
+                "ORDER BY date DESC LIMIT ?",
+                (ticker.upper(), days),
+            ).fetchall()
+            return [dict(r) for r in reversed(rows)]
+
+    def get_latest_fund_flow_date(self, ticker: str) -> Optional[str]:
+        """Return the most recent date for a ticker, or None."""
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT MAX(date) as latest FROM fund_flow WHERE ticker = ?",
+                (ticker.upper(),),
+            ).fetchone()
+            return row["latest"] if row else None
+
+    # ------------------------------------------------------------------
     # Retention / maintenance
     # ------------------------------------------------------------------
 
@@ -637,6 +705,7 @@ class Database:
             "impact_outcomes_count": 0,
             "calibration_state_count": 0,
             "health_events_count": 0,
+            "fund_flow_count": 0,
             "db_size_mb": 0,
         }
         try:
@@ -646,7 +715,8 @@ class Database:
 
         with self._get_conn() as conn:
             for table in ["news", "feedback", "event_lines", "training_docs",
-                           "impact_assessments", "impact_outcomes", "calibration_state", "health_events"]:
+                           "impact_assessments", "impact_outcomes", "calibration_state", "health_events",
+                           "fund_flow"]:
                 row = conn.execute(f"SELECT COUNT(*) as cnt FROM {table}").fetchone()
                 if row:
                     key = f"{table if table != 'news' else 'news'}_count"

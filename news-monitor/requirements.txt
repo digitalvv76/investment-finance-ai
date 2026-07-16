@@ -18,6 +18,7 @@ chromadb>=0.4.0
 
 # Market Data
 yfinance>=0.2.0
+futu-api>=6.0.0            # Futu OpenD — fund flow + market data
 
 # LLM (at least one required for deep analysis)
 anthropic>=0.30.0       # Anthropic Claude

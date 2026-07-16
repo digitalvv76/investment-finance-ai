@@ -87,3 +87,16 @@ web:
   enabled: true         # Set to true or set WEB_PORT env var
   port: 8080
   host: "0.0.0.0"
+
+# Fund flow collector — daily post-market capital flow data
+fund_flow:
+  enabled: true
+  run_hour_et: 17                # 5pm ET, 1 hour after US market close
+  check_interval_minutes: 30     # how often to check "should I run today?"
+  batch_cooldown_minutes: 5       # wait between batches (keep batch+cooldown < 2h)
+  days_to_fetch: 20              # trading days of history per ticker
+  # tickers: 不写则自动从 .claude/memory/watchlist-state.md 读取（~71只）
+  # 如需手工覆盖，取消下面注释并列出：
+  # tickers:
+  #   - AAPL
+  #   - NVDA

@@ -66,14 +66,16 @@ SOURCE_AUTHORITY: Dict[str, float] = {
     "@zerohedge": 0.03,
     "@fxhedgers": 0.05,
     "@semianalysis": 0.09,  # Semiconductor/AI supply chain — very high signal
-    # —— Tier 2: Chinese supplementary sources (low authority) ——
-    "新浪财经·7x24综合快讯": 0.02,
-    "新浪财经·7x24全球财经": 0.02,
-    "华尔街见闻·全球快讯": 0.02,
-    "华尔街见闻·美股": 0.03,
-    "华尔街见闻·外汇": 0.02,
-    "华尔街见闻·加密货币": 0.02,
-    "华尔街见闻·大宗商品": 0.02,
+    # —— Tier 2: Chinese supplementary sources ——
+    # WallStreetCN is China's best financial newswire — on par with Bloomberg terminal
+    # for Chinese markets & macro coverage. Raised from 0.02 to 0.05-0.06.
+    "新浪财经·7x24综合快讯": 0.04,
+    "新浪财经·7x24全球财经": 0.04,
+    "华尔街见闻·全球快讯": 0.06,
+    "华尔街见闻·美股": 0.06,
+    "华尔街见闻·外汇": 0.05,
+    "华尔街见闻·加密货币": 0.05,
+    "华尔街见闻·大宗商品": 0.05,
 }
 # Default for unknown sources: 0.03 (lower than any Tier-1 English source)
 
@@ -118,6 +120,23 @@ _DEVIATION_PATTERNS = [
         r"(?P<direction>beat|beats|beating|miss|misses|missed|above|below|exceed[s]?|topped)\s+(?:the\s+)?(?:expectations|forecasts?|estimates?|consensus)",
         re.IGNORECASE,
     ),
+    # —— Chinese deviation patterns ——
+    # "高于预期2.5%" / "超出市场预估190K"
+    re.compile(
+        r"(?P<actual>[\d,.]+[KMB%万亿]?)\s*(?:高于|超出|超过|好于|强于)\s*(?:市场|一致)?(?:预期|预估|预测|估计)\w*(?:的\s*)?(?P<expected>[\d,.]+[KMB%]?)?",
+    ),
+    # "低于预期" / "不及市场预估"
+    re.compile(
+        r"(?P<actual>[\d,.]+[KMB%万亿]?)\s*(?:低于|不及|弱于|差于|逊于)\s*(?:市场|一致)?(?:预期|预估|预测|估计)\w*(?:的\s*)?(?P<expected>[\d,.]+[KMB%]?)?",
+    ),
+    # "预期2.5%实际2.7%" / "市场预估190K结果285K"
+    re.compile(
+        r"(?:市场|一致)?(?:预期|预估|预测|估计)\s*(?P<expected>[\d,.]+[KMB%]?)\s*(?:实际|结果|公布|录得|报)\s*(?P<actual>[\d,.]+[KMB%万亿]?)",
+    ),
+    # "大超预期" / "远低预期" — qualitative only (direction, no numbers)
+    re.compile(
+        r"(?P<direction>大超|远超|大幅?超|大幅?高[于出]|大幅?低[于出]|远低[于出]|不及|逊于)\s*(?:市场|一致)?(?:预期|预估)",
+    ),
 ]
 
 # ---------------------------------------------------------------------------
@@ -161,6 +180,18 @@ _SURPRISE_KEYWORDS = [
     ("abruptly", 0.7),
     ("sudden", 0.6),
     ("dramatically", 0.6),
+    # —— Chinese surprise keywords ——
+    ("意外", 0.8), ("出乎意料", 0.8), ("出人意料", 0.8),
+    ("震惊", 0.9), ("震惊全球", 1.0),
+    ("暴跌", 0.8), ("暴涨", 0.7), ("闪崩", 0.9), ("熔断", 0.9),
+    ("创纪录", 0.7), ("创历史新高", 0.7), ("创历史新低", 0.7),
+    ("历史新高", 0.7), ("历史新低", 0.7), ("历史最高", 0.7),
+    ("崩盘", 0.9), ("恐慌", 0.9), ("恐慌性", 0.9),
+    ("黑天鹅", 0.9), ("灰犀牛", 0.7),
+    ("突然", 0.6), ("骤然", 0.6), ("急剧", 0.6),
+    ("大跌", 0.6), ("大涨", 0.5), ("飙升", 0.7), ("骤降", 0.7),
+    ("大幅跳涨", 0.7), ("大幅跳水", 0.8),
+    ("史诗级", 0.8), ("历史性", 0.7),
 ]
 
 # ---------------------------------------------------------------------------

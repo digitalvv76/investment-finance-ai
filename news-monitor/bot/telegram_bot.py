@@ -90,12 +90,22 @@ class NewsBot:
     async def stop(self):
         """Stop the bot gracefully."""
         if self._app:
-            await self._app.updater.stop()
-            await self._app.stop()
-            await self._app.shutdown()
+            try:
+                await self._app.updater.stop()
+            except RuntimeError:
+                pass  # updater was never started (e.g. no token configured)
+            try:
+                await self._app.stop()
+            except RuntimeError:
+                pass
+            try:
+                await self._app.shutdown()
+            except RuntimeError:
+                pass
         logger.info("Telegram bot stopped")
 
     async def push_alert(self, item: dict, analyst_note: str = "",
+                          headline_signal: str = "",
                           event_category: str = "",
                           impact_score: int = 0, confidence: int = 0,
                           disable_notification: bool = False,
@@ -131,25 +141,30 @@ class NewsBot:
             cn_title = await self._translator.translate(title)
 
         if cn_title:
-            cn_parts = [f"\U0001f1e8\U0001f1f3 {cn_title}"]
+            cn_parts = [cn_title]
 
-            # Impact score + confidence
+            # ── 📌 新闻要点 (LLM 一句话事实判断) ──
+            signal = headline_signal or item.get('headline_signal', '')
+            if signal:
+                cn_parts.append(f"\n📌 {signal}")
+
+            # ── 📊 新闻分析 (LLM 深度解读) ──
+            note = analyst_note or item.get('analyst_note', '')
+            if note:
+                cn_parts.append(f"\n📊 {note}")
+
+            # ── 💥 冲击 + 置信度 ──
             if impact_score > 0:
                 imp_line = f"\n💥 冲击: {impact_score}分"
                 if confidence > 0:
                     imp_line += f" | 置信度: {confidence}%"
                 cn_parts.append(imp_line)
 
-            # Analyst note
-            note = analyst_note or item.get('analyst_note', '')
-            if note:
-                cn_parts.append(f"\n{note}")
-
-            # Related tickers + sector ETFs
+            # ── 🎯 相关标的 ──
             from bot.formatters import _build_ticker_etf_line
             etf_line = _build_ticker_etf_line(tickers, macro, event_category)
             if etf_line:
-                cn_parts.append(f"\n{etf_line}")
+                cn_parts.append(f"\n🎯 {etf_line}")
 
             for chat_id in chat_ids:
                 try:

@@ -179,6 +179,13 @@
       "also_tests": [
         "tests/test_watchlist_safety_net.py"
       ]
+    },
+    "engine/macro_agent.py": {
+      "tests": [
+        "tests/test_macro_agent.py"
+      ],
+      "related_scripts": [],
+      "also_tests": []
     }
   }
 }

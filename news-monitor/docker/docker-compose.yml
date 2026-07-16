@@ -50,9 +50,9 @@ services:
       # ${VAR} against the compose-dir .env (which does not exist), producing an
       # EMPTY value that overrides env_file and silently disables Basic Auth.
       - TZ=America/New_York
-      # ECS has direct internet — override dev proxy from .env
-      - HTTPS_PROXY=
-      - HTTP_PROXY=
+      # Futu OpenD gateway — Docker host (via docker bridge)
+      - FUTU_OPEND_HOST=172.18.0.1
+      - FUTU_OPEND_PORT=11111
 
     # ---- Persistent Volumes ----
     # Survives container restarts & image rebuilds

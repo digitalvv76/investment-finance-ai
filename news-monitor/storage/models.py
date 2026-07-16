@@ -163,3 +163,27 @@ class HealthEvent:
     news_id: int = 0
     detail: str = ""
     created_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class FundFlowRecord:
+    """Single day of capital flow data.
+
+    ★ Anchor: super_big_net (特大单) — the ONE signal that can't be faked.
+    主力 = super_big + big (V2.1 P0: anti order-splitting).
+    主力占比 = (super+big) / abs(total) * 100.
+
+    Data source: Futu OpenD get_capital_flow.
+    """
+    id: Optional[int] = None
+    ticker: str = ""
+    date: str = ""                     # "YYYY-MM-DD"
+    main_net: float = 0.0              # 主力 = 特大单+大单 (computed, not Futu main)
+    super_big_net: float = 0.0         # ★ 特大单 (Futu: super_in_flow) — the anchor
+    big_net: float = 0.0               # 大单 (Futu: big_in_flow)
+    mid_net: float = 0.0               # 中单 (Futu: mid_in_flow)
+    small_net: float = 0.0             # 小单 (Futu: sml_in_flow)
+    main_pct: float = 0.0              # 主力占比 = (super+big)/abs(total)*100
+    source: str = ""                   # "futu"
+    fetched_at: float = 0.0            # unix timestamp
+    created_at: datetime = field(default_factory=datetime.now)

@@ -37,6 +37,7 @@ macro_alerts:  # Trigger fast lane if in title (EN + CN)
   - "降息"
   - "通胀"
   - "非农"
+  - "非农就业"
   - "失业率"
   - "央行"
   - "降准"
@@ -53,14 +54,29 @@ macro_alerts:  # Trigger fast lane if in title (EN + CN)
   # Chinese — 宏观数据
   - "GDP"
   - "CPI"
+  - "消费者价格指数"
   - "PPI"
+  - "生产者价格指数"
   - "PMI"
+  - "核心通胀"
   - "社融"
   - "M2"
   - "进出口"
   - "贸易顺差"
   - "外汇储备"
   - "人民币汇率"
+  - "初请失业金"
+  - "续请失业金"
+  - "零售销售"
+  - "ISM制造业"
+  - "ISM服务业"
+  - "密歇根大学消费者信心"
+  - "美联储利率决议"
+  - "点阵图"
+  - "缩表"
+  - "扩表"
+  - "收益率曲线"
+  - "倒挂"
   # Chinese — 地缘 / 贸易
   - "关税"
   - "贸易战"
@@ -98,12 +114,16 @@ breaking_markers:  # Words that mark breaking news (EN + CN)
 
 key_people_tier1:  # Market pricers — +0.15 in PriorityScorer
   - "Jensen Huang"
-  - "Jensen Huang"
   - "Lisa Su"
   - "Kevin Warsh"
   - "Jerome Powell"
   # Chinese
   - "黄仁勋"
+  - "苏姿丰"        # AMD CEO Lisa Su
+  - "鲍威尔"        # Jerome Powell
+  - "沃什"          # Kevin Warsh
+  - "萨姆·奥特曼"   # Sam Altman
+  - "山姆·奥特曼"
 
 key_people_tier2:  # Market influencers — +0.10
   - "Elon Musk"
@@ -114,6 +134,15 @@ key_people_tier2:  # Market influencers — +0.10
   # Chinese
   - "雷军"
   - "任正非"
+  - "马斯克"        # Elon Musk
+  - "埃隆·马斯克"
+  - "巴菲特"        # Warren Buffett
+  - "戴蒙"          # Jamie Dimon
+  - "杰米·戴蒙"
+  - "耶伦"          # Janet Yellen
+  - "詹斯勒"        # Gary Gensler
+  - "方舟"          # Cathie Wood / ARK
+  - "木头姐"
 
 key_people_tier3:  # Political / general — +0.03 (trivially low, requires market context)
   - "Donald Trump"
@@ -127,6 +156,10 @@ key_people_tier3:  # Political / general — +0.03 (trivially low, requires mark
   - "王毅"
   - "马化腾"
   - "马云"
+  - "特朗普"        # Trump
+  - "拜登"          # Biden
+  - "贝森特"        # Scott Bessent (Treasury Secretary)
+  - "卢特尼克"      # Howard Lutnick (Commerce Secretary)
 
 # Legacy key_people — merged list for backward-compatible lookup by EntityExtractor
 key_people:

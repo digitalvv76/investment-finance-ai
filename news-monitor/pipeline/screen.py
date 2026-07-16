@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SCREEN_THRESHOLD = 0.15  # Low bar: filters only garbage; event-driven evaluator is the real gate
+SCREEN_THRESHOLD = 0.22  # Raised from 0.15: Futu news + Chinese pipeline doubled volume
 
 
 class ScreenStage:
@@ -29,6 +29,18 @@ class ScreenStage:
     async def process(self, items: list[PipelineItem]) -> list[PipelineItem]:
         if not items:
             return []
+
+        # Macro-routed items pass through untouched (already evaluated by MacroAgent)
+        for it in items:
+            if getattr(it, "_macro_routed", False):
+                continue
+        # ...but we still need to process the rest.  Since ScreenStage filters
+        # items (drops low-priority), macro items must survive the filter.
+        macro_items = [it for it in items if getattr(it, "_macro_routed", False)]
+        regular_items = [it for it in items if not getattr(it, "_macro_routed", False)]
+
+        if not regular_items:
+            return macro_items
 
         # Convert PipelineItem → NewsItem for FastLane compatibility
         from storage.models import NewsItem
@@ -75,6 +87,7 @@ class ScreenStage:
                 logger.exception("SCREEN: per-item enrichment failed for id=%s",
                                  getattr(enriched, "id", "?"))
 
-        logger.info("SCREEN: %d in → %d out (threshold=%.2f)",
-                     len(items), len(results), SCREEN_THRESHOLD)
-        return results
+        all_out = results + macro_items
+        logger.info("SCREEN: %d in → %d out (threshold=%.2f, macro=%d)",
+                     len(items), len(all_out), SCREEN_THRESHOLD, len(macro_items))
+        return all_out

@@ -49,6 +49,16 @@
       "tests": [],
       "related_scripts": [],
       "also_tests": []
+    },
+    "collector/eastmoney_fetcher.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "collector/fund_flow_collector.py": {
+      "tests": ["tests/test_fund_flow_collector.py"],
+      "related_scripts": [],
+      "also_tests": []
     }
   }
 }

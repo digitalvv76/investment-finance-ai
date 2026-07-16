@@ -221,6 +221,7 @@ class1/
 ├── config/                 # 全局配置 (benchmarks/indicators/cache)
 ├── data/                   # 持久化数据 (watchlists/signals/training)
 ├── docs/                   # 文档 (prompts参考/数据源清单)
+│                           # 命名: YYYY-MM-DD-NN-描述.md (日期+序号防混淆)
 ├── deploy-main.sh          # 一键部署 ECS (内置回滚tag+UptimeRobot暂停)
 └── .env                    # 凭证 (gitignored, 唯一真相来源)
 ```

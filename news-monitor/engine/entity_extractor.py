@@ -18,6 +18,7 @@ FALLBACK_TICKERS = {
     # Watchlist — semiconductors / AI
     "PLTR", "SOXX", "SOXL", "LRCX", "ARM", "MRVL",
     "MRAAY", "CBRS",
+    "AVGO", "TSM", "QCOM", "MU", "TXN", "AMAT", "KLAC", "ON", "UMC",
     # Watchlist — space / defense
     "SPCX", "RKLB", "KTOS", "ASTS",
     # Watchlist — quantum / nuclear / emerging tech
@@ -83,6 +84,55 @@ class EntityExtractor:
             "rigetti": "RGTI", "tempus": "TEM", "nebis": "NBIS",
             # ETFs
             "ark innovation": "ARKK",
+        }
+
+        # Chinese company-name → ticker mapping
+        # WallStreetCN / Sina Finance use Chinese names like 英伟达 not NVDA.
+        self._cn_company_to_ticker: dict[str, str] = {
+            # 科技七巨头
+            "英伟达": "NVDA", "辉达": "NVDA",
+            "苹果": "AAPL", "微软": "MSFT",
+            "谷歌": "GOOGL", "亚马逊": "AMZN",
+            "脸书": "META", "元宇宙": "META", "元宇宙平台": "META",
+            "特斯拉": "TSLA",
+            # 半导体
+            "英特尔": "INTC", "超威": "AMD", "超微": "AMD",
+            "博通": "AVGO", "高通": "QCOM", "美光": "MU",
+            "德州仪器": "TXN", "应用材料": "AMAT", "泛林": "LRCX",
+            "拉姆研究": "LRCX", "科磊": "KLAC", "安森美": "ON",
+            "迈威尔": "MRVL", "迈威尔科技": "MRVL",
+            "安谋": "ARM", "安谋科技": "ARM",
+            "台积电": "TSM", "联电": "UMC",
+            # 关注股 — 半导体/AI
+            "帕兰提尔": "PLTR", "帕兰泰尔": "PLTR",
+            # 关注股 — 太空/防务
+            "火箭实验室": "RKLB", "奎托斯": "KTOS",
+            "宇航电信": "ASTS", "太空移动": "ASTS",
+            # 关注股 — 量子/核能/新兴
+            "里盖蒂": "RGTI", "奥克洛": "OKLO",
+            "纽斯凯尔": "SMR", "核能革新": "SMR",
+            "天普思": "TEM", "奈比斯": "NBIS",
+            # 加密美股
+            "币基地": "COIN", "微策略": "MSTR",
+            "马拉松数字": "MARA", "马拉松": "MARA",
+            "清洁火花": "CLSK", "哈特8": "HUT",
+            "暴乱": "RIOT", "暴乱平台": "RIOT",
+            # 金融科技
+            "布洛克": "SQ", "方块": "SQ",
+            "确认": "AFRM", "索菲": "SOFI",
+            "罗宾汉": "HOOD",
+            # 金融 — 大行
+            "摩根大通": "JPM", "高盛": "GS", "摩根士丹利": "MS",
+            "花旗": "C", "美国银行": "BAC", "富国银行": "WFC",
+            # 能源
+            "埃克森美孚": "XOM", "雪佛龙": "CVX",
+            # 零售/消费
+            "沃尔玛": "WMT", "耐克": "NKE", "迪士尼": "DIS",
+            "奈飞": "NFLX", "网飞": "NFLX",
+            "赛富时": "CRM", "甲骨文": "ORCL", "奥多比": "ADBE",
+            "贝宝": "PYPL",
+            # 波音
+            "波音": "BA",
         }
 
         # Known entities from keywords config
@@ -198,6 +248,11 @@ class EntityExtractor:
         # 2. Company-name → ticker mapping (for crypto/fintech)
         for company_name, ticker in self._company_to_ticker.items():
             if company_name in text_lower and ticker in FALLBACK_TICKERS:
+                found.add(ticker)
+
+        # 3. Chinese company-name → ticker mapping
+        for cn_name, ticker in self._cn_company_to_ticker.items():
+            if cn_name in text and ticker and ticker in FALLBACK_TICKERS:
                 found.add(ticker)
 
         return found

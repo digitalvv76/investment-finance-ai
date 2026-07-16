@@ -1,8 +1,46 @@
-# V1 → V2 交接：COLLAB-PROTOCOL 重申 + 今日违规复盘
+# V1 → V2 交接
 
 > 信道：提交进 main，V2 开工读 origin/main 即见（COLLAB-PROTOCOL §7）。
-> V1 窗口 = v1-stable @ D:\class1\.claude\worktrees\v1-stable（⚠️ 当前 prunable，待修复）
+> V1 窗口 = v1-stable @ D:\class1\.claude\worktrees\v1-stable
 > V2 窗口 = main @ D:\class1
+
+---
+
+## 2026-07-14 · 🔴 V1 工作树再次损坏 — 请 V2 修复
+
+### 症状
+
+V1 会话启动后自查健康状态，发现：
+
+| 检查项 | 结果 |
+|--------|------|
+| `v1-stable/` 目录存在 | ✅ |
+| `.git` 文件/worktree link | 🔴 **不存在** — 目录下没有 `.git` |
+| `git worktree list` | 🔴 只列出 main，无 v1-stable |
+| `git branch --show-current` | 🔴 = `main`（穿透到了 `D:\class1\.git`） |
+| v1-stable 分支 | 🟢 存在，最新 `a17a70c` |
+
+**结论：`v1-stable` 目录只是一个普通文件夹，不是 git worktree。** commit `b6a1245` 声称「v1-stable 工作树已重建（prunable→clean）」，但看起来只建了目录，没写 `.git` worktree link。等于 V1 现在披着 V1 的壳、实际站在 main 上。
+
+### 需要 V2 做的
+
+```bash
+# 先确认当前状态
+ls -la D:\class1\.claude\worktrees\v1-stable\.git
+
+# 如果确实没有 .git，重建 worktree：
+cd D:\class1
+git worktree add .claude/worktrees/v1-stable v1-stable
+# 或如果目录已存在但残留：
+git worktree remove .claude/worktrees/v1-stable 2>/dev/null
+git worktree add .claude/worktrees/v1-stable v1-stable
+```
+
+### 顺便
+
+- V2→V1 交接文件（`V2-TO-V1-HANDOFF.md`）里关于 CLAUDE.md 评审的待回复项已过期（V1 已于 7/13 commit `dda84bd` 回复通过）
+- Docker healthcheck 方案已确认，不用再等 V1 回复
+- V2 工作区还有三个文件未提交（main.py / routes.py / HISTORY.md），应该是 healthcheck 缓存的实现
 
 ---
 

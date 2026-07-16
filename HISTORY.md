@@ -4,18 +4,16 @@
 
 ---
 
-## 2026-07-16 续 · MacroAgent 推送空洞诊断 + V1 流程自检
+## 2026-07-16 续 · MacroAgent 推送空洞诊断 + V1 流程自检 + 合并 main
 
 ### 诊断
 - **MacroAgent 推送内容空洞** (`d17018c`): 宏观 (CPI/FOMC) 推送只有标题+分数，没有分析师正文
   - 根因: `evaluate.py:141-151` 救援舱构造 `DispatchDecision` 时只从 `event_assessment` 取字段，`impact` 的 `analyst_note`/`flash_note` 被丢弃
-  - 修复: Site 1 加 10 行从 `impact` 提取字段，对齐 Site 2。改动 1 文件 ~15 行 → 交接 V2
+  - V2 已修复 (`adc5429`) — V1 诊断时基于旧代码，实际 V2 已同步修了
 
 ### 流程纠正
-- **确认偏误自检**: 用户说「工作流程被违背」→ AI 直接找证据认罪，`git log --all` 混排误判 main 提交为 v1-stable 违规。实际 v1-stable 只有 docs。→ 存入 memory [[verify-before-escalating]]
-
-### 产出
-- **Spec 5**: MacroAgent 推送空洞修复 (`d17018c`)
+- **确认偏误自检** (`35bc0f6`): 用户说「工作流程被违背」→ AI 直接找证据认罪，`git log --all` 混排误判 main 提交为 v1-stable 违规。实际 v1-stable 只有 docs。→ 存入 memory [[verify-before-escalating]]
+- **合并 main** (`merge`): V1 落后 60 提交，已合并同步
 
 ---
 
@@ -64,6 +62,208 @@
 
 ### V2 交接
 - MacroAgent 设计方案已交 V2 审核通过，执行中
+
+## 2026-07-16T08:30+08:00 · 🚀 Futu OpenD 全栈迁移 + V2.5 生产级模型
+
+### Futu OpenD 替代东财（完整迁移）
+- OpenD 安装 ECS `/opt/Futu_OpenD_10.9.6908_Ubuntu18.04/`，systemd 自启
+- 安全配置：纯行情权限 + 设备锁 + 富途令牌
+- `futu_fetcher.py` -- 同 FundFlowDay/FundFlowResult 接口，底层换 `get_capital_flow` + `request_history_kline`
+- 东财 API 全线被封（push2his/push2/ff），已废弃
+- DeepSeek 连接修复：ECS `.env` 残留本地 Clash 代理 `127.0.0.1:7897`→已注释
+
+### 模型演进 V2.3→V2.5
+- 新增法则 D(合力) E(散户陷阱) F(黄金坑) — 训练资料驱动
+- V2.5 生产级定稿：推送强制首位标定 `🔴【顶背离·风险】`/`🟢【底背离·机会】`
+- 信号强度标准化 STRONG/STANDARD/WEAK
+- 开发铁律 P0：严禁金额硬编码，完全信任富途分类标准
+
+### 富途数据挖掘 (V1 Spec 实施)
+- P0 防限流：semaphore 5→1，sleep 0.3s→1.0s
+- P1 实时快照：盘前 09:25 + 盘中 14:30 ET 双窗口
+- P2 板块轮动：20 个 US 板块资金流排名，每日 16:30 ET
+- P3 经纪商队列：不可用（需 LV2）
+
+### 中文管道 + 富途新闻 + TG 优化
+- 华尔街见闻中文管道：entity_extractor + priority + prompt + keywords 全覆盖
+- 富途新闻 `get_search_news` 接入调度器，35 关键词轮转
+- TG 卡片重构：三段式 `📌要点 + 📊分析 + 💥冲击`
+- TG 限流：单轮 ≤5 条，屏阈 0.15→0.22
+- 移除 TG 反馈按钮（保留深度分析 + 原文链接）
+- 移除 🇨🇳 前缀
+
+### 对抗性核实
+- 6 个运行时 bug 修复（时区 UTC→ET、send_system_alert 参数、NaN crash、bottom5 重叠等）
+
+### 关键 commit
+```
+e7bdc90 fix: TG推送 — send_message→app.bot.send_message + 格式去冗余
+0b4e9f5 fix: 对抗性核实 — 6个运行时bug修复
+f6ffa4d feat: 代码对齐 V2.5 生产级模型
+e2b0e52 feat: 板块轮动接入调度
+edb3a3b feat: P0防封禁 + P1实时快照
+965fa36 feat: 华尔街见闻中文管道适配
+8a945ca feat: 富途牛牛新闻采集
+2b7e064 feat: Futu OpenD fund flow — 替代东财采集器
+```
+
+### 待办
+- P1: ATR 波动率阈值 / 因子有效性回测
+- 新模块注册 module_registry.json
+- 新采集器补测试覆盖
+- 板块轮动 US. 前缀验证
+
+---
+
+## 2026-07-16T00:07+08:00 · 🎯 V2.1 综合方案 P0 落地
+
+### 来源
+- 用户提交方案给 DeepSeek AI 评估 → `docs/资金流信号方案-综合评估-V2.1.md`
+
+### P0 修正 (commit `8e4f360`, 已部署)
+1. **数据口径**: 超大单→主力(特大单+大单)合计, 防拆单
+2. **推送语义**: 买入/卖出→重点关注/风险预警, 加底背离/顶背离标签
+3. **财报静默**: yfinance calendar 查财报日, 后5日仅入库不推送
+
+### 前期累积
+- 分批采集 71只/4批/5min冷却/36min跑完
+- 双窗口 收盘+盘前
+- Prompt v2 LLM 主要观点
+
+---
+
+## 2026-07-15T19:50+08:00 · 🔧 东财 Collector 管线集成 — 已接入，待部署
+
+### 集成内容
+- **新建** `fund_flow_collector.py` (~230行) — 每日美东 17:00 自动采集 22 只关注股资金流
+- **新建** `fund_flow` DB 表 — ticker+date 唯一索引，upsert 幂等
+- **接入 main.py** — 独立后台循环 `_run_fund_flow_loop()`，每 30min 检查
+- **信号推送**: extreme 参与度 → Pushover 铃声 + TG；strong → TG 静默
+- **配置**: settings.yaml `fund_flow` 段 (22 tickers)；manifest 注册 2 模块
+- **docker**: 移除 compose 中 HTTP_PROXY 硬覆盖，ECS 端由 .env 控制 `HTTP_PROXY=http://172.17.0.1:9999`
+- **测试**: +33 tests (18 collector + 7 DB + 8 基础设施)，全量 576 pass / 7 预存 fail
+
+### 部署待办
+- commit + push → deploy-main.sh
+- ECS 手动: settings.yaml 加 `fund_flow` 段 + .env 设 HTTP_PROXY
+- 用户启动 `tools\start.bat` (代理 + SSH 隧道)
+
+---
+
+## 2026-07-15T19:31+08:00 · 🔄 富途 OpenD 取消 — 东财长期化
+
+### 用户决策
+- 不安装富途 OpenD
+- 东财 collector 从临时方案升级为永久方案
+- 代理/隧道方案成为长期基础设施
+
+### 影响
+- 不需要写富途版 collector
+- `tools/` 下代理脚本从临时变为长期维护
+- SESSION.md 已更新
+
+---
+
+## 2026-07-15T17:00+08:00 · 📊 资金流分析系统 — Prompt v2 + 东财 Collector
+
+### 用户需求
+- 在已有资金流分析 Prompt（docx）基础上，评估并集成到 news-monitor
+- 核心信号：股价涨跌与特大单流向是否一致（背离 = 拐点）
+
+### Prompt 改进 (v1→v2)
+- 重构为"背离信号"锚点架构——先找背离，再看辅助确认
+- 新增第〇步（噪音日过滤：财报/FOMC/CPI）、趋势定位、主力占比阈值
+- 强化验证条件格式（证实/证伪 + 量化指标 + T+N 窗口）
+- 保存到 `E:\分析报告\美股港股资金流分析专家 Prompt.md`
+
+### 东财 Collector (`news-monitor/collector/eastmoney_fetcher.py`)
+- 250 行，push2his API + ff.eastmoney.com HTTP 备用
+- 反爬措施：UA 池 / Referer / ut token / 6s 限速 / 指数退避 / 缓存
+- **网络问题**：ECS HK IP 被封 + 本地 GFW SSL 封锁 → 写代理方案解决
+- **代理方案**：本地 Python HTTP 代理 + SSH 反向隧道 → ECS 可走用户住宅 IP
+
+### 富途 OpenAPI 对比
+- 富途 `get_capital_flow` 提供完全一致的资金流字段，无 IP 封禁
+- 用户手动分析用的是富途数据 → 一致性更好
+- 暂用东财，待用户安装 OpenD 后切换
+- **东财 vs 富途数据差异**：方向一致（6/7 天），金额东财大 2-5x → 信号阈值已上调校准
+
+### 提交流程
+- 首次分析 NBIS 资金流：底背离信号确认，两份数据源结论一致
+- NBIS 07/14：-7.8% 跌 + 特大单逆势净流入 → 机构吸筹
+
+### 工具脚本 (`tools/`)
+- `eastmoney_proxy.py` — 本地 HTTPS 正向代理（仅放行 *.eastmoney.com）
+- `eastmoney_tunnel.bat` — SSH 反向隧道自动重连
+- `start.bat` — 一键启动代理 + 隧道
+
+---
+## 2026-07-15T11:27+08:00 · 📱 event_type 3 机构资金 → TG only
+
+### 用户反馈
+- ARK增持OKLO/XE（event_type=3, ★4）不应响手机
+- 原则: 别人的操作/观点 → TG only, 硬事实 → phone OK
+
+### 修复 (commit `392820c`, 已部署)
+- `event_channel_level`: event_type 3→notable (TG静默)，★5 豁免
+- 混合类型 [1,3] 不受限 — 有硬事件照样正常推
+- +6 tests, 58 passed, ECS 11:27 上线 ✅
+
+---
+
+## 2026-07-15T11:20+08:00 · 📱 同主题去重 — CPI 重复推送修复
+
+### 用户反馈
+- CPI 同一事件 3 小时内推了 3 条到手机（均为 ★4 important）
+- 要求: 同主题只推第一篇，后续除非强度升级否则不推
+
+### 修复 (commit `ee9b671`, 已部署)
+- `dispatch.py`: 6h 窗口内同主题去重，只限 Pushover (手机)，TG 全量
+- 主题键: ticker 优先 + macro 关键词归一化 (CPI/通胀/inflation → inflation)
+- 8 组 macro 正则 + 强度升级豁免 + 方向分离
+- 新增 23 tests (`test_dispatch_dedup.py`), 538 passed
+- ECS 11:20 上线 ✅
+
+---
+
+## 2026-07-14T22:30+08:00 · 🔧 Docker healthcheck 假阳性修复 — 已部署
+
+### 背景
+- V1 交接：Deploy 后 Docker healthcheck 间歇超时 → 容器 unhealthy → restart
+- 根因：`/health` 每次 ping 跑 8 次 `SELECT COUNT(*)`，管道高峰期 SQLite 写锁竞争 → 超 10s
+- V1 出方案 C（放宽 Dockerfile 参数），V2 评估 + 提案 → 对抗核实 → 选定最终方案
+
+### 过程
+1. V2 评估 V1 方案 C：同意方向，但发现 deploy-main.sh 不同步 docker/，改 Dockerfile 到不了 ECS
+2. V2 提案「独立线程 HTTP :8081 + 心跳」→ 对抗 agent 否决（3 致命缺陷：重启循环 / 部署不达 / 治标不治本）
+3. 最终方案：只改 routes.py，watchdog 每 60s 刷新内存缓存，/health 不碰 SQLite
+4. 对抗核实第二轮 → 发现 2 致命缺陷（同步调用未用 asyncio.to_thread / 零测试）→ 修复
+5. 5 道门禁全过 → 部署 ECS (bd76df0) ✅
+
+### 其他
+- V1/V2 身份澄清：V1=v1-stable 工作树，V2=main。之前 V2 误读 SESSION.md 把「v1-stable reset 对齐 main」理解成「V1 搬到 main」
+- v1-stable 工作树两次重建（prunable → clean → 再次损坏 → 再次修复）
+- 记忆新增 `v1-v2-identity.md`（权威身份定义）
+- V1→V2 交接文件已同步到 v1-stable 分支
+- 新测试 5 个 (`test_health_cache.py`)，全量 523 passed
+
+---
+
+## 2026-07-14T21:52+08:00 · 🛡️ CPI 宏观事件漏推修复 — 已部署
+
+### 用户反馈
+- 美国 6 月 CPI 3.5% 远低于预期 3.8%，重要宏观新闻未推送
+
+### 诊断（双层故障）
+1. **event_driven prompt**：把 CPI 判为"纯宏观数据，无公司催化剂"，`is_event=false`
+2. **evaluate.py 代码 bug**：`is_event=false` 时强制 NORMAL，impact 评的 85 分被完全丢弃
+
+### 修复 (commit `ceeb86b`, 部署 `deploy-main.sh`)
+- **代码**：`is_event=false` 但 impact ≥ 80 → 救回 NOTABLE（静默 TG），不再强制静音
+- **Prompt**：`event_driven_v1.txt` 反过滤例外新增宏观数据（CPI/非农/GDP/FOMC/ISM）
+- 518 tests 绿（7 个已有路径问题无关），ECS 21:52 上线 ✅
+
+---
 
 ## 2026-07-14T15:55+08:00 · ✂️ deep_lane prompt 精简 + 新闻要点 — 已部署
 
@@ -2564,3 +2764,119 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 ---
 
 ## 2026-07-14T18:00+08:00 · 会话继续
+
+## 2026-07-14T18:09 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 28ace28 · 2026-07-14T18:01 · @ docs: LLM Wiki Phase 1 MVP 交付记录 — HISTORY+SESSION 更新 [skip-tests]
+
+---
+
+### e11914d · 2026-07-14T18:07 · docs(session): 关机同步 — V1 边界确认 + Docker healthcheck 方案交接 [skip-tests]
+
+---
+
+### 4bb9002 · 2026-07-14T18:08 · @ docs: 关机同步 — LLM Wiki MVP 交付 + V1/V2 分工确认 [skip-tests]
+
+---
+
+---
+
+## 2026-07-14T21:00+08:00 · 会话开始
+
+## 2026-07-14T22:52 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 429c3a9 · 2026-07-14T22:50 · docs: 关机同步 — Docker healthcheck 修复部署 + V1/V2 身份澄清
+
+本会话交付：
+- /health 零 DB 阻塞已部署 ECS
+- V1/V2 身份记忆已纠正
+- v1-stable 工作树已重建
+- 5 个新测试
+
+---
+
+---
+
+## 2026-07-15T10:54+08:00 · 会话开始
+
+## 2026-07-15T11:31 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 96dd552 · 2026-07-15T11:30 · docs: 关机同步 — 手机推送双规则收紧 (同主题去重 + 机构资金TG only)
+
+---
+
+### 5893dee · 2026-07-15T11:30 · docs: 关机同步 — 更新 SESSION.md
+
+---
+
+---
+
+## 2026-07-15T13:04+08:00 · 会话开始
+
+## 2026-07-15T17:42 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 5f9c490 · 2026-07-15T13:59 · docs: 会话同步 — 补录关机提交 + 新会话开始
+
+---
+
+### 4a4765e · 2026-07-15T17:20 · feat: 资金流分析系统 — Prompt v2 + 东财 Collector + 代理工具
+
+- Prompt v2: 背离信号锚点架构，噪音过滤，主力占比阈值，验证条件强化
+- eastmoney_fetcher.py: 250行，push2his + ff fallback，反爬全栈
+- tools/: 本地代理 + SSH 隧道自动重连
+- 信号强度已校准（东财 vs 富途 2-5x 差异）
+
+---
+
+---
+
+## 2026-07-15T19:31+08:00 · 会话开始
+
+## 2026-07-16T00:32 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### fa0065b · 2026-07-16T00:24 · feat: MacroAgent — 宏观新闻独立评估通道 (V2.1)
+
+问题: PPI超预期但零推送，被去重判为预告重复 + Screen低阈值吞掉
+
+方案:
+- 去重豁免: DedupManager 加载 macro_indicators.yaml 白名单,
+  标题命中宏观关键词的新闻自动跳过去重
+- MacroAgent (engine): 白名单检测 + LLM Tier×偏离矩阵评估
+- MacroStage (pipeline): 插在Ingest后/Screen前, 宏观新闻直接路由Dispatch
+- Screen/Evaluate: 检测 _macro_routed 标记, 跳过已评估的宏观项
+- macro_indicators.yaml: 15个指标×中英文变体 + 预览类关键词
+- macro_eval.txt: LLM prompt — 4步评估(Tier分档→预告排除→偏离判断→查表定级)
+
+默认透传: LLM失败/JSON解析失败/非宏观 → 原样交给Screen
+
+---
+
+### ccf7e3d · 2026-07-16T00:28 · docs: 关机同步 — 会话记录 + 背离信号方案
+
+---
+
+---
+
+## 2026-07-16T08:31+08:00 · 会话开始
+
+## 2026-07-16T14:07 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 3c4706a · 2026-07-16T14:04 · docs: 关机同步 — 会话记录 + SESSION.md 更新
+
+---
+
+---
+
+## 2026-07-16T15:08+08:00 · 会话开始

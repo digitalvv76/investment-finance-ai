@@ -771,8 +771,14 @@ async def handle_callback(update, context, db: Database,
             pass
 
     elif action == 'analyze':
-        await query.message.reply_text("正在深度分析...")
-        if deep_lane and news_id:
+        if not deep_lane:
+            await query.message.reply_text("⚠️ 深度分析引擎未就绪，请稍后重试。")
+        elif not news_id:
+            # news_id=0 means the item was a duplicate (INSERT OR IGNORE) —
+            # the card should never have been pushed, but handle gracefully.
+            await query.message.reply_text("⚠️ 该条目未入库，无法深度分析。")
+        else:
+            await query.message.reply_text("正在深度分析...")
             news_dict = db.get_news_by_id(news_id)
             if news_dict:
                 item = _newsitem_from_dict(news_dict)
@@ -789,8 +795,8 @@ async def handle_callback(update, context, db: Database,
                 except Exception as e:
                     logger.error(f"按需分析失败: {e}")
                     await query.message.reply_text("分析失败，请稍后重试。")
-        else:
-            await query.message.reply_text("深度分析引擎未就绪。")
+            else:
+                await query.message.reply_text("⚠️ 未找到该新闻记录，可能已被清理。")
 
     elif action == 'ignore':
         await query.edit_message_reply_markup(reply_markup=None)
