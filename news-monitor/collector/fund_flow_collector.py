@@ -59,12 +59,13 @@ def _load_prompt_v2() -> str:
     # Inline fallback — short version of the key instructions
     return (
         "你是一位拥有15年美股/港股市场经验的专业资金流分析师。\n"
-        "核心信念：不看单日涨跌，看涨跌与主力流向是否一致。"
+        "核心信念：不看单日涨跌，看涨跌与特大单流向是否一致。"
         "一致 = 趋势延续；背离 = 拐点临近。\n\n"
-        "⚠️ 主力 ≠ 特大单+大单。主力是 Futu 算法独立识别的 Block Orders。\n\n"
+        "⚠️ 分析锚点是"特大单"列。第3列"主力净流入"=特大单+大单的合计（防拆单），"
+        "用于计算主力占比，不作为背离方向判断的锚点。\n\n"
         "## 背离框架\n"
-        "底背离（重点关注）：股价下跌 + 主力逆势净流入 = 主力吸筹\n"
-        "顶背离（风险预警）：股价上涨 + 主力逆势净流出 = 主力出货\n\n"
+        "底背离（重点关注）：股价暴跌 + 特大单逆势净流入 = 主力吸筹\n"
+        "顶背离（风险预警）：股价大涨 + 特大单逆势净流出 = 主力出货\n\n"
         "## 输出要求\n"
         "先输出「核心信号」1-2句（有/无背离，方向，强度），"
         "再输出完整分析（趋势定位→背离细节→辅助确认→情景推演→验证条件）。"
@@ -77,18 +78,19 @@ def _load_prompt_v2() -> str:
 
 @dataclass
 class FundFlowSignal:
-    """Computed signal from a ticker's fund flow data — Futu standard.
+    """Computed signal from a ticker's fund flow data.
 
-    Primary metric: main_net = Futu's algorithm-identified 主力 (Block Orders).
-    This is a standalone metric, NOT a simple sum of super_big + big.
+    ★ Anchor: 特大单 (super_big_net) — the signal that can't be faked.
+    主力 = 特大单+大单 (V2.1 P0: anti-splitting).
+    主力占比 = (特大+大) / abs(total) * 100.
     """
 
     ticker: str
     continuity: str          # "continuous_inflow" | "continuous_outflow" | "mixed"
     participation: str       # "extreme" | "strong" | "normal" | "low"
-    cum_main_3d: float       # 3-day cumulative 主力 net (Futu main_in_flow)
-    cum_super_big_3d: float  # 3-day cumulative 特大单 net (reference only)
-    latest_main_pct: float   # latest day main_pct = 主力 / abs(total_flow) * 100
+    cum_main_3d: float       # 3-day 主力 (super+big) cumulative
+    cum_super_big_3d: float  # 3-day ★ 特大单 cumulative (the anchor)
+    latest_main_pct: float   # 主力占比 = (super+big) / abs(total) * 100
     price_change_3d: float = 0.0       # 3-day cumulative price change (%)
     price_data: list[dict] = field(default_factory=list)  # [{date, close}]
     fund_flow_days: list = field(default_factory=list)    # FundFlowDay objects
@@ -527,7 +529,8 @@ class FundFlowCollector:
     async def _push_extreme(self, s: FundFlowSignal, window: str = WINDOW_POST):
         """★★★ 强背离 → Pushover + Telegram.
 
-        Futu standard: 底背离=重点关注, 顶背离=风险预警 (not 买入/卖出).
+        底背离=重点关注, 顶背离=风险预警 (not 买入/卖出).
+        Anchor: 特大单.
         """
         inflow = s.cum_main_3d > 0
         emoji = "🔵" if inflow else "⚠️"

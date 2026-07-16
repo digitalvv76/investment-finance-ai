@@ -27,28 +27,34 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class FundFlowDay:
-    """Single day of money flow data — Futu standard.
+    """Single day of money flow data.
 
-    Futu order-size tiers (algorithm-defined, not fixed CNY thresholds):
-      main       — 主力 (Block Orders): institution/insider orders identified
-                   by trading pattern, not simple amount aggregation
-      super_big  — 特大单: extra-large block trades
-      big        — 大单: large orders
-      mid        — 中单: medium orders
-      sml        — 小单: small/retail orders
+    Analysis framework (user-defined):
+      Anchor  — 特大单 (super_big): single trade ≥ 100万 CNY equivalent.
+                Institutions cannot hide block trades; this is the ONE signal
+                that cannot be faked.
+      主力     — 特大单 + 大单 combined. Prevents institutions from hiding
+                behind order-splitting (拆单). Used for participation ratio.
+      中单/小单 — Retail sentiment confirmation (reverse indicator).
 
-    CRITICAL: Futu's `main` is a standalone metric — it is NOT simply
-    super_big + big. It represents algorithmically-identified "smart money"
-    flow. Do NOT decompose it into sub-components.
+    Futu raw fields are mapped as follows:
+      Futu super_in_flow → super_big_net  (the anchor)
+      Futu big_in_flow   → big_net
+      Futu mid_in_flow   → mid_net
+      Futu sml_in_flow   → sml_net
+      Futu main_in_flow  → NOT used directly. Futu's algorithmic "main" is
+                           informative but NOT the framework anchor.
+
+    main_net is COMPUTED: super_big_net + big_net (our definition of 主力).
     """
 
     date: str
-    main_net: float = 0.0        # 主力净流入 (Futu: main_in_flow)
-    super_big_net: float = 0.0   # 特大单净流入 (Futu: super_in_flow)
-    big_net: float = 0.0         # 大单净流入 (Futu: big_in_flow)
-    mid_net: float = 0.0         # 中单净流入 (Futu: mid_in_flow)
-    small_net: float = 0.0       # 小单净流入 (Futu: sml_in_flow)
-    main_pct: float = 0.0        # 主力占比 = main_net / abs(total_flow) * 100
+    main_net: float = 0.0        # 主力 = 特大单+大单 (computed: super+big)
+    super_big_net: float = 0.0   # ★ 特大单 (THE anchor — Futu: super_in_flow)
+    big_net: float = 0.0         # 大单 (Futu: big_in_flow)
+    mid_net: float = 0.0         # 中单 (Futu: mid_in_flow)
+    small_net: float = 0.0       # 小单 (Futu: sml_in_flow)
+    main_pct: float = 0.0        # 主力占比 = (特大+大) / abs(total) * 100
 
     # Derived fields (populated post-fetch from yfinance)
     close_price: float = 0.0
@@ -220,30 +226,32 @@ class FutuFundFlowFetcher:
                     if " " in flow_time:
                         flow_time = flow_time.split(" ")[0]
 
-                    main_in = float(row.get("main_in_flow", 0) or 0)
                     super_in = float(row.get("super_in_flow", 0) or 0)
                     big_in = float(row.get("big_in_flow", 0) or 0)
                     mid_in = float(row.get("mid_in_flow", 0) or 0)
                     sml_in = float(row.get("sml_in_flow", 0) or 0)
                     in_flow = float(row.get("in_flow", 0) or 0)
 
-                    # Compute main_pct: main / abs(total) * 100
+                    # ★ 主力 = 特大单 + 大单 (V2.1 P0: 防机构拆单)
+                    our_main = super_in + big_in
+
+                    # 主力占比 = (特大+大) / abs(total) * 100
                     if in_flow != 0:
-                        main_pct = (main_in / abs(in_flow)) * 100
+                        main_pct = (our_main / abs(in_flow)) * 100
                     else:
                         total_abs = (
-                            abs(main_in) + abs(super_in) + abs(big_in)
+                            abs(super_in) + abs(big_in)
                             + abs(mid_in) + abs(sml_in)
                         )
                         if total_abs > 0:
-                            main_pct = (main_in / total_abs) * 100
+                            main_pct = (our_main / total_abs) * 100
                         else:
                             main_pct = 0.0
 
                     fd = FundFlowDay(
                         date=flow_time,
-                        main_net=main_in,
-                        super_big_net=super_in,
+                        main_net=our_main,         # computed: super + big
+                        super_big_net=super_in,     # ★ anchor
                         big_net=big_in,
                         mid_net=mid_in,
                         small_net=sml_in,
@@ -314,62 +322,95 @@ class FutuFundFlowFetcher:
 def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
     """Compute price vs fund-flow divergence signal from recent days.
 
+    ★ Anchor: 特大单 (super_big_net) — the ONE signal that can't be faked.
+    Uses 主力 (super+big) for participation ratio, per V2.1 P0 anti-splitting.
+
     Returns dict with keys:
       signal: "bullish_divergence" | "bearish_divergence" | "confirmation" | "none"
       strength: 0-100
       detail: one-line summary
+      details: dict with cum_main_3d, cum_super_big_3d, latest_main_pct, etc.
     """
     if len(days) < 3:
-        return {"signal": "none", "strength": 0, "detail": "insufficient data"}
+        return {"signal": "insufficient_data", "strength": 0, "detail": "insufficient data"}
 
-    # Look at last 3 trading days
     recent = days[-3:]
+    latest = recent[-1]
 
+    # --- Anchor: 特大单 direction ---
+    cum_super_big = sum(d.super_big_net for d in recent)
+    cum_main = sum(d.main_net for d in recent)  # super+big combined
+
+    price_changes = [d.change_pct for d in recent if d.change_pct != 0]
+    cum_price = sum(price_changes) if price_changes else 0
+
+    super_directions = [1 if d.super_big_net > 0 else -1 if d.super_big_net < 0 else 0 for d in recent]
+    super_continuity = sum(super_directions)
+
+    # --- Divergence detection (anchor = 特大单) ---
     price_direction = 0
     flow_direction = 0
     divergent_count = 0
 
     for i in range(1, len(recent)):
         prev, curr = recent[i - 1], recent[i]
-
         price_delta = curr.change_pct - prev.change_pct
-        flow_delta = curr.main_net - prev.main_net
+        # ★ Anchor: use super_big_net, not main_net
+        flow_delta = curr.super_big_net - prev.super_big_net
 
         if price_delta != 0:
             price_direction += 1 if price_delta > 0 else -1
         if flow_delta != 0:
             flow_direction += 1 if flow_delta > 0 else -1
 
-        # Divergence: price up but main force selling (or vice versa)
+        # Divergence: price vs 特大单
         if price_delta > 0 and flow_delta < 0:
-            divergent_count += 1  # bearish: price up, money out
+            divergent_count += 1  # bearish: price up, 特大单 selling
         elif price_delta < 0 and flow_delta > 0:
-            divergent_count += 1  # bullish: price down, money in
+            divergent_count += 1  # bullish: price down, 特大单 buying
 
     # Determine signal
     if divergent_count >= 2:
         if price_direction < 0 and flow_direction > 0:
             signal = "bullish_divergence"
-            detail = f"价格下跌但主力连续{divergent_count}日净流入，底背离信号"
+            detail = f"价格下跌但特大单连续{divergent_count}日逆势净流入，底背离信号"
         elif price_direction > 0 and flow_direction < 0:
             signal = "bearish_divergence"
-            detail = f"价格上涨但主力连续{divergent_count}日净流出，顶背离信号"
+            detail = f"价格上涨但特大单连续{divergent_count}日逆势净流出，顶背离信号"
         else:
             signal = "divergence"
-            detail = f"价格与资金流向{divergent_count}日背离"
+            detail = f"价格与特大单流向{divergent_count}日背离"
         strength = min(divergent_count * 35, 100)
     elif divergent_count == 1:
         signal = "warning"
-        detail = "出现1日背离，关注后续确认"
+        detail = "特大单出现1日背离，关注后续确认"
         strength = 30
     elif price_direction != 0 and flow_direction != 0 and price_direction == flow_direction:
         signal = "confirmation"
         direction = "看涨" if price_direction > 0 else "看跌"
-        detail = f"价格与资金方向一致（{direction}），趋势确认"
+        detail = f"价格与特大单方向一致（{direction}），趋势确认"
         strength = 60
     else:
         signal = "none"
-        detail = "无明显背离信号"
+        detail = "特大单无明显背离信号"
         strength = 0
 
-    return {"signal": signal, "strength": strength, "detail": detail}
+    return {
+        "signal": signal, "strength": strength, "detail": detail,
+        "details": {
+            "continuity": (
+                "continuous_inflow" if super_continuity >= 2
+                else "continuous_outflow" if super_continuity <= -2
+                else "mixed"
+            ),
+            "participation": (
+                "extreme" if abs(latest.main_pct) > 15
+                else "strong" if abs(latest.main_pct) > 8
+                else "normal" if abs(latest.main_pct) > 3
+                else "low"
+            ),
+            "cum_main_3d": cum_main,              # 主力 (super+big) 3日累计
+            "cum_super_big_3d": cum_super_big,     # 特大单 3日累计
+            "latest_main_pct": latest.main_pct,    # 主力占比 = (super+big)/total
+        },
+    }
