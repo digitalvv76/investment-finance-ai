@@ -714,6 +714,87 @@ async def cmd_daily(update, context, db: Database):
         await update.message.reply_text("简报生成失败，请稍后重试。")
 
 
+async def cmd_ff(update, context, db: Database, ff_collector=None, **kwargs):
+    """Handle /ff TICKER — 查看资金流完整分析报告."""
+    ticker = (context.args[0] if context.args else "").upper().strip()
+    if not ticker or len(ticker) > 5 or not ticker.isalpha():
+        await update.message.reply_text(
+            "用法：<code>/ff TICKER</code>\n例如：/ff ASTS",
+        )
+        return
+
+    if ff_collector is None:
+        await update.message.reply_text("资金流分析引擎未就绪，请稍后再试。")
+        return
+
+    await update.message.chat.send_action("typing")
+
+    try:
+        rows = db.get_fund_flow(ticker, days=20)
+        if len(rows) < 3:
+            await update.message.reply_text(
+                f"<b>{ticker}</b> 资金流数据不足（需至少3个交易日），请等待更多数据入库。"
+            )
+            return
+
+        sig = ff_collector._reconstruct_signal(ticker, rows)
+        if sig is None:
+            await update.message.reply_text(
+                f"<b>{ticker}</b> 无法生成资金流信号，数据可能不完整。"
+            )
+            return
+
+        # Run LLM analysis if not already done
+        if not sig.analysis_full:
+            await ff_collector._analyze_signal(sig)
+
+        if not sig.analysis_full:
+            await update.message.reply_text(
+                f"<b>{ticker}</b> LLM 分析生成失败，请稍后重试。"
+            )
+            return
+
+        # Build report
+        st = sig.signal_type or "none"
+        dir_label = {
+            "bearish_divergence": "🔴 顶背离（风险）",
+            "bullish_divergence": "🟢 底背离（机会）",
+            "confirmation": "🟡 量价同向确认",
+            "warning": "⚠️ 预警",
+        }.get(st, "⚪ 无量价信号")
+
+        direction = "流入" if sig.cum_main_3d > 0 else "流出"
+        lines = [
+            f"<b>📊 {ticker} 资金流深度分析</b>",
+            f"",
+            f"<b>信号类型：</b>{dir_label}",
+            f"<b>信号强度：</b>{sig.signal_strength}",
+            f"<b>主力占比：</b>{sig.latest_main_pct:.1f}%",
+            f"<b>3日主力净{direction}：</b>${abs(sig.cum_main_3d)/1e8:.2f}亿",
+        ]
+        if sig.cum_price_3d != 0:
+            lines.append(f"<b>3日价格变动：</b>{sig.cum_price_3d:+.1f}%")
+        if sig.golden_pit:
+            lines.append(f"<b>特殊信号：</b>🏆 黄金坑")
+        if sig.retail_trap:
+            lines.append(f"<b>特殊信号：</b>⚠️ 散户陷阱")
+
+        lines.append(f"")
+        lines.append(sig.analysis_full)
+
+        msg = "\n".join(lines)
+        # TG max 4096, truncate if needed
+        if len(msg) > 4000:
+            msg = msg[:4000] + "\n\n...（报告过长，已截断）"
+
+        await update.message.reply_text(msg)
+
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(f"cmd_ff failed for {ticker}")
+        await update.message.reply_text(f"<b>{ticker}</b> 分析出错，请稍后重试。")
+
+
 async def cmd_help(update, context, db: Database):
     await cmd_start(update, context, db)
 
@@ -808,7 +889,7 @@ async def handle_callback(update, context, db: Database,
 
 def register_handlers(app: Application, db: Database,
                       deep_lane=None, learner=None, curator=None,
-                      trainer=None) -> None:
+                      trainer=None, ff_collector=None) -> None:
     """Register all command and callback handlers on the application."""
 
     # Bind db (+ optional dependencies) to each handler.
@@ -816,6 +897,7 @@ def register_handlers(app: Application, db: Database,
     extras = dict(
         deep_lane=deep_lane, learner=learner,
         curator=curator, trainer=trainer,
+        ff_collector=ff_collector,
     )
     extras_cb = dict(deep_lane=deep_lane, learner=learner)
 
@@ -830,6 +912,7 @@ def register_handlers(app: Application, db: Database,
     app.add_handler(CommandHandler("train",     H(cmd_train, **extras)))
     app.add_handler(CommandHandler("daily",     H(cmd_daily)))
     app.add_handler(CommandHandler("analyze",   H(cmd_analyze, **extras)))
+    app.add_handler(CommandHandler("ff",        H(cmd_ff, **extras)))
     app.add_handler(CommandHandler("alert",     H(cmd_alert)))
     app.add_handler(CommandHandler("strategic", H(cmd_strategic)))
     app.add_handler(CommandHandler("reason",    H(cmd_reason)))

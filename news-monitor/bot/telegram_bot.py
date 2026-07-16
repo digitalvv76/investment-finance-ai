@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class NewsBot:
-    def __init__(self, token: str, db: Database, config: ConfigLoader, deep_lane=None, learner=None, curator=None, trainer=None):
+    def __init__(self, token: str, db: Database, config: ConfigLoader, deep_lane=None, learner=None, curator=None, trainer=None, ff_collector=None):
         self.token = token
         self.db = db
         self.config = config
@@ -24,6 +24,7 @@ class NewsBot:
         self.learner = learner
         self.curator = curator
         self.trainer = trainer
+        self.ff_collector = ff_collector
         self._app: Optional[Application] = None
         self._translator = get_translator()
 
@@ -76,7 +77,7 @@ class NewsBot:
         self._app = Application.builder().token(self.token).build()
 
         # Register command and callback handlers
-        register_handlers(self._app, self.db, self.deep_lane, self.learner, self.curator, self.trainer)
+        register_handlers(self._app, self.db, self.deep_lane, self.learner, self.curator, self.trainer, ff_collector=self.ff_collector)
 
         # Initialize and auto-detect chat_id BEFORE starting polling
         await self._app.initialize()

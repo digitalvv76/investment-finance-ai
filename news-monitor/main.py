@@ -190,7 +190,7 @@ class NewsMonitor:
             logger.warning("TELEGRAM_BOT_TOKEN not set -- bot disabled")
             self.bot = None
         else:
-            self.bot = NewsBot(token, self.db, self.config, self.deep_lane, self.learner, self.curator, self.trainer)
+            self.bot = NewsBot(token, self.db, self.config, self.deep_lane, self.learner, self.curator, self.trainer, ff_collector=self.fund_flow_collector)
             self.fund_flow_collector._bot = self.bot
 
         # ---- web dashboard (optional) --------------------------------
