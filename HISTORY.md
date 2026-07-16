@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-16+17 · 收尾清账 + 第三方评估方案 + ECS 紧急修复
+
+### 收尾清账
+- **V2 待办清零**: 手机推送门槛+去重 V2 已做 (`f71c57d`+`c7c888b`)；部署哨兵评估不通过（五项检查 0/5 命中真实故障）；训练体系取消；富途 P3 取消（无数据）
+- **Position-analytics 方案**: P0 验证 Futu OpenSecTradeContext 需 RSA 加密，当前未配 → 搁置
+- **资金流信号**: V1 全链路梳理 → 交 V2 再次评估
+- **ORM 讨论**: 评估不做
+
+### 产出
+- **第三方评估方案** (`docs/third-party-evaluation-brief.md`, `5caf69a`): 系统全貌+架构+5 事故+5 代码债+6 维度 29 问，已推送 v1-stable
+
+### ECS 紧急修复
+- **HuggingFace CDN 被墙** (`2026-07-16T22:55`): V2 部署后容器重建，sentence-transformers 模型下载卡在 cdn-lfs.huggingface.co（中超→CDN 不通）
+  - 尝试 hf-mirror.com → 308 redirect 不 work
+  - 最终方案: `HF_HUB_OFFLINE=1` 跳过下载，语义去重降级，其余功能正常
+  - ⚠️ ECS compose 有本地改动需同步 main
+
+### 踩坑
+- 容器重建每次丢 HuggingFace 模型缓存（不在 Docker volume），需挂载 volume 持久化
+- hf-mirror.com 不可靠，返回 308 回到 huggingface.co
+
+---
+
 ## 2026-07-16 续 · MacroAgent 空洞 + 手机门槛 + 部署哨兵 + 合并 main
 
 ### 诊断
