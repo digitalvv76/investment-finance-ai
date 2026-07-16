@@ -102,7 +102,8 @@ class EntityExtractor:
             "拉姆研究": "LRCX", "科磊": "KLAC", "安森美": "ON",
             "迈威尔": "MRVL", "迈威尔科技": "MRVL",
             "安谋": "ARM", "安谋科技": "ARM",
-            "台积电": "TSM", "联电": "UMC",
+            "台积电": "TSM", "台积": "TSM", "台积公司": "TSM",
+            "联电": "UMC",
             # 关注股 — 半导体/AI
             "帕兰提尔": "PLTR", "帕兰泰尔": "PLTR",
             # 关注股 — 太空/防务
@@ -133,6 +134,12 @@ class EntityExtractor:
             "贝宝": "PYPL",
             # 波音
             "波音": "BA",
+            # 中概 / 港股 ADR (cross-market news often uses Chinese names)
+            "腾讯": "TCEHY", "腾讯控股": "TCEHY",
+            "阿里巴巴": "BABA", "阿里": "BABA",
+            "百度": "BIDU", "京东": "JD",
+            "拼多多": "PDD", "蔚来": "NIO",
+            "小鹏": "XPEV", "理想": "LI",
         }
 
         # Known entities from keywords config

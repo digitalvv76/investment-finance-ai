@@ -105,6 +105,39 @@ class DispatchStage:
         # Companion cache: topic_key → headline_signal text (for cross-key similarity)
         self._headline_cache: dict[str, str] = {}
 
+    # ── Phone threshold gate ──
+    # IMPORTANT alerts only reach phone for watchlist stocks or macro ≥85.
+    # Non-watchlist events still hit Telegram, just don't vibrate the phone.
+    _PHONE_MACRO_MIN_SCORE = 85
+
+    def _phone_threshold_ok(self, item: PipelineItem) -> tuple[bool, str]:
+        """Check if an IMPORTANT item is phone-worthy.
+
+        Returns (ok, reason). ok=False means skip phone, TG only.
+        """
+        d = item.decision
+        tickers = d.ticker_hint or []
+        is_macro = bool(item.macro_tags)
+        impact = d.impact_score or 0
+
+        # Watchlist / tracked tickers → phone
+        if tickers:
+            try:
+                from engine.relevance import get_tracked_tickers
+                tracked = get_tracked_tickers()
+                if any(t.upper().strip() in tracked for t in tickers if t and t.strip()):
+                    return True, "watchlist_ticker"
+            except Exception:
+                pass
+
+        # Macro shock ≥ 85 → phone
+        if is_macro and impact >= self._PHONE_MACRO_MIN_SCORE:
+            return True, f"macro_shock(impact={impact})"
+
+        return False, (
+            f"below_phone_threshold(tickers={tickers}, macro={is_macro}, impact={impact})"
+        )
+
     # ── headline_signal similarity threshold for cross-ticker dedup ──
     # When two articles about the same event use different ticker names
     # (e.g. "台积电" vs "TSM"), the ticker-based dedup key won't match.
@@ -243,6 +276,20 @@ class DispatchStage:
                             item.id, reason,
                         )
                         continue
+
+                    # ── Phone threshold gate ──
+                    # IMPORTANT alerts only push to phone for watchlist stocks
+                    # OR macro events with impact_score ≥ 85.  Everything else
+                    # stays Telegram-only (no phone vibration).
+                    # (V1 spec: phone-threshold-raise — reduce weekly vibrations)
+                    if level == AlertLevel.IMPORTANT:
+                        ok, gate_reason = self._phone_threshold_ok(item)
+                        if not ok:
+                            logger.info(
+                                "DISPATCH: phone threshold SKIP #%d: %s",
+                                item.id, gate_reason,
+                            )
+                            continue
 
                 # ── TG rate limit ──
                 if channel.name == "telegram" and tg_pushed >= self._MAX_TG_PER_CYCLE:

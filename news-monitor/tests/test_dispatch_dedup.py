@@ -14,17 +14,20 @@ from pipeline.dispatch import DispatchStage, _dedup_key, _DEDUP_WINDOW_SECONDS
 # ── Helpers ────────────────────────────────────────────────────────────
 
 def _item(title="", headline_signal="", ticker_hint=None, intensity=4,
-          direction="up", alert_level=AlertLevel.IMPORTANT, id=1):
+          direction="up", alert_level=AlertLevel.IMPORTANT, id=1,
+          impact_score=0, macro_tags=""):
     """Minimal PipelineItem with DispatchDecision for dispatch tests."""
     return PipelineItem(
         id=id,
         title=title,
+        macro_tags=macro_tags,
         decision=DispatchDecision(
             alert_level=alert_level,
             intensity=intensity,
             direction=direction,
             headline_signal=headline_signal,
             ticker_hint=ticker_hint or [],
+            impact_score=impact_score,
         ),
     )
 
@@ -237,15 +240,15 @@ async def test_dispatch_cpi_trio_only_first_to_pushover():
     stage = DispatchStage([pushover, telegram])
 
     items = [
-        _item(id=1, title="CPI低于预期，道指开盘走高",
-              headline_signal="CPI超预期回落至3.5%，降息预期升温，系统性利好美股",
-              intensity=4, direction="up"),
+        _item(id=1, title="CPI暴跌至3.5%，降息预期飙升",
+              headline_signal="CPI大幅回落至3.5%远超预期，市场押注9月降息50bp",
+              intensity=5, direction="up", impact_score=100, macro_tags="CPI"),  # ≥85 → phone
         _item(id=2, title="CPI Headline Inflation Drops To 3.5%",
               headline_signal="CPI超预期回落至3.5%，助力股市走高",
-              intensity=4, direction="up"),
+              intensity=4, direction="up", impact_score=80, macro_tags="CPI"),  # <85 → TG only
         _item(id=3, title="6月通胀放缓至3.5%，但能持续多久？",
               headline_signal="6月通胀放缓至3.5%，但投资者需知后续风险",
-              intensity=4, direction="up"),
+              intensity=4, direction="up", impact_score=80, macro_tags="CPI"),
     ]
 
     await stage.process(items)
@@ -267,7 +270,7 @@ async def test_dispatch_intensity_upgrade_repushes():
 
     items = [
         _item(id=1, title="CPI低于预期", headline_signal="CPI通胀放缓至3.5%",
-              intensity=4, direction="up"),
+              intensity=4, direction="up", impact_score=100, macro_tags="CPI"),
         _item(id=2, title="CPI暴跌！紧急降息", headline_signal="CPI意外暴跌，美联储紧急降息50bp",
               intensity=5, direction="up", alert_level=AlertLevel.CRITICAL),
     ]
@@ -288,7 +291,7 @@ async def test_dispatch_mixed_tickers_all_pass():
     items = [
         _item(id=1, title="NVDA earnings", ticker_hint=["NVDA"],
               intensity=4, direction="up"),
-        _item(id=2, title="AAPL product launch", ticker_hint=["AAPL"],
+        _item(id=2, title="RKLB launch success", ticker_hint=["RKLB"],
               intensity=4, direction="up"),
         _item(id=3, title="TSLA delivery beat", ticker_hint=["TSLA"],
               intensity=4, direction="up"),
@@ -347,14 +350,16 @@ async def test_headline_similarity_cross_ticker_dedup():
     telegram = SpyChannel("telegram")
     stage = DispatchStage([pushover, telegram])
 
-    # Item 1: Chinese source — LLM doesn't map 台积电→TSM, ticker_hint empty
-    item1 = _item(id=1, title="台积电3nm制程涨价20%",
-                  headline_signal="台积电宣布3nm制程涨价20%，利好半导体代工板块",
-                  ticker_hint=[], intensity=4, direction="up")
+    # Item 1: Chinese source — article covers TSMC+NVIDIA, LLM picks NVDA
+    # NVDA is in watchlist → phone threshold passes
+    item1 = _item(id=1, title="台积电3nm制程涨价20%，英伟达成本承压",
+                  headline_signal="台积电宣布3nm制程涨价20%，英伟达GPU成本将上升，利好半导体代工板块",
+                  ticker_hint=["NVDA"], intensity=4, direction="up")
 
-    # Item 2: English source — LLM gives TSM, ticker_hint=["TSM"]
+    # Item 2: English source — same event, LLM picks TSM (different ticker!)
+    # TSM is in watchlist → phone threshold passes
     item2 = _item(id=2, title="TSMC Raises 3nm Prices By 20%",
-                  headline_signal="台积电3nm晶圆代工价格上调20%，反映AI芯片强劲需求",
+                  headline_signal="台积电3nm晶圆代工价格上调20%，反映AI芯片强劲需求，利好台积电毛利率",
                   ticker_hint=["TSM"], intensity=4, direction="up")
 
     await stage.process([item1])
