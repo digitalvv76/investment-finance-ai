@@ -243,8 +243,8 @@ class FutuFundFlowFetcher:
                             "close": float(kr.get("close", 0) or 0),
                             "change_rate": float(kr.get("change_rate", 0) or 0),
                         }
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Futu K-line failed for %s: %s", futu_code, e)
 
             # Stock name from snapshot
             try:
