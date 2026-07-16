@@ -102,6 +102,8 @@ class FundFlowSignal:
     analysis_full: str = ""            # LLM 完整报告
     silenced: bool = False             # true = 财报静默期内，仅入库不推送
     market: str = ""                   # "US" / "HK" — determines currency display
+    signal_type: str = ""              # "bullish_divergence" / "bearish_divergence" / "confirmation" / "warning" / "none"
+    cum_price_3d: float = 0.0          # true cumulative 3-day return from Futu close prices
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +371,8 @@ class FundFlowCollector:
             latest_main_pct=details.get("latest_main_pct", 0.0),
             fund_flow_days=days,
             market=_infer_market(ticker),
+            signal_type=signal_dict.get("signal", "none"),
+            cum_price_3d=details.get("cum_price", 0.0),
         )
 
     # ------------------------------------------------------------------
@@ -504,11 +508,13 @@ class FundFlowCollector:
             ticker=result.ticker,
             continuity=details.get("continuity", "mixed"),
             participation=details.get("participation", "low"),
-            cum_main_3d=details.get("cum_main_3d", 0.0),     # Futu 主力 (Block Orders)
+            cum_main_3d=details.get("cum_main_3d", 0.0),
             cum_super_big_3d=details.get("cum_super_big_3d", 0.0),
             latest_main_pct=details.get("latest_main_pct", 0.0),
             fund_flow_days=result.days,
             market=result.market,
+            signal_type=signal_dict.get("signal", "none"),
+            cum_price_3d=details.get("cum_price", 0.0),
         )]
 
     # ------------------------------------------------------------------
@@ -536,28 +542,34 @@ class FundFlowCollector:
         return pushed
 
     async def _push_extreme(self, s: FundFlowSignal, window: str = WINDOW_POST):
-        """★★★ 强背离 → Pushover + Telegram.  V2.5: 强制首位标定信号类型."""
-        inflow = s.cum_main_3d > 0
-        label = "盘前更新" if window == self.WINDOW_PRE else "收盘分析"
+        """★★★ 强背离 → Pushover + Telegram.  V2.5: 强制首位标定信号类型.
 
+        Uses signal_type from compute_divergence_signal (Futu anchor = super_big),
+        NOT recomputed from yfinance price_change_3d + cum_main_3d.
+        """
         # V2.5: 强制首位标定 — 🔴【顶背离·风险】/ 🟢【底背离·机会】
-        price_down = s.price_change_3d < 0
-        price_up = s.price_change_3d > 0
-        if price_down and inflow:
-            prefix = "🟢【底背离·机会】"
-            tag = "底背离"
-        elif price_up and not inflow:
+        if s.signal_type == "bearish_divergence":
             prefix = "🔴【顶背离·风险】"
             tag = "顶背离"
-        else:
-            # Non-divergence: use flow direction for prefix
+        elif s.signal_type == "bullish_divergence":
+            prefix = "🟢【底背离·机会】"
+            tag = "底背离"
+        elif s.signal_type == "confirmation":
+            inflow = s.cum_super_big_3d > 0
             prefix = "🟢" if inflow else "🔴"
             tag = "量价同向"
+        else:
+            inflow = s.cum_super_big_3d > 0
+            prefix = "🟢" if inflow else "🔴"
+            tag = "量价信号"
 
+        # Direction for display: use anchor (super_big), not composite main
+        anchor_inflow = s.cum_super_big_3d > 0
         title = f"{prefix} {s.ticker}"
 
         pushover_body = (
-            f"{'流入' if inflow else '流出'} ¥{abs(s.cum_main_3d)/1e8:.1f}亿, "
+            f"{'流入' if anchor_inflow else '流出'} "
+            f"${abs(s.cum_super_big_3d)/1e8:.1f}亿, "
             f"主力占比 {s.latest_main_pct:.1f}%"
         )
         if s.analysis_summary:
@@ -586,9 +598,12 @@ class FundFlowCollector:
         """★★ 标准背离 → Telegram only (silent)."""
         if self._bot:
             try:
-                inflow = s.cum_main_3d > 0
-                tag = "底背离" if s.price_change_3d < 0 and inflow else \
-                      "顶背离" if s.price_change_3d > 0 and not inflow else "量价信号"
+                if s.signal_type == "bearish_divergence":
+                    tag = "顶背离"
+                elif s.signal_type == "bullish_divergence":
+                    tag = "底背离"
+                else:
+                    tag = "量价信号"
                 tg_text = self._format_tg_message(
                     s, "📊", tag, "跟踪观察", window,
                 )

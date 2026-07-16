@@ -299,6 +299,17 @@ class FutuFundFlowFetcher:
             # Return last N days
             parsed_days = parsed_days[-days:]
 
+            # K-line subscription check: if ALL change_pct are zero, the
+            # kline API likely failed silently (no market data subscription).
+            if parsed_days and all(d.change_pct == 0 for d in parsed_days):
+                logger.warning(
+                    "Futu: ALL kline change_pct=0 for %s (%s) — "
+                    "market data subscription may be missing. "
+                    "Price-dependent signals (divergence, retail_trap, "
+                    "golden_pit) will be degraded.",
+                    ticker, futu_code,
+                )
+
             return FundFlowResult(
                 ticker=ticker,
                 secid=futu_code,
@@ -377,7 +388,14 @@ def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
     cum_small = sum(d.small_net for d in recent)
     cum_mid = sum(d.mid_net for d in recent)
     cum_big = sum(d.big_net for d in recent)
-    cum_price = sum(d.change_pct for d in recent if d.change_pct != 0)
+
+    # True cumulative return from close prices (preferred over sum-of-pcts
+    # which amplifies error for volatile/leveraged tickers).
+    closes = [d.close_price for d in recent if d.close_price != 0]
+    if len(closes) >= 2 and closes[0] != 0:
+        cum_price = (closes[-1] - closes[0]) / closes[0] * 100
+    else:
+        cum_price = sum(d.change_pct for d in recent if d.change_pct != 0)
 
     super_directions = [1 if d.super_big_net > 0 else -1 if d.super_big_net < 0 else 0 for d in recent]
     super_continuity = sum(super_directions)
@@ -413,19 +431,24 @@ def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
     retail_only_positive = cum_small > 0 and cum_mid > 0 and cum_super_big <= 0
     retail_only_selling = cum_small < 0 and cum_mid < 0 and cum_super_big >= 0
 
-    # Law F: 散户陷阱 — price up but super flat/out, small crazy in
+    # Law F: 散户陷阱 — price up but super flat/out, small crazy in.
+    # When super_big is exactly zero, abs(0)*3 = 0, so ANY positive
+    # cum_small would trigger → false positive.  Require a minimum
+    # retail inflow of at least 1% of total absolute turnover.
+    total_abs = sum(abs(d.super_big_net) + abs(d.big_net) + abs(d.mid_net) + abs(d.small_net) for d in recent)
+    min_retail_threshold = total_abs * 0.01  # at least 1% of total turnover
     retail_trap = (
         cum_price > 5
         and cum_super_big <= 0
-        and cum_small > abs(cum_super_big) * 3
+        and cum_small > max(abs(cum_super_big) * 3, min_retail_threshold)
     )
 
-    # Law G: 黄金坑 — extreme drop + tiny outflow + super buying
-    total_outflow = abs(cum_super_big) + abs(cum_big) + abs(cum_mid) + abs(cum_small)
+    # Law G: 黄金坑 — extreme drop + tiny outflow + super buying.
+    # Reuses total_abs from retail_trap check above (per-day gross turnover).
     golden_pit = (
         cum_price < -10
         and cum_super_big > 0
-        and total_outflow < abs(cum_super_big) * 5
+        and total_abs < abs(cum_super_big) * 5
     )
 
     # -------------------------------------------------------------------
