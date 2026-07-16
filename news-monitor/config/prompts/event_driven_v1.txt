@@ -98,6 +98,33 @@
 
 **注意**：以上 ticker_hint / 联动股为知识映射（哪些股受益），非实时行情；你只需识别受益面，价格由系统另行实时抓取，禁止臆测或编造价位。
 
+### 中文新闻示例（与英文同等对待）
+
+**示例1 — 宏观数据超预期（催化剂3等效）**
+标题：美国6月PPI同比增长2.7%，高于预期的2.5%
+摘要：美国劳工部公布6月生产者价格指数，同比上涨2.7%，超出市场预期的2.5%。核心PPI同比上涨3.0%，亦高于预期的2.8%。
+→ {"is_event": true, "intensity": 4, "timeliness": "immediate", "direction": "neutral", "confirmed": true, "sector_tags": ["Macro", "Fed Policy", "Equities Broad"], "headline_signal": "PPI超预期强化利率higher-for-longer叙事，科技成长股估值承压，价值/能源板块受益", "ticker_hint": ["SOXX", "XLF", "XLE"]}
+
+**示例2 — 芯片法案政府入股（催化剂1）**
+标题：英特尔获CHIPS法案最高80亿美元补贴，将用于亚利桑那州工厂建设
+摘要：美国商务部宣布与英特尔达成初步协议，提供最高80亿美元CHIPS法案补贴及110亿美元贷款，支持其在亚利桑那、俄亥俄等州的先进芯片制造设施建设。
+→ {"is_event": true, "intensity": 5, "timeliness": "immediate", "direction": "up", "confirmed": true, "sector_tags": ["Semiconductor", "Government Contract", "AI Foundry"], "headline_signal": "80亿美元CHIPS补贴锁定英特尔先进制程扩产确定性，设备材料链（AMAT/LRCX/KLAC）和AI算力基建双重受益", "ticker_hint": ["INTC", "AMAT", "LRCX", "KLAC", "AMD", "NVDA"]}
+
+**示例3 — 暴涨/模因（催化剂5，确认已发生）**
+标题：游戏驿站盘中暴涨超90%触发熔断，Reddit散户再度集结
+摘要：GameStop股价周二盘中一度暴涨超90%并多次触发熔断，此前被视为2021年模因股热潮核心人物的Roaring Kitty时隔近三年首次在社交媒体发文，引发散户集体买入。
+→ {"is_event": true, "intensity": 5, "timeliness": "immediate", "direction": "up", "confirmed": true, "sector_tags": ["Meme Stocks", "Retail Trading"], "headline_signal": "Roaring Kitty时隔三年回归引爆GME轧空，已触发熔断→强催化5，散户资金实际涌入，但AMC等跟风股可能冲高回落", "ticker_hint": ["GME", "AMC"]}
+
+**示例4 — 传闻（不确认，不上手机）**
+标题：据传OpenAI正洽谈以600亿美元估值进行新一轮融资
+摘要：据知情人士透露，OpenAI正在与投资者洽谈新一轮融资，估值可能达到600亿美元，但谈判仍处于早期阶段，条款尚未敲定。
+→ {"is_event": true, "intensity": 3, "timeliness": "recent", "direction": "up", "confirmed": false, "sector_tags": ["AI", "SaaS"], "headline_signal": "OpenAI传闻融资属未证实消息→confirmed=false，不上手机，TG静音通知", "ticker_hint": ["MSFT"]}
+
+**示例5 — 纯A股无美股映射（过滤）**
+标题：央行降准0.5个百分点释放长期资金约1万亿元
+摘要：中国人民银行决定下调金融机构存款准备金率0.5个百分点，此次降准预计释放长期资金约1万亿元，旨在支持实体经济发展。
+→ {"is_event": false, "filter_reason": "中国央行降准主要影响A股/港股，无直接美股映射标的"}
+
 ## 最终输出规则
 - 只返回一个 JSON 对象，禁止任何注释、Markdown标记或额外文字。
 - 确保 is_event = true 且 intensity ≥ 3 的事件，才是需要通知用户的财富效应机会；其余均不会触发强提醒。

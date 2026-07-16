@@ -20,6 +20,10 @@ tier_1_rss:  # RSS/Atom feeds — no browser needed
   - name: "CNBC Economy"
     url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258"
     category: "macro"
+  - name: "Nikkei Asia"
+    url: "https://asia.nikkei.com/rss/feed/nar"
+    category: "macro"
+    delay_seconds: 3
 
 tier_2_playwright:  # Browser-based scraping
   # Bloomberg blocks headless browsers with anti-bot detection.
