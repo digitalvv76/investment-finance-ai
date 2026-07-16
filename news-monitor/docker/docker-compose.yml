@@ -51,7 +51,7 @@ services:
       # EMPTY value that overrides env_file and silently disables Basic Auth.
       - TZ=America/New_York
       # Futu OpenD gateway — Docker host (via docker bridge)
-      - FUTU_OPEND_HOST=172.17.0.1
+      - FUTU_OPEND_HOST=172.18.0.1
       - FUTU_OPEND_PORT=11111
 
     # ---- Persistent Volumes ----

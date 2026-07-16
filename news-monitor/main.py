@@ -165,7 +165,7 @@ class NewsMonitor:
 
         # ---- fund flow collector (daily post-market) -----------------
         ff_cfg = settings.get("fund_flow", {})
-        futu_host = os.environ.get("FUTU_OPEND_HOST", "172.17.0.1")  # docker bridge gateway
+        futu_host = os.environ.get("FUTU_OPEND_HOST", "172.18.0.1")  # docker bridge gateway
         futu_port = int(os.environ.get("FUTU_OPEND_PORT", "11111"))
         self.fund_flow_collector = FundFlowCollector(
             db=self.db,
