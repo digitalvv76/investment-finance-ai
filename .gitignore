@@ -61,3 +61,5 @@ scripts/*.pyc
 
 .vercel
 opencli-extension-v1.0.22/
+Futu_OpenD_*.tar.gz
+opend_build/
