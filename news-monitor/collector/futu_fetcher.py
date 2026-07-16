@@ -49,12 +49,13 @@ class FundFlowDay:
     """
 
     date: str
-    main_net: float = 0.0        # 主力 = 特大单+大单 (computed: super+big)
+    main_net: float = 0.0        # 主力 = Futu main_in_flow (官方定义), 回退 super+big
+    main_in_flow: float = 0.0    # Futu官方"主力大单净流入"（仅历史周期有效）
     super_big_net: float = 0.0   # ★ 特大单 (THE anchor — Futu: super_in_flow)
     big_net: float = 0.0         # 大单 (Futu: big_in_flow)
     mid_net: float = 0.0         # 中单 (Futu: mid_in_flow)
     small_net: float = 0.0       # 小单 (Futu: sml_in_flow)
-    main_pct: float = 0.0        # 主力占比 = (特大+大) / abs(total) * 100
+    main_pct: float = 0.0        # 主力占比 = main_net / abs(total) * 100
 
     # Derived fields (populated post-fetch from yfinance)
     close_price: float = 0.0
@@ -267,21 +268,20 @@ class FutuFundFlowFetcher:
                     big_in = float(row.get("big_in_flow", 0) or 0)
                     mid_in = float(row.get("mid_in_flow", 0) or 0)
                     sml_in = float(row.get("sml_in_flow", 0) or 0)
-                    in_flow = float(row.get("in_flow", 0) or 0)
+                    futu_main = float(row.get("main_in_flow", 0) or 0)
 
-                    # ★ 主力 = 特大单 + 大单 (V2.1 P0: 防机构拆单)
-                    our_main = super_in + big_in
+                    # ★ 主力 = Futu官方 main_in_flow（主力大单净流入），回退 super+big
+                    main_net = futu_main if futu_main != 0 else (super_in + big_in)
 
-                    # 主力占比 = (特大+大) / 总成交绝对值 * 100
-                    # Use gross turnover as denominator — net flow (in_flow) can
-                    # be near-zero when tiers cancel out, producing nonsensical
-                    # percentages (325%, 547%, -205%, etc.).
+                    # 主力占比 = main_net / 总成交绝对值 * 100
+                    # Denominator: gross turnover — net flow can be near-zero
+                    # when tiers cancel, producing nonsensical percentages.
                     total_abs = (
                         abs(super_in) + abs(big_in)
                         + abs(mid_in) + abs(sml_in)
                     )
                     if total_abs > 0:
-                        main_pct = (our_main / total_abs) * 100
+                        main_pct = (main_net / total_abs) * 100
                     else:
                         main_pct = 0.0
 
@@ -292,8 +292,9 @@ class FutuFundFlowFetcher:
 
                     fd = FundFlowDay(
                         date=flow_time,
-                        main_net=our_main,         # computed: super + big
-                        super_big_net=super_in,     # ★ anchor
+                        main_net=main_net,
+                        main_in_flow=futu_main,      # Futu官方主力定义
+                        super_big_net=super_in,       # ★ anchor
                         big_net=big_in,
                         mid_net=mid_in,
                         small_net=sml_in,

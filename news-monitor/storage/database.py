@@ -190,6 +190,7 @@ class Database:
                     ticker TEXT NOT NULL,
                     date TEXT NOT NULL,
                     main_net REAL DEFAULT 0.0,
+                    main_in_flow REAL DEFAULT 0.0,
                     super_big_net REAL DEFAULT 0.0,
                     big_net REAL DEFAULT 0.0,
                     mid_net REAL DEFAULT 0.0,
@@ -214,6 +215,7 @@ class Database:
                 "ALTER TABLE impact_assessments ADD COLUMN key_points TEXT DEFAULT ''",
                 "ALTER TABLE impact_assessments ADD COLUMN risk_flags TEXT DEFAULT ''",
                 "ALTER TABLE fund_flow ADD COLUMN close_price REAL DEFAULT 0.0",
+                "ALTER TABLE fund_flow ADD COLUMN main_in_flow REAL DEFAULT 0.0",
             ]
             for stmt in _migrations:
                 try:
@@ -636,12 +638,13 @@ class Database:
         with self._get_conn() as conn:
             c = conn.execute("""
                 INSERT OR REPLACE INTO fund_flow
-                    (ticker, date, main_net, super_big_net, big_net, mid_net,
+                    (ticker, date, main_net, main_in_flow, super_big_net, big_net, mid_net,
                      small_net, main_pct, close_price, source, fetched_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 record.ticker.upper(), record.date,
-                record.main_net, record.super_big_net, record.big_net,
+                record.main_net, record.main_in_flow,
+                record.super_big_net, record.big_net,
                 record.mid_net, record.small_net, record.main_pct,
                 record.close_price,
                 record.source, record.fetched_at,

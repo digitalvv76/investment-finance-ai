@@ -353,11 +353,13 @@ class FundFlowCollector:
         from collector.futu_fetcher import FundFlowDay
         days = [
             FundFlowDay(
-                date=r["date"], main_net=r["main_net"],
+                date=r["date"],
+                main_net=r["main_net"],
+                main_in_flow=r.get("main_in_flow", 0.0) or 0.0,
                 super_big_net=r["super_big_net"], big_net=r["big_net"],
                 mid_net=r["mid_net"], small_net=r["small_net"],
                 main_pct=r["main_pct"],
-                close_price=r.get("close_price", 0.0),
+                close_price=r.get("close_price", 0.0) or 0.0,
             )
             for r in rows
         ]
@@ -495,6 +497,7 @@ class FundFlowCollector:
                 ticker=result.ticker,
                 date=day.date,
                 main_net=day.main_net,
+                main_in_flow=day.main_in_flow,
                 super_big_net=day.super_big_net,
                 big_net=day.big_net,
                 mid_net=day.mid_net,

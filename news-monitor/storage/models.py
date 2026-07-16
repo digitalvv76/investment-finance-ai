@@ -178,7 +178,8 @@ class FundFlowRecord:
     id: Optional[int] = None
     ticker: str = ""
     date: str = ""                     # "YYYY-MM-DD"
-    main_net: float = 0.0              # 主力 = 特大单+大单 (computed, not Futu main)
+    main_net: float = 0.0              # 主力 = Futu main_in_flow, 回退 super+big
+    main_in_flow: float = 0.0          # Futu官方"主力大单净流入"
     super_big_net: float = 0.0         # ★ 特大单 (Futu: super_in_flow) — the anchor
     big_net: float = 0.0               # 大单 (Futu: big_in_flow)
     mid_net: float = 0.0               # 中单 (Futu: mid_in_flow)

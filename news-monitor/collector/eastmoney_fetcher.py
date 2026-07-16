@@ -78,6 +78,7 @@ class FundFlowDay:
 
     date: str  # "YYYY-MM-DD"
     main_net: float = 0.0  # 主力净流入 (元)
+    main_in_flow: float = 0.0  # Futu官方"主力大单净流入"
     super_big_net: float = 0.0  # 超大单净流入 (元)
     big_net: float = 0.0  # 大单净流入 (元)
     mid_net: float = 0.0  # 中单净流入 (元)

@@ -34,13 +34,16 @@ def _make_result(ticker="AAPL", days_data=None):
         # 2-day bearish divergence: price ↑↑ while super_big ↓↓
         # divergence_count=2 → strength=70=STRONG, participation=extreme → v2 tier 2
         days_data = [
-            FundFlowDay(date="2026-07-10", main_net=1.2e8, super_big_net=1.0e8,
+            FundFlowDay(date="2026-07-10", main_net=1.0e8, main_in_flow=1.0e8,
+                        super_big_net=1.0e8,
                         big_net=0.2e8, mid_net=-0.3e8, small_net=-0.7e8,
                         main_pct=10.0, close_price=100.0, change_pct=1.0),
-            FundFlowDay(date="2026-07-11", main_net=0.7e8, super_big_net=0.5e8,
+            FundFlowDay(date="2026-07-11", main_net=0.5e8, main_in_flow=0.5e8,
+                        super_big_net=0.5e8,
                         big_net=0.2e8, mid_net=-0.5e8, small_net=-0.7e8,
                         main_pct=12.0, close_price=103.0, change_pct=3.0),
-            FundFlowDay(date="2026-07-14", main_net=0.4e8, super_big_net=0.2e8,
+            FundFlowDay(date="2026-07-14", main_net=0.2e8, main_in_flow=0.2e8,
+                        super_big_net=0.2e8,
                         big_net=0.2e8, mid_net=-0.8e8, small_net=-1.2e8,
                         main_pct=18.0, close_price=108.0, change_pct=4.85),
         ]
