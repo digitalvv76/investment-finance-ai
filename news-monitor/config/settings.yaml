@@ -95,8 +95,75 @@ fund_flow:
   check_interval_minutes: 30     # how often to check "should I run today?"
   batch_cooldown_minutes: 5       # wait between batches (keep batch+cooldown < 2h)
   days_to_fetch: 20              # trading days of history per ticker
-  # tickers: 不写则自动从 .claude/memory/watchlist-state.md 读取（~71只）
-  # 如需手工覆盖，取消下面注释并列出：
-  # tickers:
-  #   - AAPL
-  #   - NVDA
+  tickers:  # 71只，同步自 .claude/memory/watchlist-state.md (2026-07-16)
+    - NVDA
+    - AVGO
+    - MU
+    - MRVL
+    - ARM
+    - LRCX
+    - MRAAY
+    - NVTS
+    - HPE
+    - VPG
+    - AMBA
+    - LITE
+    - AAOI
+    - ALAB
+    - SOXL
+    - SOXX
+    - SMH
+    - PLTR
+    - GOOGL
+    - ORCL
+    - TEM
+    - RGTI
+    - IONQ
+    - CRWV
+    - NBIS
+    - BOT
+    - AVAV
+    - ACHR
+    - SERV
+    - ROBT
+    - BOTZ
+    - ARKQ
+    - RKLB
+    - RDW
+    - ASTS
+    - SATS
+    - SPCX
+    - WOLF
+    - BE
+    - UUUU
+    - MP
+    - IREN
+    - VST
+    - OKLO
+    - SMR
+    - NNE
+    - LEU
+    - BWXT
+    - KTOS
+    - HII
+    - BTBT
+    - BTDR
+    - BTCS
+    - GLXY
+    - UPXI
+    - CLPT
+    - DTIL
+    - RXRX
+    - ABSI
+    - ZETA
+    - TSLA
+    - WEN
+    - FUTU
+    - BABA
+    - FIG
+    - VOO
+    - QQQ
+    - QQQM
+    - GLD
+    - ARKK
+    - CBRS
