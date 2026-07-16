@@ -259,18 +259,18 @@ class FutuFundFlowFetcher:
                     # ★ 主力 = 特大单 + 大单 (V2.1 P0: 防机构拆单)
                     our_main = super_in + big_in
 
-                    # 主力占比 = (特大+大) / abs(total) * 100
-                    if in_flow != 0:
-                        main_pct = (our_main / abs(in_flow)) * 100
+                    # 主力占比 = (特大+大) / 总成交绝对值 * 100
+                    # Use gross turnover as denominator — net flow (in_flow) can
+                    # be near-zero when tiers cancel out, producing nonsensical
+                    # percentages (325%, 547%, -205%, etc.).
+                    total_abs = (
+                        abs(super_in) + abs(big_in)
+                        + abs(mid_in) + abs(sml_in)
+                    )
+                    if total_abs > 0:
+                        main_pct = (our_main / total_abs) * 100
                     else:
-                        total_abs = (
-                            abs(super_in) + abs(big_in)
-                            + abs(mid_in) + abs(sml_in)
-                        )
-                        if total_abs > 0:
-                            main_pct = (our_main / total_abs) * 100
-                        else:
-                            main_pct = 0.0
+                        main_pct = 0.0
 
                     # Populate price from kline lookup
                     price_info = price_map.get(flow_time, {})
