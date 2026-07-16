@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-16~17 · 🔥 资金流 v2 全栈重构
+
+### 推送标准重构
+- `c4a4d48` refactor: 资金流移除手机推送 — 走 TG 不走 Pushover
+- `9425b36` fix: _push_strong guard 补全 ._app 检查
+- `b8632e5` feat: v2 推送标准 — 信号×强度×占比×特殊模式 四维决策
+- `54978bf` fix: _format_tg_message 用 cum_price_3d 替代废弃的 price_change_3d
+
+### Futu 主力定义 + 价格数据修复
+- `07cfbcd` feat: 纳入 Futu 官方 main_in_flow 主力定义
+- `b60a9d3` feat: fund_flow 表加 close_price
+- `a758d63` fix: K-line max_count 不足导致最新日期被截断
+- `f0b36d9` fix: K-line 异常不再静默吞掉
+- `17ce613` fix: LLM 提示中 change_pct 补全所有日期
+
+### /ff 命令 + 配置
+- `96dd443` feat: /ff 命令 — TG 内查看资金流深度分析
+- `9cf7d0c` config: settings.yaml 写入 71 只关注标的
+- `cb852b2` chore: 4 个 Futu 模块注册 manifest
+
+### 数据 + 分析
+- 72 标的资金流全量采集入库（1451 行，3 个不支持）
+- ASTS 黄金坑 + ACHR 底背离已推 TG
+- 发现 K-line date 匹配 bug、change_pct 补全 bug、watchlist 容器不可读等
+
+---
+
 ## 2026-07-16 21:03-21:20 · 📋 开工 + manifest 注册 + 资金流检查
 - 4 个 Futu 模块注册到 collector/__manifest__.json (`cb852b2`)
 - 资金流全链路检查：OpenD ✅ → 容器连通 ✅ → 数据采集 ✅ → DB 存储 ✅ → 盘前分析 ✅

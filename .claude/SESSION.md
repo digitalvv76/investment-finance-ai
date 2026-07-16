@@ -1,64 +1,56 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-16 18:00。关机同步。
+> 最后更新: 2026-07-17 凌晨。关机同步。
 
 ## 🟢 当前部署状态
-- **ECS 生产**: V2 (origin/main, `c3a93bf`)，健康 ✅
+- **ECS 生产**: V2 (origin/main, `9cf7d0c`)，健康 ✅
 - **LLM 供应商**: DeepSeek 唯一 ✅
 - **Futu OpenD**: systemd 自启，行情+资金流+新闻+快照+板块五合一 ✅
-- **东财代理**: 已废弃 ❌
 - **TG 推送**: 资金流 + 新闻 + 快照 + 板块轮动，四通道正常 ✅
+- **资金流 DB**: 72 标的，1451 行（最新 07-16）
 
-## ✅ 本次会话交付 (8 个提交)
+## ✅ 本次会话交付 (~18 个提交)
 
-### 1. TG 重复推送修复 (`6ae7617`)
-- IngestStage 跳过 INSERT OR IGNORE 返回 0 的条目
-- 启动时 load_existing_urls 种子 6K URL 缓存
-- 新增 get_all_urls() 方法
+### 1. 资金流推送重构
+- 移除手机 Pushover 推送，走 TG only
+- `_push_strong` guard 补全 `._app` 检查
 
-### 2. TG 推送格式修复 (`9551566`)
-- 📌 headline_signal + 📊 analyst_note 不再重复/缺失
-- Path A flash_note 不再覆盖 analyst_note
-- Path B headline_signal 回退 flash_note
+### 2. v2 推送标准
+- 信号类型 × 强度 × 主力占比 × 特殊模式 四维决策矩阵
+- 背离+STRONG+extreme → 有声TG / 背离+STANDARD → 静默 / 其余 → skip
+- 黄金坑/散户陷阱 升一档
 
-### 3. 深度分析按钮修复 (`6ac8f0a` + `adc5429`)
-- 区分 news_id=0 vs deep_lane 缺失，不再误导"引擎未就绪"
-- 宏观推送空洞修复（V1 诊断 → V2 实施）：救援舱补全 impact 字段
+### 3. Futu main_in_flow 集成
+- 纳入 Futu 官方"主力大单净流入"替代自行计算的 super+big
+- 回退兼容：旧数据 main_in_flow=0 时使用 super+big
 
-### 4. 资金流卡片重构 (`a51918f`)
-- 币种: US→$, HK→HK$
-- 格式: 📌终极结论 + 🎯操作建议
-- 对抗性核实修复 3 项
+### 4. DB close_price + change_pct 修复
+- fund_flow 表加 close_price 列，采集时写入
+- K-line max_count 不足导致最新日期被截断 → 改为 days*2+10
+- K-line 异常不再静默吞掉
+- LLM 分析提示中 change_pct 补全所有日期（之前仅补最后3日）
 
-### 5. 同主题去重增强 (`c7c888b`)
-- Tier 2 跨键 headline_signal 相似度 (CJK unigram Jaccard ≥ 0.22)
-- ticker_hint 空时生成 headline MD5 回退键
-- 测试覆盖台积电/TSM 跨 ticker 场景
+### 5. /ff 命令
+- TG 内 `/ff TICKER` 查看资金流完整深度分析，实时调用 LLM
 
-### 6. 手机推送门槛调高 (`f71c57d`)
-- IMPORTANT 仅推关注股 + 宏观 impact ≥ 85
-- 预期手机推送量降 50-70%
-- entity_extractor 补中概映射
+### 6. 配置
+- settings.yaml 写入 71 只关注标的（容器内无需读 watchlist-state.md）
+- 4 个 Futu 模块注册到 collector/__manifest__.json
 
-### 7. 资金流全流程审计 (`c0eb7dd` + `e094605` + `c3a93bf`)
-- main_pct 分母修复（总成交绝对值替代净流入）
-- 推送方向改回 anchor (super_big)
-- 散户陷阱零边界 + 累计价格真实值
-- K线全零警告 + 采集加重试
-
-### V1 协同
-- V1 d17018c 审查：取 macro-push-hollow-fix spec，已实施
-- V1 phone-threshold-raise spec，已实施
+### 7. 全量数据采集
+- 72 标的资金流数据全量入库（MRAAY/SATS/PXD 不支持）
+- ASTS 黄金坑 + ACHR 底背离 已推送 TG
 
 ## 📋 下一步
-- 观察 TG 新闻推送格式是否正常
-- 观察资金流卡片新格式效果
-- 观察手机推送量是否下降
-- 盘前 08:00 ET 后检查资金流采集覆盖更多标的
-- 🔔 P1 ATR 波动率阈值（仍未实施）
-- 🔔 P1 因子有效性回测（仍未实施）
+- 今晚 17:00 ET 盘后采集按 71 标的自动运行
+- 明早 ~05:00 ET 盘前分析 v2 标准生效
+- OpenD systemd 重启循环修复（cron 已排期 06:00 CST）
+- Playwright/Twitter/WebScraper 浏览器 OOM（P3，暂不修）
+- P1 ATR 波动率阈值 + 因子有效性回测
 
-## ⚠️ 本次踩坑
-- HuggingFace 504 导致 sentence-transformers 模型下载超时，重启后自动恢复
-- dispatch 测试 `_item` 默认 impact_score=0 导致手机门槛挡住所有测试
-- CJK 单字 Jaccard 对短标题不敏感 → 改用 unigram 分词
+## ⚠️ 踩坑记录
+- K-line max_count=25 不足，Futu 截断最新日期而非最旧
+- 东财 eastmoney_fetcher 是死代码但测试仍在引用
+- Docker 容器内读不到 .claude/memory/watchlist-state.md → settings.yaml 直配
+- price_change_3d 已废弃但 _format_tg_message 仍在用 → 改为 cum_price_3d
+- MRAAY (OTC)/SATS (未知)/PXD (已退市) Futu 不支持
