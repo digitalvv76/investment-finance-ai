@@ -112,7 +112,6 @@ class TelegramChannel:
             await self._bot.push_alert(
                 alert_dict,
                 analyst_note=decision.flash_note or decision.analyst_note,
-                headline_signal=decision.headline_signal,
                 event_category=decision.event_category,
                 impact_score=decision.impact_score,
                 confidence=80,
