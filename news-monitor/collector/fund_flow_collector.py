@@ -103,7 +103,10 @@ class FundFlowSignal:
     silenced: bool = False             # true = 财报静默期内，仅入库不推送
     market: str = ""                   # "US" / "HK" — determines currency display
     signal_type: str = ""              # "bullish_divergence" / "bearish_divergence" / "confirmation" / "warning" / "none"
+    signal_strength: str = "WEAK"      # "STRONG" / "STANDARD" / "WEAK"
     cum_price_3d: float = 0.0          # true cumulative 3-day return from Futu close prices
+    golden_pit: bool = False           # 黄金坑: extreme drop + tiny outflow + super buying
+    retail_trap: bool = False          # 散户陷阱: price up + super flat + small crazy in
 
 
 # ---------------------------------------------------------------------------
@@ -363,6 +366,7 @@ class FundFlowCollector:
             return None
 
         details = signal_dict["details"]
+        modifiers = details.get("modifiers", [])
         return FundFlowSignal(
             ticker=ticker,
             continuity=details.get("continuity", "mixed"),
@@ -373,7 +377,10 @@ class FundFlowCollector:
             fund_flow_days=days,
             market=_infer_market(ticker),
             signal_type=signal_dict.get("signal", "none"),
+            signal_strength=signal_dict.get("final_strength", "WEAK"),
             cum_price_3d=details.get("cum_price", 0.0),
+            golden_pit=("golden_pit" in modifiers),
+            retail_trap=("retail_trap" in modifiers),
         )
 
     # ------------------------------------------------------------------
@@ -506,6 +513,7 @@ class FundFlowCollector:
             return []
 
         details = signal_dict["details"]
+        modifiers = details.get("modifiers", [])
         return [FundFlowSignal(
             ticker=result.ticker,
             continuity=details.get("continuity", "mixed"),
@@ -516,17 +524,55 @@ class FundFlowCollector:
             fund_flow_days=result.days,
             market=result.market,
             signal_type=signal_dict.get("signal", "none"),
+            signal_strength=signal_dict.get("final_strength", "WEAK"),
             cum_price_3d=details.get("cum_price", 0.0),
+            golden_pit=("golden_pit" in modifiers),
+            retail_trap=("retail_trap" in modifiers),
         )]
 
     # ------------------------------------------------------------------
     # Push
     # ------------------------------------------------------------------
 
+    def _decide_push_tier(self, s: FundFlowSignal) -> int:
+        """v2 multi-dimension push decision.
+
+        Returns: 2 = loud TG, 1 = silent TG, 0 = skip.
+
+        Matrix:
+          背离 + STRONG + extreme  → 2 (loud)
+          背离 + STANDARD           → 1 (silent)
+          确认 + STRONG + extreme   → 1 (silent)
+          黄金坑 / 散户陷阱         → +1 tier (max 2)
+          其余                      → 0 (skip)
+        """
+        st = s.signal_type or "none"
+        part = s.participation or "low"
+        strength = s.signal_strength or "WEAK"
+
+        tier = 0
+
+        if st in ("bearish_divergence", "bullish_divergence"):
+            if strength == "STRONG" and part == "extreme":
+                tier = 2
+            elif strength in ("STRONG", "STANDARD"):
+                tier = 1
+        elif st == "confirmation":
+            if strength == "STRONG" and part == "extreme":
+                tier = 1
+
+        # Special modes: upgrade one tier (cap at 2)
+        if s.golden_pit and tier < 2:
+            tier += 1
+        if s.retail_trap and tier < 2:
+            tier += 1
+
+        return tier
+
     async def _push_signals(
         self, signals: list[FundFlowSignal], window: str = WINDOW_POST,
     ) -> int:
-        """Push strong signals. Skips silenced signals (earnings quiet period).
+        """Push signals using v2 multi-dimension criteria.
 
         Returns count of pushed signals.
         """
@@ -535,12 +581,16 @@ class FundFlowCollector:
             if s.silenced:
                 logger.info("FundFlow: %s silenced (earnings quiet period)", s.ticker)
                 continue
-            if s.participation == "extreme":
+
+            tier = self._decide_push_tier(s)
+            if tier == 2:
                 await self._push_extreme(s, window)
                 pushed += 1
-            elif s.participation == "strong":
+            elif tier == 1:
                 await self._push_strong(s, window)
                 pushed += 1
+            # tier 0: skip
+
         return pushed
 
     async def _push_extreme(self, s: FundFlowSignal, window: str = WINDOW_POST):
