@@ -530,27 +530,24 @@ class FundFlowCollector:
         return pushed
 
     async def _push_extreme(self, s: FundFlowSignal, window: str = WINDOW_POST):
-        """★★★ 强背离 → Pushover + Telegram.
-
-        底背离=重点关注, 顶背离=风险预警 (not 买入/卖出).
-        Anchor: 特大单.
-        """
+        """★★★ 强背离 → Pushover + Telegram.  V2.5: 强制首位标定信号类型."""
         inflow = s.cum_main_3d > 0
-        emoji = "🔵" if inflow else "⚠️"
         label = "盘前更新" if window == self.WINDOW_PRE else "收盘分析"
-        signal_type = "重点观察" if inflow else "风险预警"
 
-        # Determine if it's a divergence (price vs flow direction mismatch)
+        # V2.5: 强制首位标定 — 🔴【顶背离·风险】/ 🟢【底背离·机会】
         price_down = s.price_change_3d < 0
         price_up = s.price_change_3d > 0
         if price_down and inflow:
+            prefix = "🟢【底背离·机会】"
             tag = "底背离"
         elif price_up and not inflow:
+            prefix = "🔴【顶背离·风险】"
             tag = "顶背离"
         else:
+            prefix = "⚪"
             tag = "量价同向"
 
-        title = f"{emoji} [{signal_type}] {s.ticker} {tag}"
+        title = f"{prefix} {s.ticker}"
 
         pushover_body = (
             f"{'流入' if inflow else '流出'} ¥{abs(s.cum_main_3d)/1e8:.1f}亿, "

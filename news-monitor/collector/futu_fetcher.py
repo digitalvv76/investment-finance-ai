@@ -497,8 +497,17 @@ def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
         detail = "特大单无明显背离信号"
         strength = 0
 
+    # V2.5: standardized strength tier
+    if strength >= 70:
+        final_strength = "STRONG"
+    elif strength >= 40:
+        final_strength = "STANDARD"
+    else:
+        final_strength = "WEAK"
+
     return {
-        "signal": signal, "strength": strength, "detail": detail,
+        "signal": signal, "strength": strength, "final_strength": final_strength,
+        "detail": detail,
         "details": {
             "continuity": (
                 "continuous_inflow" if super_continuity >= 2
