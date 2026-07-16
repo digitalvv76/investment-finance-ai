@@ -23,7 +23,7 @@ def mock_dedup():
 @pytest.fixture
 def mock_vector():
     vec = MagicMock()
-    vec.index_article = MagicMock()
+    vec.add_article = MagicMock()
     return vec
 
 
@@ -35,7 +35,7 @@ def stage(mock_db, mock_dedup, mock_vector):
 class TestIngestStage:
 
     @pytest.mark.asyncio
-    async def test_happy_path(self, stage, mock_dedup, mock_db):
+    async def test_happy_path(self, stage, mock_dedup, mock_db, mock_vector):
         """Normal items pass through dedup → insert → index."""
         items = [
             PipelineItem(id=0, title="News 1", source="src1", url="http://a.com/1", snippet="s1"),
@@ -48,7 +48,8 @@ class TestIngestStage:
         assert result[1].id == 42
         assert mock_dedup.filter_duplicates.called
         assert mock_db.insert_news.call_count == 2
-        assert mock_dedup.index_item.call_count == 2
+        # After fix: vector_store.add_article is used instead of dedup.index_item
+        assert mock_vector.add_article.call_count == 2
 
     @pytest.mark.asyncio
     async def test_single_item_failure_isolation(self, stage, mock_db):
@@ -79,3 +80,22 @@ class TestIngestStage:
         result = await stage.process(items)
 
         assert result == []
+
+    @pytest.mark.asyncio
+    async def test_skip_db_duplicate(self, stage, mock_db, mock_vector):
+        """INSERT OR IGNORE returns 0 → item skipped (not pushed to pipeline)."""
+        mock_db.insert_news = MagicMock(return_value=0)  # IGNORE → lastrowid=0
+
+        items = [
+            PipelineItem(id=0, title="Already in DB", source="s", url="http://a.com/1", snippet="s"),
+            PipelineItem(id=0, title="New item", source="s", url="http://a.com/2", snippet="s2"),
+        ]
+        # Second insert succeeds
+        mock_db.insert_news = MagicMock(side_effect=[0, 99])
+
+        result = await stage.process(items)
+
+        assert len(result) == 1
+        assert result[0].id == 99
+        assert result[0].title == "New item"
+        assert mock_vector.add_article.call_count == 1  # only indexed the survivor
