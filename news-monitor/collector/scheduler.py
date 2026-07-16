@@ -1,6 +1,7 @@
 """Master scheduler with 4-tier frequency and exchange calendar awareness."""
 import asyncio
 import logging
+import os
 import time
 from datetime import datetime, timedelta
 from typing import Callable, Awaitable, List
@@ -11,6 +12,7 @@ from collector.playwright_fetcher import PlaywrightFetcher
 from collector.api_fetcher import APIFetcher
 from collector.twitter_fetcher import TwitterFetcher
 from collector.chinese_fetcher import ChineseNewsFetcher
+from collector.futu_news_fetcher import FutuNewsFetcher
 from collector.finnhub_fetcher import FinnhubNewsFetcher
 from collector.web_scraper import WebScraper
 from config.loader import ConfigLoader
@@ -53,6 +55,11 @@ class NewsScheduler:
         self.web_scraper = WebScraper()
         self.finnhub_fetcher = FinnhubNewsFetcher(
             watchlist=self._load_watchlist()
+        )
+        futu_host = os.environ.get("FUTU_OPEND_HOST", "172.18.0.1")
+        futu_port = int(os.environ.get("FUTU_OPEND_PORT", "11111"))
+        self.futu_news_fetcher = FutuNewsFetcher(
+            host=futu_host, port=futu_port,
         )
 
     def _load_watchlist(self) -> list:
@@ -167,6 +174,18 @@ class NewsScheduler:
                 logger.warning("API check failed: %s", e)
                 return []
 
+        async def _fetch_futu_news():
+            try:
+                return await asyncio.wait_for(
+                    self.futu_news_fetcher.fetch(), timeout=30,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Futu news fetch timed out after 30s")
+                return []
+            except Exception as e:
+                logger.warning("Futu news fetch failed: %s", e)
+                return []
+
         async def _fetch_web_scraper():
             try:
                 return await asyncio.wait_for(
@@ -188,6 +207,7 @@ class NewsScheduler:
                     _fetch_playwright_heartbeat(),
                     _fetch_api(),
                     _fetch_web_scraper(),
+                    _fetch_futu_news(),
                     return_exceptions=True,
                 ),
                 timeout=55,  # heartbeat fires every 60s, leave 5s margin
@@ -206,7 +226,7 @@ class NewsScheduler:
                 items.extend(result)
 
         if items:
-            logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape)")
+            logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape+futu)")
             await self._notify_callbacks(items)
 
     async def _run_playwright_heartbeat(self, sources):
@@ -411,3 +431,4 @@ class NewsScheduler:
         await self.chinese_fetcher.close()
         await self.web_scraper.shutdown()
         await self.finnhub_fetcher.close()
+        await self.futu_news_fetcher.close()
