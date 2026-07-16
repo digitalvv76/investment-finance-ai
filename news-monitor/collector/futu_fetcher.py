@@ -27,29 +27,42 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class FundFlowDay:
-    """Single day of money flow data."""
+    """Single day of money flow data — Futu standard.
 
-    date: str  # "YYYY-MM-DD"
-    main_net: float = 0.0  # 主力净流入
-    super_big_net: float = 0.0  # 特大单净流入
-    big_net: float = 0.0  # 大单净流入
-    mid_net: float = 0.0  # 中单净流入
-    small_net: float = 0.0  # 小单净流入
-    main_pct: float = 0.0  # 主力净占比 (%)
+    Futu order-size tiers (algorithm-defined, not fixed CNY thresholds):
+      main       — 主力 (Block Orders): institution/insider orders identified
+                   by trading pattern, not simple amount aggregation
+      super_big  — 特大单: extra-large block trades
+      big        — 大单: large orders
+      mid        — 中单: medium orders
+      sml        — 小单: small/retail orders
 
-    # Derived fields (populated post-fetch)
+    CRITICAL: Futu's `main` is a standalone metric — it is NOT simply
+    super_big + big. It represents algorithmically-identified "smart money"
+    flow. Do NOT decompose it into sub-components.
+    """
+
+    date: str
+    main_net: float = 0.0        # 主力净流入 (Futu: main_in_flow)
+    super_big_net: float = 0.0   # 特大单净流入 (Futu: super_in_flow)
+    big_net: float = 0.0         # 大单净流入 (Futu: big_in_flow)
+    mid_net: float = 0.0         # 中单净流入 (Futu: mid_in_flow)
+    small_net: float = 0.0       # 小单净流入 (Futu: sml_in_flow)
+    main_pct: float = 0.0        # 主力占比 = main_net / abs(total_flow) * 100
+
+    # Derived fields (populated post-fetch from yfinance)
     close_price: float = 0.0
     change_pct: float = 0.0
 
 
 @dataclass
 class FundFlowResult:
-    """Full fund flow fetch result for one ticker."""
+    """Full fund flow fetch result for one ticker — Futu standard."""
 
     ticker: str
     secid: str = ""
     name: str = ""
-    market: str = ""  # "NASDAQ" / "NYSE" / "HK"
+    market: str = ""  # "US" / "HK"
     days: List[FundFlowDay] = field(default_factory=list)
     fetched_at: float = 0.0
     source: str = "futu"

@@ -167,16 +167,24 @@ class HealthEvent:
 
 @dataclass
 class FundFlowRecord:
-    """Single day of capital flow data from East Money per ticker."""
+    """Single day of capital flow data — Futu standard.
+
+    Futu order tiers (algorithm-defined, not fixed CNY amounts):
+      main       — 主力 (Block Orders): independently identified, NOT super_big+big
+      super_big  — 特大单
+      big        — 大单
+      mid        — 中单
+      sml        — 小单
+    """
     id: Optional[int] = None
     ticker: str = ""
     date: str = ""                     # "YYYY-MM-DD"
-    main_net: float = 0.0              # 主力净流入 (CNY)
-    super_big_net: float = 0.0         # 超大单净流入
-    big_net: float = 0.0               # 大单净流入
-    mid_net: float = 0.0               # 中单净流入
-    small_net: float = 0.0             # 小单净流入
-    main_pct: float = 0.0              # 主力净占比 (%)
-    source: str = ""                   # "push2his" | "ff"
+    main_net: float = 0.0              # 主力净流入 (Futu: main_in_flow)
+    super_big_net: float = 0.0         # 特大单净流入 (Futu: super_in_flow)
+    big_net: float = 0.0               # 大单净流入 (Futu: big_in_flow)
+    mid_net: float = 0.0               # 中单净流入 (Futu: mid_in_flow)
+    small_net: float = 0.0             # 小单净流入 (Futu: sml_in_flow)
+    main_pct: float = 0.0              # 主力占比 = main / abs(total) * 100
+    source: str = ""                   # "futu"
     fetched_at: float = 0.0            # unix timestamp
     created_at: datetime = field(default_factory=datetime.now)

@@ -59,11 +59,12 @@ def _load_prompt_v2() -> str:
     # Inline fallback — short version of the key instructions
     return (
         "你是一位拥有15年美股/港股市场经验的专业资金流分析师。\n"
-        "核心信念：不看单日涨跌，看涨跌与特大单流向是否一致。"
+        "核心信念：不看单日涨跌，看涨跌与主力流向是否一致。"
         "一致 = 趋势延续；背离 = 拐点临近。\n\n"
+        "⚠️ 主力 ≠ 特大单+大单。主力是 Futu 算法独立识别的 Block Orders。\n\n"
         "## 背离框架\n"
-        "底背离（买入信号）：股价暴跌 + 特大单逆势净流入 = 主力吸筹\n"
-        "顶背离（卖出信号）：股价大涨 + 特大单逆势净流出 = 主力出货\n\n"
+        "底背离（重点关注）：股价下跌 + 主力逆势净流入 = 主力吸筹\n"
+        "顶背离（风险预警）：股价上涨 + 主力逆势净流出 = 主力出货\n\n"
         "## 输出要求\n"
         "先输出「核心信号」1-2句（有/无背离，方向，强度），"
         "再输出完整分析（趋势定位→背离细节→辅助确认→情景推演→验证条件）。"
@@ -76,16 +77,18 @@ def _load_prompt_v2() -> str:
 
 @dataclass
 class FundFlowSignal:
-    """Computed signal from a ticker's fund flow data.
+    """Computed signal from a ticker's fund flow data — Futu standard.
 
-    Primary metric (V2.1): main_net = 特大单 + 大单 (防机构拆单).
+    Primary metric: main_net = Futu's algorithm-identified 主力 (Block Orders).
+    This is a standalone metric, NOT a simple sum of super_big + big.
     """
+
     ticker: str
     continuity: str          # "continuous_inflow" | "continuous_outflow" | "mixed"
     participation: str       # "extreme" | "strong" | "normal" | "low"
-    cum_main_3d: float       # 3-day cumulative main net = 特大单+大单 (CNY)
-    cum_super_big_3d: float  # 3-day cumulative super-big net (reference only)
-    latest_main_pct: float   # latest day main_pct = (特大单+大单)/成交额
+    cum_main_3d: float       # 3-day cumulative 主力 net (Futu main_in_flow)
+    cum_super_big_3d: float  # 3-day cumulative 特大单 net (reference only)
+    latest_main_pct: float   # latest day main_pct = 主力 / abs(total_flow) * 100
     price_change_3d: float = 0.0       # 3-day cumulative price change (%)
     price_data: list[dict] = field(default_factory=list)  # [{date, close}]
     fund_flow_days: list = field(default_factory=list)    # FundFlowDay objects
@@ -101,7 +104,7 @@ class FundFlowSignal:
 class FundFlowCollector:
     """Daily fund flow collection + LLM analysis — two windows per trading day.
 
-    Window 1 — Post-market (~17:00 ET): fetch fresh data from East Money,
+    Window 1 — Post-market (~17:00 ET): fetch fresh data from Futu,
     persist to DB, compute signals, run LLM analysis, push.
 
     Window 2 — Pre-market (~08:00 ET next trading day): re-read yesterday's
@@ -335,7 +338,7 @@ class FundFlowCollector:
         self, ticker: str, rows: list[dict],
     ) -> Optional[FundFlowSignal]:
         """Rebuild a FundFlowSignal from stored DB rows."""
-        from collector.eastmoney_fetcher import FundFlowDay
+        from collector.futu_fetcher import FundFlowDay
         days = [
             FundFlowDay(
                 date=r["date"], main_net=r["main_net"],
@@ -412,7 +415,7 @@ class FundFlowCollector:
 
         header = (
             "| 日期 | 涨跌幅% | 主力净流入(万) | 特大单净流入(万) | "
-            "大单净流入(万) | 中单净流入(万) | 小单净流入(万) | 主力净占比% |"
+            "大单净流入(万) | 中单净流入(万) | 小单净流入(万) | 主力占比% |"
         )
         table = "\n".join([header, *rows]) if rows else "（无数据）"
 
@@ -491,8 +494,8 @@ class FundFlowCollector:
             ticker=result.ticker,
             continuity=details.get("continuity", "mixed"),
             participation=details.get("participation", "low"),
-            cum_main_3d=details.get("cum_main_3d", 0.0),          # V2.1 primary
-            cum_super_big_3d=details.get("cum_super_big_3d", 0.0),  # reference
+            cum_main_3d=details.get("cum_main_3d", 0.0),     # Futu 主力 (Block Orders)
+            cum_super_big_3d=details.get("cum_super_big_3d", 0.0),
             latest_main_pct=details.get("latest_main_pct", 0.0),
             fund_flow_days=result.days,
         )]
@@ -524,7 +527,7 @@ class FundFlowCollector:
     async def _push_extreme(self, s: FundFlowSignal, window: str = WINDOW_POST):
         """★★★ 强背离 → Pushover + Telegram.
 
-        V2.1 semantics: 底背离=重点关注, 顶背离=风险预警 (not 买入/卖出).
+        Futu standard: 底背离=重点关注, 顶背离=风险预警 (not 买入/卖出).
         """
         inflow = s.cum_main_3d > 0
         emoji = "🔵" if inflow else "⚠️"
