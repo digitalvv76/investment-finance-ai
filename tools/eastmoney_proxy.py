@@ -14,11 +14,17 @@ Security: only forwards to *.eastmoney.com domains, rejects everything else.
 
 import argparse
 import logging
+import os
 import select
 import socket
 import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
+
+# Clear any system proxy env vars so raw sockets bypass VPN/Clash TUN
+for _k in list(os.environ.keys()):
+    if 'proxy' in _k.lower():
+        os.environ.pop(_k, None)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -83,9 +89,10 @@ class ForwardProxyHandler(BaseHTTPRequestHandler):
                 pass
 
     def do_GET(self):
-        """Handle plain HTTP GET (for ff.eastmoney.com HTTP fallback)."""
+        """Handle plain HTTP GET — uses raw sockets to bypass system proxy."""
         parsed = urlparse(self.path)
         hostname = parsed.hostname or self.headers.get("Host", "").split(":")[0]
+        port = parsed.port or 80
 
         if not host_allowed(hostname):
             logger.warning("BLOCKED GET: %s", hostname)
@@ -93,28 +100,64 @@ class ForwardProxyHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            # Build the target URL
-            if parsed.scheme:
-                target_url = self.path
+            # Rebuild the path for the target server
+            if parsed.path:
+                request_path = parsed.path
+                if parsed.query:
+                    request_path += "?" + parsed.query
             else:
-                target_url = f"http://{self.headers['Host']}{self.path}"
+                request_path = self.path.split(hostname, 1)[-1] if hostname in self.path else "/"
 
-            import urllib.request
-            req = urllib.request.Request(
-                target_url,
-                headers={k: v for k, v in self.headers.items()
-                        if k.lower() not in ("host", "proxy-connection")},
-                method="GET",
-            )
-            resp = urllib.request.urlopen(req, timeout=15)
-            body = resp.read()
+            # Use raw socket to bypass system HTTP_PROXY (Clash/V2Ray etc.)
+            remote = socket.create_connection((hostname, port), timeout=15)
 
-            self.send_response(resp.status)
-            for k, v in resp.headers.items():
-                if k.lower() not in ("transfer-encoding",):
-                    self.send_header(k, v)
+            # Build the HTTP request
+            req_lines = [f"GET {request_path} HTTP/1.1",
+                         f"Host: {hostname}"]
+            for k, v in self.headers.items():
+                if k.lower() not in ("host", "proxy-connection", "proxy-authorization"):
+                    req_lines.append(f"{k}: {v}")
+            req_lines.append("Connection: close")
+            req_lines.append("")
+            http_request = "\r\n".join(req_lines).encode("utf-8")
+
+            remote.sendall(http_request)
+
+            # Read response
+            response_data = b""
+            while True:
+                chunk = remote.recv(65536)
+                if not chunk:
+                    break
+                response_data += chunk
+            remote.close()
+
+            # Split headers and body
+            header_end = response_data.find(b"\r\n\r\n")
+            if header_end == -1:
+                self.send_error(502, "Invalid response from upstream")
+                return
+
+            headers_raw = response_data[:header_end].decode("utf-8", errors="replace")
+            body = response_data[header_end + 4:]
+
+            # Parse status line
+            status_line = headers_raw.split("\r\n")[0]
+            try:
+                status_code = int(status_line.split(" ")[1])
+            except (IndexError, ValueError):
+                status_code = 200
+
+            # Forward headers (skip Transfer-Encoding/Connection)
+            self.send_response(status_code)
+            for line in headers_raw.split("\r\n")[1:]:
+                if ":" in line:
+                    k, v = line.split(":", 1)
+                    if k.strip().lower() not in ("transfer-encoding", "connection"):
+                        self.send_header(k.strip(), v.strip())
             self.end_headers()
             self.wfile.write(body)
+
         except Exception as e:
             logger.error("GET %s failed: %s", hostname, e)
             try:

@@ -1,37 +1,39 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-15 19:50。Collector 集成完成，待部署。
+> 最后更新: 2026-07-16 00:30。关机同步。
 
 ## 🟢 当前部署状态
-- **ECS 生产**: V2 (origin/main, `4a4765e`)，健康 ✅
+- **ECS 生产**: V2 (origin/main, `ccf7e3d`)，健康 ✅
 - **LLM 供应商**: DeepSeek 唯一 ✅
-- **东财代理**: 需用户手动启动 `tools\start.bat`（代理 + SSH 隧道）
+- **东财代理**: 需用户手动启动 `tools\start.vbs`
 
-## ✅ 本会话交付
+## ✅ 本次会话交付
 
-### 📊 资金流分析 Prompt v2 (下午)
-- 核心重构为"背离信号"锚点架构
-- 保存位置: `E:\分析报告\美股港股资金流分析专家 Prompt.md`
+### 资金流信号系统 V2.1
+- P0 数据口径: 超大单 → 主力(特大单+大单)合计
+- P0 推送语义: 买入/卖出 → 重点关注/风险预警
+- P0 财报静默: 财报后5日不推送
+- 分批采集: 71只/4批/5min冷却/~36min跑完
+- 双窗口: 收盘 17:00ET + 盘前 05:00ET
+- LLM 分析: Prompt v2 自动生成主要观点
+- 评估文档: `docs/资金流信号方案-综合评估-V2.1.md`
 
-### 🔧 东财 Collector 管线集成 (晚上)
-- **新建** `fund_flow_collector.py` — 每日美东17:00自动采集资金流数据
-- **新建** `fund_flow` 数据库表 — ticker+date 唯一索引，upsert 幂等
-- **接入 main.py** — 独立后台循环（对标 ImpactCollector 模式）
-- **信号推送** — extreme → Pushover 铃声 + TG；strong → TG 静默
-- **配置** — settings.yaml 含 22 只关注股，每 30 分钟检查是否该跑
-- **注册** — manifest.json 已注册 eastmoney_fetcher + fund_flow_collector
-- **docker** — 移除 compose 中 HTTP_PROXY 硬覆盖，改由 .env 控制
-- **测试** — +33 tests (18 collector + 7 database + 已有回归 576 pass)
+### MacroAgent 宏观独立通道
+- 去重豁免: 宏观新闻白名单自动跳过去重
+- MacroAgent: 15个指标×中英文变体 + LLM Tier×偏离评估
+- 管道: Ingest → MacroStage → Screen → Evaluate → Dispatch
 
-### 📈 NBIS 资金流分析
-- 两份数据源（东财 + 富途）结论一致：底背离信号确认
+### 基础设施
+- 代理隧道开机自启 (start.vbs + Startup 快捷方式)
+- 关注股 ~71只 自动从 watchlist-state.md 读取
 
 ## 📋 下一步
-- 📦 **部署到 ECS**：commit + push → deploy-main.sh → ECS 手动更新 settings.yaml + .env
-- 🖥️ **启动代理隧道**：用户运行 `tools\start.bat`
-- 📊 **回归验证**：观察手机推送双规则 + 资金流首次自动采集
+- 🔔 **P1 ATR 波动率阈值** — 替代固定 ±10%（见 [[fund-flow-v2.1-plan]]）
+- 🔔 **P1 因子有效性回测** — 东财数据 → 超额收益相关性
+- 📊 观察 MacroAgent 生产推送质量
+- 🖥️ 用户开机后隧道自动启动，验证首次自动采集
 
 ## ⚠️ 本次踩坑
-- 东财 `push2his` API IP 封禁 → 本地 HTTP 代理 + SSH 反向隧道
-- 东财数据金额比富途大 2-5x → 阈值已上调校准
-- 富途 OpenD 已取消，东财从临时→永久方案
+- 东财 IP 封禁（22只连续请求触发），已修：间隔12s + 分批 + 断连不重试
+- start.bat 双击找不到 Python（Explorer PATH 不含），已修：绝对路径 + VBS 静默启动
+- ECS Docker 容器无法访问宿主 127.0.0.1，需 GatewayPorts + FUND_FLOW_PROXY

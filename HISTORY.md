@@ -2728,3 +2728,32 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 ---
 
 ## 2026-07-15T19:31+08:00 · 会话开始
+
+## 2026-07-16T00:32 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### fa0065b · 2026-07-16T00:24 · feat: MacroAgent — 宏观新闻独立评估通道 (V2.1)
+
+问题: PPI超预期但零推送，被去重判为预告重复 + Screen低阈值吞掉
+
+方案:
+- 去重豁免: DedupManager 加载 macro_indicators.yaml 白名单,
+  标题命中宏观关键词的新闻自动跳过去重
+- MacroAgent (engine): 白名单检测 + LLM Tier×偏离矩阵评估
+- MacroStage (pipeline): 插在Ingest后/Screen前, 宏观新闻直接路由Dispatch
+- Screen/Evaluate: 检测 _macro_routed 标记, 跳过已评估的宏观项
+- macro_indicators.yaml: 15个指标×中英文变体 + 预览类关键词
+- macro_eval.txt: LLM prompt — 4步评估(Tier分档→预告排除→偏离判断→查表定级)
+
+默认透传: LLM失败/JSON解析失败/非宏观 → 原样交给Screen
+
+---
+
+### ccf7e3d · 2026-07-16T00:28 · docs: 关机同步 — 会话记录 + 背离信号方案
+
+---
+
+---
+
+## 2026-07-16T08:31+08:00 · 会话开始

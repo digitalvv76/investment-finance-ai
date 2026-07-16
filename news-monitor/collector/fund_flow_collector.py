@@ -1,6 +1,6 @@
 """Fund flow collector — daily post-market capital flow data pipeline.
 
-Wires the EastMoneyFundFlowFetcher into the system: fetch → persist →
+Wires the FutuFundFlowFetcher into the system: fetch → persist →
 compute divergence signal → LLM analysis (Prompt v2) → push.
 
 This is NOT part of NewsScheduler because fund flow data is daily
@@ -20,8 +20,8 @@ from typing import Optional
 
 import yfinance as yf
 
-from collector.eastmoney_fetcher import (
-    EastMoneyFundFlowFetcher,
+from collector.futu_fetcher import (
+    FutuFundFlowFetcher,
     FundFlowResult,
     compute_divergence_signal,
 )
@@ -117,7 +117,8 @@ class FundFlowCollector:
         db: Database,
         alert_dispatcher=None,          # AlertDispatcher (for Pushover)
         bot=None,                        # NewsBot (for Telegram)
-        proxy: str = "",
+        futu_host: str = "127.0.0.1",
+        futu_port: int = 11111,
         watchlist: Optional[list[str]] = None,
         days_to_fetch: int = 20,
     ):
@@ -125,7 +126,7 @@ class FundFlowCollector:
         self._dispatcher = alert_dispatcher
         self._bot = bot
         self._days = days_to_fetch
-        self._fetcher = EastMoneyFundFlowFetcher(proxy=proxy)
+        self._fetcher = FutuFundFlowFetcher(host=futu_host, port=futu_port)
 
         # Resolve watchlist: explicit → watchlist-state.md → fallback
         if watchlist:
