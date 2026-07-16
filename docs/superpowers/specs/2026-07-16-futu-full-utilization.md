@@ -245,10 +245,29 @@ Futu OpenD ──┬── 资金流 (已有) ──→ 背离信号 ──→ P
 - P2: 收盘后收到板块资金流 TOP5/BOTTOM5，Playwright 验证
 - P3: 收盘后收到机构买卖信号（与资金流交叉验证），Playwright 验证（需先确认美股 broker queue 可用性）
 
+### ⚠️ P0 前置：防封禁加固
+
+东财因调用太频繁被封。富途虽不会轻易封客户，但需加一层保护：
+
+```python
+# futu_fetcher.py — fetch_multi() 加请求间隔
+# 当前: semaphore(5) 5并发瞬间发出，无间隔
+# 修复: 每只股票请求后 asyncio.sleep(0.3)，71只≈21秒完成
+
+async def _fetch_one(ticker):
+    async with sem:
+        result = await self.fetch(ticker, days=days)
+        await asyncio.sleep(0.3)  # ← 防限流
+        return ticker, result
+```
+
+同样逻辑适用于 P1-P3 新增的任何批量请求。**所有批量调用统一间隔 0.3s。**
+
 ### 已知风险
 
 | 风险 | 缓解 |
 |------|------|
+| 富途限流（类似东财封禁） | P0 统一 0.3s 请求间隔 + semaphore 限并发 |
 | P3 美股 broker queue 不可用 | 先测试，不可用则 P3 仅港股 |
 | 快照 71 只股票可能超时 | 分批 20 只/批，asyncio.gather |
 | 推送过多打扰用户 | P1 盘前推 TG + 极端推手机，盘中只推 >5%+放量 |
