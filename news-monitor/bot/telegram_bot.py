@@ -90,9 +90,18 @@ class NewsBot:
     async def stop(self):
         """Stop the bot gracefully."""
         if self._app:
-            await self._app.updater.stop()
-            await self._app.stop()
-            await self._app.shutdown()
+            try:
+                await self._app.updater.stop()
+            except RuntimeError:
+                pass  # updater was never started (e.g. no token configured)
+            try:
+                await self._app.stop()
+            except RuntimeError:
+                pass
+            try:
+                await self._app.shutdown()
+            except RuntimeError:
+                pass
         logger.info("Telegram bot stopped")
 
     async def push_alert(self, item: dict, analyst_note: str = "",
