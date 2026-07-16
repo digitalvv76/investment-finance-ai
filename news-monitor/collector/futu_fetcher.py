@@ -320,13 +320,13 @@ class FutuFundFlowFetcher:
     ) -> Dict[str, Optional[FundFlowResult]]:
         """Fetch fund flow for multiple tickers concurrently."""
         results = {}
-        # Futu rate limit: ~10 req/s is safe
-        sem = asyncio.Semaphore(5)
+        # Futu rate limit: 30 req per 30 seconds → 1 req/s max
+        sem = asyncio.Semaphore(1)
 
         async def _fetch_one(ticker: str) -> tuple:
             async with sem:
                 result = await self.fetch(ticker, days=days)
-                await asyncio.sleep(0.3)  # P0: 防限流（东财教训）
+                await asyncio.sleep(1.0)  # P0: 1 req/s, 30/min at Futu limit
                 return ticker, result
 
         tasks = [_fetch_one(t) for t in tickers]
