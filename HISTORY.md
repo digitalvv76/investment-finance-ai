@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-16 · V1 高产日 — 4 诊断 + 4 Spec + Wiki 试用
+
+### 诊断
+- **华尔街见闻零推送** (`3537222`): 管道全链路英文盲 → V2 中文管道适配 (`965fa36` 已部署)
+- **黄仁勋日本行漏推**: 中文管道截杀 + 日经 Nikkei 不在源列表 → 追加 RSS
+- **PPI 误推手机**: MacroAgent 已编码 (`fa0065b`) 但未部署 → 已部署 ✅
+- **MacroAgent 推送格式空洞** (`fa0065b`): DispatchDecision 缺 analyst_note → V2 排查中
+
+### 产出
+- **Spec 1**: 华尔街见闻中文管道适配 (`3537222`→`965fa36` 已上线) — 5 文件 158 行
+- **Spec 2**: 富途 OpenD 充分利用 P0-P3 (`0a3bebf`→`edb3a3b`+`b36f3d0`+`e2b0e52` 已上线)
+- **Spec 3**: 四层训练体系 L1-L4 (`bc8811b`)
+- **Spec 4**: 日经 Nikkei Asia RSS 追加
+- **Wiki 试用**: PLTR 刷新 (加载→yfinance/SEC/TradingView→编译), 维持 HOLD
+- **SESSION.md**: 300→35 行清理
+
+### V2 复核
+- MacroAgent + 中文管道 + 日经 RSS + 富途 P0-P2: 全部已部署 ECS (`e2b0e52`)
+- TG 溢出修复: 阈值 0.15→0.22 + 限流 5 条/轮 + 卡片三段式重构
+- 富途 P3 (经纪商) + 训练体系 L1-L4: 待执行
+
+### 踩坑
+- 中文管道上线后 TG 推送泛滥 → V2 提屏阈值+限流已修复
+- MacroAgent 推送手机空壳 → 缺 analyst_note, V2 排查中
+
 ## 2026-07-15+07-16 · V1 会话 — PPI 未推送诊断 + MacroAgent 设计 + 推送复核
 
 ### 诊断
