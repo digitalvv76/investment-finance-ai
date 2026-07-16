@@ -326,6 +326,7 @@ class FutuFundFlowFetcher:
         async def _fetch_one(ticker: str) -> tuple:
             async with sem:
                 result = await self.fetch(ticker, days=days)
+                await asyncio.sleep(0.3)  # P0: 防限流（东财教训）
                 return ticker, result
 
         tasks = [_fetch_one(t) for t in tickers]

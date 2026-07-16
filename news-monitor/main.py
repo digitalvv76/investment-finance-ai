@@ -213,6 +213,14 @@ class NewsMonitor:
             telegram_push_provider=(lambda: self.alert_dispatcher.wrap_telegram_push(self.bot)) if self.bot else None,
         )
 
+        # ---- market snapshot collector (pre-market + intraday) ----------
+        from collector.market_snapshot import MarketSnapshotCollector
+        futu_host = os.environ.get("FUTU_OPEND_HOST", "172.18.0.1")
+        futu_port = int(os.environ.get("FUTU_OPEND_PORT", "11111"))
+        self.snapshot_collector = MarketSnapshotCollector(
+            host=futu_host, port=futu_port,
+        )
+
         # ── Build Phase 3 Pipeline ──
         from pipeline import Pipeline
         from pipeline.ingest import IngestStage
@@ -410,6 +418,73 @@ class NewsMonitor:
             except Exception:
                 logger.exception("FundFlowLoop: failed")
 
+    async def _run_snapshot_loop(self):
+        """Pre-market + intraday snapshots via Futu get_market_snapshot.
+
+        Pre-market  09:25 ET — full scan, push movers >±2% to TG + Pushover extreme
+        Intraday    14:30 ET — re-scan, push extreme >±5%+volume to Pushover phone
+        """
+        while True:
+            await asyncio.sleep(120)  # check every 2 minutes
+            try:
+                now = datetime.now()
+                hour, minute = now.hour, now.minute
+                weekday = now.weekday()  # 0=Mon, 6=Sun
+                if weekday >= 5:
+                    continue  # skip weekends
+
+                # Pre-market window: 09:25-09:35 ET
+                if hour == 9 and 25 <= minute <= 35:
+                    summary = await self.snapshot_collector.pre_market_snapshot()
+                    if summary and summary.movers:
+                        msg = MarketSnapshotCollector.format_pre_market_summary(summary)
+                        # Push to TG
+                        if self.bot and self.bot._app:
+                            for cid in self.bot._get_chat_ids():
+                                try:
+                                    await self.bot._app.bot.send_message(
+                                        chat_id=cid, text=msg,
+                                        disable_notification=False,
+                                    )
+                                except Exception:
+                                    pass
+                        # Push extreme to phone
+                        if summary.extreme and self.alert_dispatcher:
+                            extreme_msg = MarketSnapshotCollector.format_intraday_alert(summary)
+                            await self.alert_dispatcher.send_system_alert(
+                                title="⚡ 盘前极端异动",
+                                body=extreme_msg,
+                                priority=1,
+                            )
+                        logger.info("SnapshotLoop[pre]: %d movers pushed", len(summary.movers))
+
+                # Intraday window: 14:30-14:40 ET
+                if hour == 14 and 30 <= minute <= 40:
+                    summary = await self.snapshot_collector.intraday_snapshot()
+                    if summary and summary.extreme:
+                        msg = MarketSnapshotCollector.format_intraday_alert(summary)
+                        # Push to TG
+                        if self.bot and self.bot._app:
+                            for cid in self.bot._get_chat_ids():
+                                try:
+                                    await self.bot._app.bot.send_message(
+                                        chat_id=cid, text=msg,
+                                        disable_notification=False,
+                                    )
+                                except Exception:
+                                    pass
+                        # Push to phone
+                        if self.alert_dispatcher:
+                            await self.alert_dispatcher.send_system_alert(
+                                title="⚡ 盘中极端异动",
+                                body=msg,
+                                priority=2,
+                            )
+                        logger.info("SnapshotLoop[intra]: %d extreme pushed", len(summary.extreme))
+
+            except Exception:
+                logger.exception("SnapshotLoop: failed")
+
     # -----------------------------------------------------------------
     # Lifecycle
     # -----------------------------------------------------------------
@@ -442,6 +517,7 @@ class NewsMonitor:
         self._collector_task = asyncio.create_task(self._run_collector_loop())
         self._escalator_task = asyncio.create_task(self._run_escalation_loop())
         self._fund_flow_task = asyncio.create_task(self._run_fund_flow_loop())
+        self._snapshot_task = asyncio.create_task(self._run_snapshot_loop())
 
         # Start the independent liveness watchdog.
         self._watchdog_task = asyncio.create_task(self.watchdog.run_loop())
