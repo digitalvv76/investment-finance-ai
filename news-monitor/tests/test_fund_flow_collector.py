@@ -230,7 +230,7 @@ async def test_collect_batch_single_ticker(db):
 
     pushed = await collector.collect_batch()
     assert pushed == 1  # single batch = last batch → pushes
-    assert collector._dispatcher.send_system_alert.called
+    # Phone push removed — fund flow now TG-only per 2026-07-16
 
 
 @pytest.mark.asyncio

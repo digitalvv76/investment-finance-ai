@@ -542,10 +542,12 @@ class FundFlowCollector:
         return pushed
 
     async def _push_extreme(self, s: FundFlowSignal, window: str = WINDOW_POST):
-        """★★★ 强背离 → Pushover + Telegram.  V2.5: 强制首位标定信号类型.
+        """★★★ 强背离 → Telegram only.  V2.5: 强制首位标定信号类型.
 
         Uses signal_type from compute_divergence_signal (Futu anchor = super_big),
         NOT recomputed from yfinance price_change_3d + cum_main_3d.
+
+        Phone push removed per 2026-07-16: 资金流非时效性信息，走 TG 不走手机。
         """
         # V2.5: 强制首位标定 — 🔴【顶背离·风险】/ 🟢【底背离·机会】
         if s.signal_type == "bearish_divergence":
@@ -562,26 +564,6 @@ class FundFlowCollector:
             inflow = s.cum_super_big_3d > 0
             prefix = "🟢" if inflow else "🔴"
             tag = "量价信号"
-
-        # Direction for display: use anchor (super_big), not composite main
-        anchor_inflow = s.cum_super_big_3d > 0
-        title = f"{prefix} {s.ticker}"
-
-        pushover_body = (
-            f"{'流入' if anchor_inflow else '流出'} "
-            f"${abs(s.cum_super_big_3d)/1e8:.1f}亿, "
-            f"主力占比 {s.latest_main_pct:.1f}%"
-        )
-        if s.analysis_summary:
-            pushover_body += f"\n\n💡 {s.analysis_summary}"
-
-        if self._dispatcher:
-            try:
-                await self._dispatcher.send_system_alert(
-                    title, pushover_body, emergency=False, quiet=False,
-                )
-            except Exception:
-                logger.exception("FundFlow: Pushover push failed for %s", s.ticker)
 
         if self._bot and self._bot._app:
             try:
