@@ -243,6 +243,11 @@ class FutuFundFlowFetcher:
                             "close": float(kr.get("close", 0) or 0),
                             "change_rate": float(kr.get("change_rate", 0) or 0),
                         }
+                else:
+                    logger.warning(
+                        "Futu K-line empty for %s: ret=%s rows=%s",
+                        futu_code, ret_k, len(kline) if kline is not None else 0,
+                    )
             except Exception as e:
                 logger.warning("Futu K-line failed for %s: %s", futu_code, e)
 
