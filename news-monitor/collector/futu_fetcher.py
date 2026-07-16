@@ -351,34 +351,37 @@ class FutuFundFlowFetcher:
 
 
 def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
-    """Compute price vs fund-flow divergence signal from recent days.
+    """Compute price vs fund-flow divergence signal — 5-law framework.
 
-    ★ Anchor: 特大单 (super_big_net) — the ONE signal that can't be faked.
-    Uses 主力 (super+big) for participation ratio, per V2.1 P0 anti-splitting.
+    ★ Anchor: 特大单 (super_big_net).
+    主力 = super+big for participation ratio (V2.1 P0 anti-splitting).
 
-    Returns dict with keys:
-      signal: "bullish_divergence" | "bearish_divergence" | "confirmation" | "none"
-      strength: 0-100
-      detail: one-line summary
-      details: dict with cum_main_3d, cum_super_big_3d, latest_main_pct, etc.
+    Five laws from user training data:
+      E. 合力检测 — all 4 tiers same direction = healthy; only retail = trap
+      F. 散户陷阱 — price up + super flat/out + small crazy in = downgrade ×2
+      G. 黄金坑 — extreme drop + tiny outflow + super buying = stronger than normal divergence
+
+    Returns: {signal, strength, detail, details, laws}
     """
+
     if len(days) < 3:
         return {"signal": "insufficient_data", "strength": 0, "detail": "insufficient data"}
 
     recent = days[-3:]
     latest = recent[-1]
 
-    # --- Anchor: 特大单 direction ---
+    # --- Anchor: 特大单 ---
     cum_super_big = sum(d.super_big_net for d in recent)
-    cum_main = sum(d.main_net for d in recent)  # super+big combined
-
-    price_changes = [d.change_pct for d in recent if d.change_pct != 0]
-    cum_price = sum(price_changes) if price_changes else 0
+    cum_main = sum(d.main_net for d in recent)
+    cum_small = sum(d.small_net for d in recent)
+    cum_mid = sum(d.mid_net for d in recent)
+    cum_big = sum(d.big_net for d in recent)
+    cum_price = sum(d.change_pct for d in recent if d.change_pct != 0)
 
     super_directions = [1 if d.super_big_net > 0 else -1 if d.super_big_net < 0 else 0 for d in recent]
     super_continuity = sum(super_directions)
 
-    # --- Divergence detection (anchor = 特大单) ---
+    # --- Divergence detection ---
     price_direction = 0
     flow_direction = 0
     divergent_count = 0
@@ -386,36 +389,103 @@ def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
     for i in range(1, len(recent)):
         prev, curr = recent[i - 1], recent[i]
         price_delta = curr.change_pct - prev.change_pct
-        # ★ Anchor: use super_big_net, not main_net
-        flow_delta = curr.super_big_net - prev.super_big_net
+        flow_delta = curr.super_big_net - prev.super_big_net  # ★ Anchor
 
         if price_delta != 0:
             price_direction += 1 if price_delta > 0 else -1
         if flow_delta != 0:
             flow_direction += 1 if flow_delta > 0 else -1
 
-        # Divergence: price vs 特大单
         if price_delta > 0 and flow_delta < 0:
-            divergent_count += 1  # bearish: price up, 特大单 selling
+            divergent_count += 1
         elif price_delta < 0 and flow_delta > 0:
-            divergent_count += 1  # bullish: price down, 特大单 buying
+            divergent_count += 1
 
-    # Determine signal
+    # -------------------------------------------------------------------
+    # New Law checks
+    # -------------------------------------------------------------------
+
+    # Law E: 合力检测 — are all 4 tiers aligned?
+    all_tiers = [cum_super_big, cum_big, cum_mid, cum_small]
+    all_positive = all(t > 0 for t in all_tiers)
+    all_negative = all(t < 0 for t in all_tiers)
+    retail_only_positive = cum_small > 0 and cum_mid > 0 and cum_super_big <= 0
+    retail_only_selling = cum_small < 0 and cum_mid < 0 and cum_super_big >= 0
+
+    # Law F: 散户陷阱 — price up but super flat/out, small crazy in
+    retail_trap = (
+        cum_price > 5
+        and cum_super_big <= 0
+        and cum_small > abs(cum_super_big) * 3
+    )
+
+    # Law G: 黄金坑 — extreme drop + tiny outflow + super buying
+    total_outflow = abs(cum_super_big) + abs(cum_big) + abs(cum_mid) + abs(cum_small)
+    golden_pit = (
+        cum_price < -10
+        and cum_super_big > 0
+        and total_outflow < abs(cum_super_big) * 5
+    )
+
+    # -------------------------------------------------------------------
+    # Signal determination
+    # -------------------------------------------------------------------
+    signal = "none"
+    strength = 0
+    detail = ""
+    modifiers = []
+
     if divergent_count >= 2:
         if price_direction < 0 and flow_direction > 0:
             signal = "bullish_divergence"
-            detail = f"价格下跌但特大单连续{divergent_count}日逆势净流入，底背离信号"
+            base_strength = min(divergent_count * 35, 100)
+            if golden_pit:
+                strength = min(base_strength + 20, 100)
+                detail = f"★黄金坑★ 暴跌{abs(cum_price):.0f}%但特大单逆势净流入{cum_super_big/1e4:.0f}万，空头力竭+机构吸筹，强底背离"
+                modifiers.append("golden_pit")
+            else:
+                strength = base_strength
+                detail = f"价格下跌但特大单连续{divergent_count}日逆势净流入，底背离信号"
         elif price_direction > 0 and flow_direction < 0:
             signal = "bearish_divergence"
-            detail = f"价格上涨但特大单连续{divergent_count}日逆势净流出，顶背离信号"
+            if retail_trap:
+                strength = min(divergent_count * 35 + 20, 100)
+                detail = f"★散户陷阱★ 股价上涨但特大单未参与，小单疯狂流入{cum_small/1e4:.0f}万→诱多，强顶背离"
+                modifiers.append("retail_trap")
+            else:
+                strength = min(divergent_count * 35, 100)
+                detail = f"价格上涨但特大单连续{divergent_count}日逆势净流出，顶背离信号"
         else:
             signal = "divergence"
             detail = f"价格与特大单流向{divergent_count}日背离"
-        strength = min(divergent_count * 35, 100)
+            strength = min(divergent_count * 35, 100)
     elif divergent_count == 1:
         signal = "warning"
         detail = "特大单出现1日背离，关注后续确认"
         strength = 30
+        if golden_pit:
+            strength += 15
+            modifiers.append("golden_pit_partial")
+    elif all_positive and cum_price > 0:
+        signal = "confirmation"
+        detail = f"四维共振：特大/大/中/小全净流入，健康上涨，趋势延续"
+        strength = 75
+        modifiers.append("all_tiers_aligned_up")
+    elif all_negative and cum_price < 0:
+        signal = "confirmation"
+        detail = f"四维共振：特大/大/中/小全净流出，一致抛售，趋势延续"
+        strength = 75
+        modifiers.append("all_tiers_aligned_down")
+    elif retail_only_positive:
+        signal = "warning"
+        detail = f"散户独舞：仅中单/小单净流入，特大单未参与→上涨不可持续，警惕诱多"
+        strength = 40
+        modifiers.append("retail_only")
+    elif retail_only_selling:
+        signal = "warning"
+        detail = f"散户恐慌：仅中单/小单净流出，特大单未跟→可能为洗盘尾声"
+        strength = 35
+        modifiers.append("retail_panic")
     elif price_direction != 0 and flow_direction != 0 and price_direction == flow_direction:
         signal = "confirmation"
         direction = "看涨" if price_direction > 0 else "看跌"
@@ -440,8 +510,12 @@ def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
                 else "normal" if abs(latest.main_pct) > 3
                 else "low"
             ),
-            "cum_main_3d": cum_main,              # 主力 (super+big) 3日累计
-            "cum_super_big_3d": cum_super_big,     # 特大单 3日累计
-            "latest_main_pct": latest.main_pct,    # 主力占比 = (super+big)/total
+            "cum_main_3d": cum_main,
+            "cum_super_big_3d": cum_super_big,
+            "latest_main_pct": latest.main_pct,
+            "all_tiers_aligned": all_positive or all_negative,
+            "retail_trap": retail_trap,
+            "golden_pit": golden_pit,
+            "modifiers": modifiers,
         },
     }
