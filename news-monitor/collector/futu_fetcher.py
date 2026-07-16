@@ -226,13 +226,15 @@ class FutuFundFlowFetcher:
             price_map: dict[str, dict] = {}  # "2026-07-14" → {close, change_rate}
             name = ""
             try:
+                # max_count must cover all calendar days to avoid truncation
+                # (Futu trims from the END when max_count < available rows)
                 ret_k, kline, _ = ctx.request_history_kline(
                     futu_code,
                     start=start_date,
                     end=end_date,
                     ktype=KLType.K_DAY,
                     autype=AuType.QFQ,
-                    max_count=days + 5,
+                    max_count=days * 2 + 10,
                 )
                 if ret_k == RET_OK and len(kline) > 0:
                     for _, kr in kline.iterrows():
@@ -293,11 +295,6 @@ class FutuFundFlowFetcher:
                     price_info = price_map.get(flow_time, {})
                     close_price = price_info.get("close", 0.0)
                     change_pct = price_info.get("change_rate", 0.0)
-                    if close_price == 0.0 and price_map:
-                        logger.warning(
-                            "Futu price_map MISS: ticker=%s flow_time=[%s] map_last5=%s",
-                            ticker, flow_time, sorted(price_map.keys())[-5:],
-                        )
 
                     fd = FundFlowDay(
                         date=flow_time,
