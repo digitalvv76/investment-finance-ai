@@ -246,6 +246,24 @@ macro_alerts:
   - "倒挂"
 ```
 
+### 改动 5/4：`sources.yaml` — 新增日经 Nikkei Asia RSS
+
+日经是亚洲科技/AI/半导体新闻的核心一手源。黄仁勋亚洲行、台积电供应链、Rapidus 进展、日本 AI 政策等关键事件常由日经首发，但当前采集源列表中完全没有日经。
+
+```yaml
+# tier_1_rss 列表新增：
+- name: "Nikkei Asia"
+  url: "https://asia.nikkei.com/rss/feed/nar"
+  category: "macro"
+  delay_seconds: 3
+```
+
+**说明**：
+- RSS URL 经过验证 (`https://asia.nikkei.com/rss/feed/nar`)
+- 用途为个人投资研究，属个人非商业使用，符合 RSS 使用条款
+- 归类 macro（日经覆盖科技政策+产业+宏观，跨领域）
+- delay 3s 与 WSJ Markets 同级，避免请求过频
+
 ---
 
 ## 验收标准
@@ -294,5 +312,6 @@ macro_alerts:
 | `priority.py` | +35 行中文模式 + 8 行权重调整 | 低 |
 | `event_driven_v1.txt` | +25 行 few-shot 样本 | 低 |
 | `keywords.yaml` | +30 行补充关键词 | 低 |
+| `sources.yaml` | +5 行（日经 RSS） | 低 |
 | 测试（新建） | ~30 条测试用例 | 中 |
-| **总计** | ~180 行改动 + 测试 | 半天 |
+| **总计** | ~185 行改动 + 测试 | 半天 |
