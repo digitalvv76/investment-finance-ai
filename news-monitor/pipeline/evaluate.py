@@ -141,9 +141,27 @@ class EvaluateStage:
                           + reason)
                 logger.info("EVALUATE: high-impact rescue → silent TG (score=%d): %s",
                             impact_score_raw, (item.title or "")[:60])
+            # Rescue hatch — extract impact fields so macro pushes aren't hollow.
+            # (V1 diagnosis: macro events take this path, and the old code
+            # dropped all ImpactEvaluator output — analyst_note, flash_note,
+            # impact_score, etc. — leaving title+score-only "hollow" pushes.)
+            _flash_note = str(getattr(impact, "flash_note", "") or "")
+            _analyst_note = str(getattr(impact, "analyst_note", "") or "")
+            _impact_score = int(getattr(impact, "impact_score", 0) or 0)
+            _urgency = str(getattr(impact, "urgency", "") or "").upper()
+            _sentiment = str(getattr(impact, "sentiment", "") or "").upper()
+            _greed_index = int(getattr(impact, "greed_index", 50) or 50)
+            _key_points = str(getattr(impact, "key_points", "") or "")
+            _risk_flags = str(getattr(impact, "risk_flags", "") or "")
+            _event_category = str(getattr(impact, "event_category", "") or "")
+
             item.decision = DispatchDecision(
                 alert_level=level,
                 alert_reason=reason,
+                impact_score=_impact_score,
+                urgency=_urgency,
+                sentiment=_sentiment,
+                greed_index=_greed_index,
                 filter_reason=event_assessment.filter_reason,
                 headline_signal=event_assessment.headline_signal,
                 risk_snapshot=event_assessment.risk_snapshot,
@@ -151,6 +169,12 @@ class EvaluateStage:
                 intensity=event_assessment.intensity,
                 sector_tags=event_assessment.sector_tags,
                 ticker_hint=event_assessment.ticker_hint,
+                analyst_note=_analyst_note,
+                flash_note=_flash_note,
+                key_points=_key_points,
+                risk_flags=_risk_flags,
+                event_category=_event_category,
+                needs_deep=(_impact_score >= 60 or _urgency in ("FLASH", "ALERT")),
             )
             self._persist_event_decision(item, event_assessment, level=level)
             return
