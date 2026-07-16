@@ -18,6 +18,7 @@ FALLBACK_TICKERS = {
     # Watchlist — semiconductors / AI
     "PLTR", "SOXX", "SOXL", "LRCX", "ARM", "MRVL",
     "MRAAY", "CBRS",
+    "AVGO", "TSM", "QCOM", "MU", "TXN", "AMAT", "KLAC", "ON", "UMC",
     # Watchlist — space / defense
     "SPCX", "RKLB", "KTOS", "ASTS",
     # Watchlist — quantum / nuclear / emerging tech
