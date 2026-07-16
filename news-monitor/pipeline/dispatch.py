@@ -102,36 +102,101 @@ class DispatchStage:
         self.recent_decisions: deque = deque(maxlen=50)
         # Same-topic phone dedup: topic_key → (intensity, timestamp, item_id)
         self._phone_push_log: dict[str, tuple[int, float, int]] = {}
+        # Companion cache: topic_key → headline_signal text (for cross-key similarity)
+        self._headline_cache: dict[str, str] = {}
+
+    # ── headline_signal similarity threshold for cross-ticker dedup ──
+    # When two articles about the same event use different ticker names
+    # (e.g. "台积电" vs "TSM"), the ticker-based dedup key won't match.
+    # If headline_signal word-level Jaccard ≥ this threshold, treat as
+    # same topic and suppress the phone push.
+    _HEADLINE_SIMILARITY_THRESHOLD = 0.22
 
     def _phone_should_skip(self, item: PipelineItem) -> tuple[bool, str]:
         """Check same-topic dedup for phone push.
 
+        Two-tier dedup:
+          1. Exact key match (ticker or macro topic)
+          2. Cross-key headline_signal similarity (catches 台积电/TSM
+             where LLM ticker_hint differs across sources)
+
         Returns (skip, reason). skip=True means don't push to Pushover.
         """
         key = _dedup_key(item)
+        # Fallback key: when ticker_hint is empty and no macro pattern matches,
+        # use a headline-content hash so cross-key dedup can still find it.
         if key is None:
-            return False, ""
-
+            headline_fb = (item.decision.headline_signal or item.title or "").strip()
+            if len(headline_fb) > 10:
+                import hashlib
+                key = f"headline:{hashlib.md5(headline_fb.encode('utf-8', errors='replace')).hexdigest()[:12]}"
         intensity = getattr(item.decision, "intensity", 0) or 0
+        headline = (item.decision.headline_signal or item.title or "").strip()
         now = time.time()
 
-        prev = self._phone_push_log.get(key)
-        if prev is not None:
-            prev_intensity, prev_ts, prev_id = prev
-            age = now - prev_ts
-            if age < _DEDUP_WINDOW_SECONDS:
-                if intensity > prev_intensity:
-                    # Intensity upgrade: allow through, update log
-                    self._phone_push_log[key] = (intensity, now, item.id or 0)
-                    return False, f"intensity_upgrade({prev_intensity}→{intensity})"
-                else:
+        if key is not None:
+            prev = self._phone_push_log.get(key)
+            if prev is not None:
+                prev_intensity, prev_ts, prev_id = prev
+                age = now - prev_ts
+                if age < _DEDUP_WINDOW_SECONDS:
+                    if intensity > prev_intensity:
+                        self._phone_push_log[key] = (intensity, now, item.id or 0)
+                        self._headline_cache[key] = headline
+                        return False, f"intensity_upgrade({prev_intensity}→{intensity})"
+                    else:
+                        return True, (
+                            f"same_topic_dedup(key={key}, prev_id={prev_id}, "
+                            f"prev_intensity={prev_intensity}, age={age:.0f}s)"
+                        )
+
+        # ── Tier 2: cross-key headline_signal similarity ──
+        # Catches 台积电/TSM and other Chinese/English ticker-name mismatches
+        # where the LLM ticker_hint differs but the headline describes the
+        # same event.  Only runs when there IS a key to log (skip None).
+        if headline and key is not None:
+            for existing_key, (prev_intensity, prev_ts, prev_id) in self._phone_push_log.items():
+                # Skip exact matches (already handled above)
+                if existing_key == key:
+                    continue
+                age = now - prev_ts
+                if age >= _DEDUP_WINDOW_SECONDS:
+                    continue
+                # Compare headline_signal against this entry's key
+                # We need the previous item's headline — extract from key
+                # or fall back to checking the key itself
+                if self._headlines_similar(headline, existing_key, item):
+                    if intensity > prev_intensity:
+                        self._phone_push_log[key] = (intensity, now, item.id or 0)
+                        return False, (
+                            f"intensity_upgrade_cross_key({prev_intensity}→{intensity}, "
+                            f"prev_key={existing_key})"
+                        )
                     return True, (
-                        f"same_topic_dedup(key={key}, prev_id={prev_id}, "
-                        f"prev_intensity={prev_intensity}, age={age:.0f}s)"
+                        f"headline_similarity_dedup(headline≈prev_key={existing_key}, "
+                        f"prev_id={prev_id}, prev_intensity={prev_intensity}, age={age:.0f}s)"
                     )
+
         # First occurrence or window expired: record and allow
-        self._phone_push_log[key] = (intensity, now, item.id or 0)
+        if key is not None:
+            self._phone_push_log[key] = (intensity, now, item.id or 0)
+            if headline:
+                self._headline_cache[key] = headline
         return False, ""
+
+    def _headlines_similar(
+        self, headline: str, existing_key: str, item: PipelineItem,
+    ) -> bool:
+        """Check if headline is semantically similar to a previously-pushed item.
+
+        Uses word-level Jaccard on headline_signal text.  The existing_key is
+        a ticker: or macro: prefix; we store the headline text alongside it
+        in a companion dict for lookup.
+        """
+        prev_text = self._headline_cache.get(existing_key, "")
+        if not prev_text:
+            return False
+        return _jaccard_similarity(headline, prev_text) >= self._HEADLINE_SIMILARITY_THRESHOLD
 
     def _record(self, item: PipelineItem, level: AlertLevel, silent: bool) -> None:
         d = item.decision
@@ -212,3 +277,56 @@ class DispatchStage:
             (item.title or "")[:80],
             d.ticker_hint, d.headline_signal, d.risk_snapshot,
         )
+
+
+# ── headlne similarity helper ──
+
+def _is_cjk(ch: str) -> bool:
+    return '一' <= ch <= '鿿' or '㐀' <= ch <= '䶿'
+
+
+def _jaccard_similarity(text1: str, text2: str) -> float:
+    """Token-aware Jaccard for Chinese/English headlines.
+
+    Chinese: individual CJK characters (unigrams) — robust against different
+            phrasing of the same event (涨价 vs 价格上调, both share 价).
+    ASCII: whole words + alphanumeric runs.
+    """
+    if not text1 or not text2:
+        return 0.0
+
+    def _tokenize(t: str) -> set[str]:
+        t = t.lower().strip()
+        tokens: set[str] = set()
+        for word in t.split():
+            cjk_run = ""
+            ascii_run = ""
+            for ch in word:
+                if _is_cjk(ch):
+                    if ascii_run:
+                        tokens.add(ascii_run)
+                        ascii_run = ""
+                    cjk_run += ch
+                else:
+                    if cjk_run:
+                        tokens.update(cjk_run)  # each CJK char = one token
+                        cjk_run = ""
+                    if ch.isalnum():
+                        ascii_run += ch
+                    else:
+                        if ascii_run:
+                            tokens.add(ascii_run)
+                            ascii_run = ""
+            if cjk_run:
+                tokens.update(cjk_run)
+            if ascii_run:
+                tokens.add(ascii_run)
+        return tokens
+
+    t1 = _tokenize(text1)
+    t2 = _tokenize(text2)
+    if not t1 or not t2:
+        return 0.0
+    inter = t1 & t2
+    union = t1 | t2
+    return len(inter) / len(union) if union else 0.0

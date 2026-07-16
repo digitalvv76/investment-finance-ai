@@ -332,3 +332,39 @@ async def test_dispatch_notable_telegram_only():
     # Telegram: gets NOTABLE with disable_notification=True
     assert len(telegram.calls) == 1
     assert telegram.calls[0]["silent"] is True
+
+
+@pytest.mark.asyncio
+async def test_headline_similarity_cross_ticker_dedup():
+    """台积电(TSM) and TSM produce different ticker keys, but similar
+    headline_signal should still dedup on phone.
+
+    Scenario: Chinese source reports "台积电3nm涨价", LLM ticker_hint=[];
+    English source reports "TSMC price hike", LLM ticker_hint=["TSM"].
+    Without cross-key fallback, both push to phone. With it, second is skipped.
+    """
+    pushover = SpyChannel("pushover")
+    telegram = SpyChannel("telegram")
+    stage = DispatchStage([pushover, telegram])
+
+    # Item 1: Chinese source — LLM doesn't map 台积电→TSM, ticker_hint empty
+    item1 = _item(id=1, title="台积电3nm制程涨价20%",
+                  headline_signal="台积电宣布3nm制程涨价20%，利好半导体代工板块",
+                  ticker_hint=[], intensity=4, direction="up")
+
+    # Item 2: English source — LLM gives TSM, ticker_hint=["TSM"]
+    item2 = _item(id=2, title="TSMC Raises 3nm Prices By 20%",
+                  headline_signal="台积电3nm晶圆代工价格上调20%，反映AI芯片强劲需求",
+                  ticker_hint=["TSM"], intensity=4, direction="up")
+
+    await stage.process([item1])
+    assert len(pushover.calls) == 1  # first item pushes to phone
+
+    await stage.process([item2])
+    # Second item should be deduped on phone because headline_signal is similar
+    assert len(pushover.calls) == 1, (
+        f"Cross-key headline dedup failed: expected 1 Pushover, got {len(pushover.calls)}. "
+        f"Calls: {[(c['id'], c.get('reason','')) for c in pushover.calls]}"
+    )
+    # TG still gets both (by design — TG doesn't participate in phone dedup)
+    assert len(telegram.calls) == 2
