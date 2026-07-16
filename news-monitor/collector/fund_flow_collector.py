@@ -97,9 +97,11 @@ class FundFlowSignal:
     price_change_3d: float = 0.0       # 3-day cumulative price change (%)
     price_data: list[dict] = field(default_factory=list)  # [{date, close}]
     fund_flow_days: list = field(default_factory=list)    # FundFlowDay objects
-    analysis_summary: str = ""         # LLM 主要观点
+    analysis_summary: str = ""         # LLM 终极结论
+    action_advice: str = ""            # LLM 操作建议
     analysis_full: str = ""            # LLM 完整报告
     silenced: bool = False             # true = 财报静默期内，仅入库不推送
+    market: str = ""                   # "US" / "HK" — determines currency display
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +368,7 @@ class FundFlowCollector:
             cum_main_3d=details.get("cum_main_3d", 0.0),
             latest_main_pct=details.get("latest_main_pct", 0.0),
             fund_flow_days=days,
+            market=_infer_market(ticker),
         )
 
     # ------------------------------------------------------------------
@@ -395,9 +398,11 @@ class FundFlowCollector:
             # Call LLM
             response = await self._call_llm(prompt)
 
-            # Extract 核心信号 (主要观点) vs full report
+            # Extract 终极结论 + 操作建议 from LLM response
             s.analysis_full = response
-            s.analysis_summary = _extract_core_signal(response)
+            s.analysis_summary, _ = _extract_section(response, "终极结论")
+            advice_text, advice_found = _extract_section(response, "操作建议")
+            s.action_advice = advice_text if advice_found else ""
 
             logger.info("FundFlow: LLM analysis done for %s (%d chars)",
                          s.ticker, len(response))
@@ -503,6 +508,7 @@ class FundFlowCollector:
             cum_super_big_3d=details.get("cum_super_big_3d", 0.0),
             latest_main_pct=details.get("latest_main_pct", 0.0),
             fund_flow_days=result.days,
+            market=result.market,
         )]
 
     # ------------------------------------------------------------------
@@ -598,25 +604,33 @@ class FundFlowCollector:
         self, s: FundFlowSignal, emoji: str, tag: str, signal_type: str,
         window: str = WINDOW_POST,
     ) -> str:
-        """Format Telegram message — V2.5 compact card."""
+        """Format Telegram message — structured card with currency awareness."""
         inflow = s.cum_main_3d > 0
         direction = "流入" if inflow else "流出"
-        label = "🔔 盘前更新" if window == self.WINDOW_PRE else "📈 收盘分析"
+        currency = "HK$" if s.market == "HK" else "$"
+        amount = abs(s.cum_main_3d)
+        if amount >= 1e8:
+            amount_str = f"{currency}{amount/1e8:.1f}亿"
+        else:
+            amount_str = f"{currency}{amount/1e4:.0f}万"
+
         lines = [
-            f"{emoji} <b>{s.ticker}</b>  <i>{label}</i>",
-            "",
-            f"📊 主力净{direction} ¥{abs(s.cum_main_3d)/1e8:.1f}亿, "
-            f"主力占比 {s.latest_main_pct:.1f}%",
+            f"{emoji} <b>{s.ticker}</b>",
+            f"主力净{direction} {amount_str} | 占比 {s.latest_main_pct:.1f}%",
         ]
 
         if s.price_change_3d != 0:
-            pct_str = f"{s.price_change_3d:+.1f}%"
-            lines.append(f"📉 3日涨跌幅：{pct_str}")
+            lines[-1] += f" | 3日 {s.price_change_3d:+.1f}%"
 
         if s.analysis_summary:
             lines.append("")
-            lines.append("💡 <b>主要观点</b>")
+            lines.append(f"📌 <b>终极结论</b>")
             lines.append(s.analysis_summary)
+
+        if s.action_advice:
+            lines.append("")
+            lines.append(f"🎯 <b>操作建议</b>")
+            lines.append(s.action_advice)
 
         if s.analysis_full:
             lines.append("")
@@ -699,26 +713,47 @@ def _fetch_price_data(ticker: str, period: str = "1mo") -> list[dict]:
         return []
 
 
-def _extract_core_signal(text: str) -> str:
-    """Extract the 核心信号 / ultimate conclusion from the LLM response.
+def _extract_section(text: str, section_name: str) -> tuple[str, bool]:
+    """Extract a named section from the LLM response.
 
-    Looks for the first meaningful paragraph after section headers like
-    「核心信号」「1. 核心信号」「## 核心信号」. Falls back to first 300 chars.
+    Returns (content, found) where found=True if the section header was actually
+    matched, False if the result is a fallback guess.
+
+    Callers MUST check `found` before displaying the content as authoritative
+    (especially for 操作建议 — fallback text is NOT real trading advice).
     """
     patterns = [
-        r'(?:核心信号|1\.\s*核心信号|##\s*核心信号)[：:\s]*\n?(.{10,500}?)(?=\n\n|\n#|\n\d\.|\Z)',
-        r'(?:终极结论|主要结论)[：:\s]*\n?(.{10,500}?)(?=\n\n|\n#|\n\d\.|\Z)',
+        # ### 标题\n 段落  (most explicit — prompt requests this)
+        rf'#+\s*{section_name}\s*\n+(.{{10,800}}?)(?=\n\n|\n#|\n\d+\.|\Z)',
+        # 标题：段落  (Chinese colon)
+        rf'{section_name}[：:]\s*\n?(.{{10,800}}?)(?=\n\n|\n#|\n\d+\.|\n📌|\n🎯|\Z)',
+        # N. 标题 段落
+        rf'\d+\.\s*{section_name}\s*\n+(.{{10,800}}?)(?=\n\n|\n#|\n\d+\.|\Z)',
     ]
     for pat in patterns:
         m = re.search(pat, text, re.DOTALL)
         if m:
-            return m.group(1).strip()
-    # Fallback: first meaningful paragraph (skip blank/separator lines)
+            return m.group(1).strip(), True
+    # No section header found — fallback to first substantial paragraph.
+    # This is NOT real section content; callers must treat it as such.
     for line in text.split("\n"):
         stripped = line.strip()
         if len(stripped) > 30 and not stripped.startswith("#") and not stripped.startswith("-"):
-            return stripped[:500]
-    return text[:300]
+            return stripped[:500], False
+    return text[:300], False
+
+
+def _infer_market(ticker: str) -> str:
+    """Infer market from ticker format. US=alpha, HK=5-digit numeric.
+
+    MUST match futu_fetcher._ticker_to_market() logic exactly so that
+    pre-market (DB reconstruct) and post-market (Futu API) paths agree.
+    """
+    if not ticker:
+        return "US"
+    if ticker.isdigit() and len(ticker) == 5:
+        return "HK"
+    return "US"
 
 
 def _et_offset_hours() -> int:
