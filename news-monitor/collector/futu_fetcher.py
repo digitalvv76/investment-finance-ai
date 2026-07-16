@@ -293,6 +293,11 @@ class FutuFundFlowFetcher:
                     price_info = price_map.get(flow_time, {})
                     close_price = price_info.get("close", 0.0)
                     change_pct = price_info.get("change_rate", 0.0)
+                    if close_price == 0.0 and price_map:
+                        logger.warning(
+                            "Futu price_map MISS: ticker=%s flow_time=[%s] map_last5=%s",
+                            ticker, flow_time, sorted(price_map.keys())[-5:],
+                        )
 
                     fd = FundFlowDay(
                         date=flow_time,
