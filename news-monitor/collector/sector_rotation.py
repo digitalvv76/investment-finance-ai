@@ -98,7 +98,8 @@ class SectorRotationCollector:
 
         ranked = sorted(flows, key=lambda f: f.main_net, reverse=True)
         top5 = ranked[:5]
-        bottom5 = ranked[-5:] if len(ranked) >= 5 else []
+        # Avoid overlap: bottom5 only from index 5 onward
+        bottom5 = ranked[-5:] if len(ranked) >= 10 else (ranked[5:] if len(ranked) > 5 else [])
 
         summary = SectorSummary(
             top5=top5,

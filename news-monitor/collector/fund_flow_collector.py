@@ -544,7 +544,8 @@ class FundFlowCollector:
             prefix = "🔴【顶背离·风险】"
             tag = "顶背离"
         else:
-            prefix = "⚪"
+            # Non-divergence: use flow direction for prefix
+            prefix = "🟢" if inflow else "🔴"
             tag = "量价同向"
 
         title = f"{prefix} {s.ticker}"

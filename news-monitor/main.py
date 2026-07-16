@@ -12,7 +12,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 # Load .env from repo root BEFORE any module reads os.environ.
@@ -434,9 +434,12 @@ class NewsMonitor:
         while True:
             await asyncio.sleep(120)  # check every 2 minutes
             try:
-                now = datetime.now()
-                hour, minute = now.hour, now.minute
-                weekday = now.weekday()  # 0=Mon, 6=Sun
+                # ECS server is Asia/Shanghai (UTC+8); convert to US Eastern
+                now_utc = datetime.now(timezone.utc)
+                now_et = now_utc.astimezone(timezone(timedelta(hours=-5)))
+                # EDT is UTC-4, EST is UTC-5; using -5 for safety (wider window)
+                hour, minute = now_et.hour, now_et.minute
+                weekday = now_et.weekday()  # 0=Mon, 6=Sun
                 if weekday >= 5:
                     continue  # skip weekends
 
@@ -455,9 +458,9 @@ class NewsMonitor:
                                 except Exception:
                                     pass
                         if summary.extreme and self.alert_dispatcher:
-                            extreme_msg = MarketSnapshotCollector.format_intraday_alert(summary)
+                            extreme_msg = MarketSnapshotCollector.format_pre_market_summary(summary)
                             await self.alert_dispatcher.send_system_alert(
-                                title="⚡ 盘前极端异动", body=extreme_msg, priority=1,
+                                title="⚡ 盘前极端异动", message=extreme_msg,
                             )
                         logger.info("Window[pre]: %d movers pushed", len(summary.movers))
 
@@ -477,13 +480,12 @@ class NewsMonitor:
                                     pass
                         if self.alert_dispatcher:
                             await self.alert_dispatcher.send_system_alert(
-                                title="⚡ 盘中极端异动", body=msg, priority=2,
+                                title="⚡ 盘中极端异动", message=msg,
                             )
                         logger.info("Window[intra]: %d extreme pushed", len(summary.extreme))
 
                 # Sector rotation: 16:30-16:40 ET (post-market)
                 if hour == 16 and 30 <= minute <= 40:
-                    from collector.sector_rotation import SectorRotationCollector
                     s_summary = await self.sector_collector.collect_post_market()
                     if s_summary and s_summary.top5:
                         msg = SectorRotationCollector.format_summary(s_summary)

@@ -20,6 +20,18 @@ from typing import Dict, List, Optional, Set
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _safe_int(val) -> int:
+    """Convert to int, guarding against NaN (which is truthy but int(NaN)→ValueError)."""
+    try:
+        return int(float(val)) if val else 0
+    except (ValueError, TypeError):
+        return 0
+
+
+# ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
 
@@ -195,7 +207,7 @@ class MarketSnapshotCollector:
                     open_price=float(row.get("open_price", 0) or 0),
                     high_price=float(row.get("high_price", 0) or 0),
                     low_price=float(row.get("low_price", 0) or 0),
-                    volume=int(row.get("volume", 0) or 0),
+                    volume=_safe_int(row.get("volume", 0)),
                     turnover=float(row.get("turnover", 0) or 0),
                     turnover_rate=float(row.get("turnover_rate", 0) or 0),
                     pe_ratio=float(row.get("pe_ratio", 0) or 0),
