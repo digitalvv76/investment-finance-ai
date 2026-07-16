@@ -181,7 +181,7 @@ class FutuFundFlowFetcher:
         self, futu_code: str, ticker: str, days: int, market: str
     ) -> Optional[FundFlowResult]:
         """Synchronous Futu API call — runs in thread pool."""
-        from futu import OpenQuoteContext, PeriodType, RET_OK, SubType
+        from futu import OpenQuoteContext, PeriodType, RET_OK, KLType, AuType
 
         ctx = OpenQuoteContext(host=self._host, port=self._port)
         try:
@@ -191,6 +191,7 @@ class FutuFundFlowFetcher:
                 "%Y-%m-%d"
             )  # extra buffer for non-trading days
 
+            # ---- Capital flow ----
             ret, data = ctx.get_capital_flow(
                 futu_code,
                 period_type=PeriodType.DAY,
@@ -208,8 +209,31 @@ class FutuFundFlowFetcher:
                 logger.debug("Futu returned empty data for %s", futu_code)
                 return None
 
-            # Fetch stock name via snapshot
+            # ---- Price data via history K-line (Futu native, no subscription) ----
+            price_map: dict[str, dict] = {}  # "2026-07-14" → {close, change_rate}
             name = ""
+            try:
+                ret_k, kline, _ = ctx.request_history_kline(
+                    futu_code,
+                    start=start_date,
+                    end=end_date,
+                    ktype=KLType.K_DAY,
+                    autype=AuType.QFQ,
+                    max_count=days + 5,
+                )
+                if ret_k == RET_OK and len(kline) > 0:
+                    for _, kr in kline.iterrows():
+                        kdate = str(kr.get("time_key", ""))
+                        if " " in kdate:
+                            kdate = kdate.split(" ")[0]
+                        price_map[kdate] = {
+                            "close": float(kr.get("close", 0) or 0),
+                            "change_rate": float(kr.get("change_rate", 0) or 0),
+                        }
+            except Exception:
+                pass
+
+            # Stock name from snapshot
             try:
                 ret_snap, snap = ctx.get_market_snapshot([futu_code])
                 if ret_snap == RET_OK and len(snap) > 0:
@@ -248,6 +272,11 @@ class FutuFundFlowFetcher:
                         else:
                             main_pct = 0.0
 
+                    # Populate price from kline lookup
+                    price_info = price_map.get(flow_time, {})
+                    close_price = price_info.get("close", 0.0)
+                    change_pct = price_info.get("change_rate", 0.0)
+
                     fd = FundFlowDay(
                         date=flow_time,
                         main_net=our_main,         # computed: super + big
@@ -256,6 +285,8 @@ class FutuFundFlowFetcher:
                         mid_net=mid_in,
                         small_net=sml_in,
                         main_pct=round(main_pct, 2),
+                        close_price=close_price,
+                        change_pct=change_pct,
                     )
                     parsed_days.append(fd)
                 except Exception as e:
