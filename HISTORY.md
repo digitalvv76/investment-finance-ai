@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-16 15:00-18:00 · 🔧 TG推送修复 + 资金流重构 + 审计
+
+### TG 推送管线修复
+- `6ae7617` fix: TG重复推送 — IngestStage跳过id=0 + 启动加载URL缓存
+- `9551566` fix: TG推送格式 — 📌📊分段分离，不再重复+缺失
+- `6ac8f0a` fix: 深度分析按钮 — 区分「引擎未就绪」vs「条目未入库」
+- `adc5429` fix: 宏观推送空洞 — 救援舱补全impact字段 (V1诊断→V2实施)
+
+### 资金流卡片重构
+- `a51918f` feat: 资金流卡片重构 — 币种+终极结论+操作建议+对抗核实修复
+- `c7c888b` fix: 同主题去重漏网 — headline_signal回退 + CJK unigram相似度
+- `f71c57d` feat: 手机推送门槛调高 — IMPORTANT仅推关注股+宏观≥85分
+- `c0eb7dd` fix: 主力占比计算 — 用总成交绝对值替代净流入做分母
+- `e094605` fix: 资金流审计修复 — BUG-4/11/7/10/3
+- `c3a93bf` fix: BUG-5 Futu采集加重试 — 3次backoff
+
+### V1 协同
+- 审查 V1 d17018c (落后main 59提交): 取 spec 不取代码
+- 实施 macro-push-hollow-fix + phone-threshold-raise 两个 spec
+- 确认 entity_extractor 台积电→TSM 映射已存在
+
+### 审计
+- 资金流全流程审计: 19 bugs 发现, 6 fixed, 其余确认不影响/不修
+- 当前DB 12标的, 全部量价同向无背离
+
+---
+
 ## 2026-07-16T08:30+08:00 · 🚀 Futu OpenD 全栈迁移 + V2.5 生产级模型
 
 ### Futu OpenD 替代东财（完整迁移）
