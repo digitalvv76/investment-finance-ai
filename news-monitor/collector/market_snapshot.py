@@ -181,9 +181,14 @@ class MarketSnapshotCollector:
                 code = str(row.get("code", ""))
                 ticker = code.replace("US.", "") if code.startswith("US.") else code
 
+                name = str(row.get("name", ""))
+                # Skip unknown stocks (Futu returns name="未知股票" for unsupported codes)
+                if name == "未知股票" or "未知" in name:
+                    continue
+
                 items.append(SnapshotItem(
                     ticker=ticker,
-                    name=str(row.get("name", "")),
+                    name=name,
                     last_price=float(row.get("last_price", 0) or 0),
                     prev_close=float(row.get("prev_close_price", 0) or 0),
                     change_rate=float(row.get("change_rate", 0) or 0),
