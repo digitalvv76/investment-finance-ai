@@ -59,6 +59,26 @@
       "tests": ["tests/test_fund_flow_collector.py"],
       "related_scripts": [],
       "also_tests": []
+    },
+    "collector/futu_fetcher.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "collector/futu_news_fetcher.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "collector/market_snapshot.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
+    },
+    "collector/sector_rotation.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
     }
   }
 }

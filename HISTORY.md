@@ -4,6 +4,11 @@
 
 ---
 
+## 2026-07-16 21:03-21:10 · 📋 开工 + manifest 注册修复
+- futu_fetcher / futu_news_fetcher / market_snapshot / sector_rotation 注册到 collector/__manifest__.json，消除启动警告
+
+---
+
 ## 2026-07-16 15:00-18:00 · 🔧 TG推送修复 + 资金流重构 + 审计
 
 ### TG 推送管线修复
@@ -2848,3 +2853,15 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 ---
 
 ## 2026-07-16T15:08+08:00 · 会话开始
+
+## 2026-07-16T18:08 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 6059ff4 · 2026-07-16T18:07 · docs: 关机同步 — 会话记录 + SESSION.md 更新
+
+---
+
+---
+
+## 2026-07-16T21:03+08:00 · 会话开始
