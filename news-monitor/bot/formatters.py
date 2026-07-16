@@ -477,8 +477,14 @@ def _translate_macro_tags(macro_tags: str) -> str:
 
 # Inline keyboard markup helpers (already Chinese)
 def build_feedback_keyboard(news_id: int, url: str = "") -> dict:
-    """Build inline keyboard — source link only, no feedback buttons."""
-    keyboard: dict = {'inline_keyboard': []}
+    """Build inline keyboard — deep analysis + source link."""
+    keyboard = {
+        'inline_keyboard': [
+            [
+                {'text': '📊 深度分析', 'callback_data': f'analyze:{news_id}'},
+            ],
+        ]
+    }
     if url:
         keyboard['inline_keyboard'].append([
             {'text': '🔗 原文链接', 'url': url},
