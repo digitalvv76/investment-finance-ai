@@ -395,6 +395,13 @@ def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
     recent = days[-3:]
     latest = recent[-1]
 
+    # --- Backfill change_pct from close_price when missing (DB reconstruction) ---
+    for i, d in enumerate(recent):
+        if d.change_pct == 0 and d.close_price != 0 and i > 0:
+            prev_close = recent[i - 1].close_price
+            if prev_close != 0:
+                d.change_pct = (d.close_price - prev_close) / prev_close * 100
+
     # --- Anchor: 特大单 ---
     cum_super_big = sum(d.super_big_net for d in recent)
     cum_main = sum(d.main_net for d in recent)

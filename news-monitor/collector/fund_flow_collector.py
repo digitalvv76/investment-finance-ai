@@ -354,6 +354,7 @@ class FundFlowCollector:
                 super_big_net=r["super_big_net"], big_net=r["big_net"],
                 mid_net=r["mid_net"], small_net=r["small_net"],
                 main_pct=r["main_pct"],
+                close_price=r.get("close_price", 0.0),
             )
             for r in rows
         ]
@@ -492,6 +493,7 @@ class FundFlowCollector:
                 mid_net=day.mid_net,
                 small_net=day.small_net,
                 main_pct=day.main_pct,
+                close_price=day.close_price,
                 source=result.source,
                 fetched_at=result.fetched_at,
             )

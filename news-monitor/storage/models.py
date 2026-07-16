@@ -184,6 +184,7 @@ class FundFlowRecord:
     mid_net: float = 0.0               # 中单 (Futu: mid_in_flow)
     small_net: float = 0.0             # 小单 (Futu: sml_in_flow)
     main_pct: float = 0.0              # 主力占比 = (super+big)/abs(total)*100
+    close_price: float = 0.0           # 当日收盘价 (for divergence signal computation)
     source: str = ""                   # "futu"
     fetched_at: float = 0.0            # unix timestamp
     created_at: datetime = field(default_factory=datetime.now)

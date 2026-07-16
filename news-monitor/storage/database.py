@@ -195,6 +195,7 @@ class Database:
                     mid_net REAL DEFAULT 0.0,
                     small_net REAL DEFAULT 0.0,
                     main_pct REAL DEFAULT 0.0,
+                    close_price REAL DEFAULT 0.0,
                     source TEXT DEFAULT '',
                     fetched_at REAL DEFAULT 0.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -212,6 +213,7 @@ class Database:
                 "ALTER TABLE impact_assessments ADD COLUMN flash_note TEXT DEFAULT ''",
                 "ALTER TABLE impact_assessments ADD COLUMN key_points TEXT DEFAULT ''",
                 "ALTER TABLE impact_assessments ADD COLUMN risk_flags TEXT DEFAULT ''",
+                "ALTER TABLE fund_flow ADD COLUMN close_price REAL DEFAULT 0.0",
             ]
             for stmt in _migrations:
                 try:
@@ -635,12 +637,13 @@ class Database:
             c = conn.execute("""
                 INSERT OR REPLACE INTO fund_flow
                     (ticker, date, main_net, super_big_net, big_net, mid_net,
-                     small_net, main_pct, source, fetched_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     small_net, main_pct, close_price, source, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 record.ticker.upper(), record.date,
                 record.main_net, record.super_big_net, record.big_net,
                 record.mid_net, record.small_net, record.main_pct,
+                record.close_price,
                 record.source, record.fetched_at,
             ))
             if c.lastrowid:
