@@ -2946,3 +2946,15 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 - V2 建议 v1-stable 取消/限寿命，待用户决策 (T14)
 
 ---
+
+## 2026-07-17T10:44 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 3c893ee · 2026-07-17T10:41 · docs: 关机同步 — HISTORY.md + SESSION.md 更新
+
+---
+
+---
+
+## 2026-07-17T11:34+08:00 · 会话开始
