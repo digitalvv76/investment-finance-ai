@@ -240,10 +240,12 @@ class NewsMonitor:
         from pipeline.macro import MacroStage
         from pipeline.screen import ScreenStage
         from pipeline.evaluate import EvaluateStage
+        from pipeline.graham import GrahamStage
         from pipeline.dispatch import DispatchStage
         from pipeline.deep import DeepStage
         from pipeline.channel import PushoverChannel, TelegramChannel, WebSSEChannel
         from engine.macro_agent import MacroAgent
+        from engine.graham_reviewer import GrahamReviewer
 
         channels = []
         channels.append(PushoverChannel(self.alert_dispatcher))
@@ -254,6 +256,7 @@ class NewsMonitor:
 
         self._dispatch_stage = DispatchStage(channels=channels)
         self._macro_agent = MacroAgent()
+        self._graham_reviewer = GrahamReviewer()
         self._pipeline = Pipeline([
             IngestStage(db=self.db, dedup=self.dedup, vector_store=self.vector_store, cluster=self.cluster),
             MacroStage(macro_agent=self._macro_agent),
@@ -266,13 +269,14 @@ class NewsMonitor:
                 event_evaluator=self.event_evaluator,
                 cluster=self.cluster,
             ),
+            GrahamStage(reviewer=self._graham_reviewer),
             self._dispatch_stage,
             DeepStage(deep_lane=self.deep_lane),
         ])
         # Expose recent decisions to the web panel (dashboard built before pipeline).
         if self.web_dashboard is not None:
             self.web_dashboard.decisions_source = self._dispatch_stage
-        logger.info("Pipeline: IngestStage → MacroStage → ScreenStage → EvaluateStage → DispatchStage → DeepStage")
+        logger.info("Pipeline: IngestStage → MacroStage → ScreenStage → EvaluateStage → GrahamStage → DispatchStage → DeepStage")
 
     # -----------------------------------------------------------------
     # Callback - wired to scheduler.on_news_batch

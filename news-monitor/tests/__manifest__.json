@@ -150,6 +150,11 @@
       "tests": [],
       "related_scripts": [],
       "also_tests": []
+    },
+    "tests/test_graham_reviewer.py": {
+      "tests": [],
+      "related_scripts": [],
+      "also_tests": []
     }
   }
 }

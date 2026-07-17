@@ -186,6 +186,13 @@
       ],
       "related_scripts": [],
       "also_tests": []
+    },
+    "engine/graham_reviewer.py": {
+      "tests": [
+        "tests/test_graham_reviewer.py"
+      ],
+      "related_scripts": [],
+      "also_tests": []
     }
   }
 }
