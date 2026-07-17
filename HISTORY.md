@@ -2911,4 +2911,24 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 
 ---
 
-## 2026-07-17T09:19+08:00 · 会话开始
+## 2026-07-17T09:19+08:00 · 📱 推送门槛全面提高
+
+- `e741974` docs: 补录 HISTORY.md — SessionEnd 自动回填 + 会话开始标记
+- `a46e552` refactor: 推送门槛全面提高 — 手机仅CRITICAL/宏观≥92/extreme±7%
+
+### 手机 Pushover
+- 移除关注股 IMPORTANT 手机门禁（71只普通新闻不再震手机）
+- 宏观阈值 85→92，去重窗口 6h→24h，快照 extreme ±5%→±7%
+- 战略规则(gov_intervention/NVDA)走 CRITICAL 独立通道，不受影响
+
+### TG
+- IMPORTANT 阈值 0.45→0.50，每周期封顶 5→4 条
+
+### 资金流
+- 背离+STANDARD→skip，仅 STRONG 信号推送
+
+### Memory
+- 新增 [[strategic-rules-phone-first]]：战略规则是手机推送最高优先级
+- 更新 [[push-phone-rules]]：记录新门禁参数
+
+---
