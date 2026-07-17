@@ -74,7 +74,7 @@ ssh "$ECS_HOST" "cd ${DOCKER_DIR} && docker compose -f docker-compose.yml up -d 
 
 # ── 4. 健康验证 ────────────────────────────────────────────────────────
 if $VERIFY; then
-  info "4/5  健康验证"
+  info "4/6  健康验证"
   for i in $(seq 1 12); do
     sleep 5
     STATUS=$(ssh "$ECS_HOST" "docker ps --filter name=^news-monitor$ --format '{{.Status}}' 2>/dev/null")
@@ -85,9 +85,43 @@ if $VERIFY; then
   done
   ssh "$ECS_HOST" "docker logs news-monitor --since 90s 2>&1 | grep -E 'News Monitor running|Watchdog started' | tail -2" || true
 else
-  info "4/5  验证已跳过"
+  info "4/6  验证已跳过"
 fi
 
-# ── 5. 完成 ────────────────────────────────────────────────────────────
-info "5/5  部署完成"
+# ── 5. Smoke test ──────────────────────────────────────────────────────
+info "5/6  Smoke test — 关键模块 import 检查"
+SMOKE_OUT=$(ssh "$ECS_HOST" "docker exec news-monitor python -c \"
+from collector.fund_flow_collector import FundFlowCollector
+from pipeline.dispatch import DispatchStage
+from engine.alert_dispatcher import AlertDispatcher
+from engine.strategic_detector import StrategicDetector
+print('SMOKE OK')
+\"" 2>&1)
+if echo "$SMOKE_OUT" | grep -q "SMOKE OK"; then
+  echo -e "     ${GREEN}✅ SMOKE OK${NC}"
+else
+  err "     ❌ SMOKE FAILED: ${SMOKE_OUT}"
+  exit 1
+fi
+
+# ── 6. 完成 + TG 通知 ─────────────────────────────────────────────────
+COMMIT_HASH=$(git log -1 --format='%h')
+COMMIT_MSG=$(git log -1 --format='%s')
+info "6/6  部署完成 — ${COMMIT_HASH}"
+
+# TG 通知：从 .env 取 token，发静默消息
+TG_TOKEN="$(grep -s '^TELEGRAM_BOT_TOKEN=' "${_SCRIPT_DIR}/.env" | cut -d= -f2- | tr -d '\r' || true)"
+if [ -n "$TG_TOKEN" ]; then
+  TG_MSG="✅ V2 已更新 — ${COMMIT_HASH}%0A${COMMIT_MSG}"
+  # 从 settings.json 取第一个 chat_id
+  CHAT_ID="$(python3 -c "import json; c=json.load(open('${_SCRIPT_DIR}/news-monitor/config/settings.json')); print(c.get('telegram',{}).get('chat_ids',[''])[0])" 2>/dev/null || echo "")"
+  if [ -n "$CHAT_ID" ]; then
+    curl -s -m 8 "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+      -d "chat_id=${CHAT_ID}" -d "text=${TG_MSG}" \
+      -d "disable_notification=true" >/dev/null 2>&1 && \
+      info "     TG 通知已发送 → chat_id=${CHAT_ID}" || \
+      warn "     TG 通知发送失败"
+  fi
+fi
+
 info "     回滚: ssh ${ECS_HOST} \"docker tag docker-news-monitor:${ROLLBACK_TAG} docker-news-monitor && cd ${DOCKER_DIR} && docker compose -f docker-compose.yml up -d news-monitor\""

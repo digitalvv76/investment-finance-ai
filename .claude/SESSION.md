@@ -1,13 +1,35 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-17 凌晨。关机同步。
+> 最后更新: 2026-07-17。推送门槛全面提高已部署。
 
 ## 🟢 当前部署状态
-- **ECS 生产**: V2 (origin/main, `9cf7d0c`)，健康 ✅
+- **ECS 生产**: V2 (origin/main, `d6a3da7`)，健康 ✅
 - **LLM 供应商**: DeepSeek 唯一 ✅
 - **Futu OpenD**: systemd 自启，行情+资金流+新闻+快照+板块五合一 ✅
 - **TG 推送**: 资金流 + 新闻 + 快照 + 板块轮动，四通道正常 ✅
 - **资金流 DB**: 72 标的，1451 行（最新 07-16）
+
+## 📱 推送门槛调整 (2026-07-17 已部署)
+
+### 手机 Pushover
+- 仅 3 种情况震手机：战略规则(STRATEGIC_*) > 宏观≥92 > CRITICAL
+- 关注股 IMPORTANT 新闻 → TG only（不再震手机）
+- 去重 6h→24h，快照 extreme ±5%→±7%
+
+### TG
+- IMPORTANT 阈值 0.45→0.50，每周期封顶 5→4 条
+
+### 资金流
+- 背离+STANDARD→skip，仅 STRONG 推送
+
+### 对抗核实
+- 发现 classify() auto-CRITICAL 死代码，改为 _phone_threshold_ok 显式战略绕过
+- `fast_lane.py` 打的 STRATEGIC_* 标签第一优先级检查
+
+## 📋 下一步
+- OpenD systemd 重启循环修复（cron 已排期 06:00 CST）
+- P1 ATR 波动率阈值 + 因子有效性回测
+- 观察推送频率变化
 
 ## ✅ 本次会话交付 (~18 个提交)
 
