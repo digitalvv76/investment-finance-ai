@@ -214,6 +214,276 @@ def geo_market_filter(text: str, source: str = "") -> float:
 
 
 # ---------------------------------------------------------------------------
+# Geo-tier weight — economic relevance by geography for US-centric investing
+# ---------------------------------------------------------------------------
+# SEPARATE from geo_market_filter() above, which handles political noise
+# demotion.  This function classifies news by geographic focus and applies
+# a relevance multiplier: US=1.0, non-US=0.25, unclassified=1.0.
+#
+# Principle: user invests primarily in US stocks.  Non-US macro news
+# (ECB, BOJ, China GDP, etc.) is basically never pushed unless it is an
+# extreme outlier event (raw_score ≈ 1.0).
+
+# ── US-tier patterns ─────────────────────────────────────────────────
+# Only patterns that EXPLICITLY signal US context.  Do NOT include bare
+# macro indicator names (CPI/PPI/GDP/PMI/ISM) — those appear globally
+# and would false-match "UK GDP", "Eurozone PMI" etc.
+
+_US_TIER_PATTERNS: list[re.Pattern] = [
+    re.compile(p, re.IGNORECASE) for p in [
+        # Federal Reserve / monetary policy
+        r'\bFederal\s+Reserve\b', r'\bthe\s+Fed\b', r'\bFOMC\b',
+        r'\b(?:Jerome\s+)?Powell\b', r'\bWarsh\b',
+        # US market indices
+        r'\bS&P\s*500\b', r'\bSPX\b', r'\bNASDAQ\b', r'\bNDX\b',
+        r'\bNYSE\b', r'\bDow\s+Jones\b',
+        # US government institutions
+        r'\bWhite\s+House\b', r'\bCongress\b', r'\bSenate\b',
+        r'\b(?:US\s+)?Treasury\s+Department\b', r'\bUS\s+Treasury\b',
+        r'\bSEC\b',
+        # US financial places
+        r'\bWall\s+Street\b', r'\bSilicon\s+Valley\b',
+        # US dollar / index
+        r'\bDXY\b', r'\bdollar\s+index\b',
+        # US-specific labour-market releases (unambiguously US)
+        r'\bjobless\s+claims\b', r'\binitial\s+claims\b',
+        r'\bcontinuing\s+claims\b', r'\bnonfarm\s+payrolls?\b',
+        r'\bNFP\b',
+        # US-specific housing / mortgage
+        r'\bMBA\s+mortgage\b', r'\bFreddie\s+Mac\b', r'\bFannie\s+Mae\b',
+        # Regional Fed surveys
+        r'\bPhilly\s+Fed\b', r'\bEmpire\s+State\b',
+        r'\bRichmond\s+Fed\b', r'\bDallas\s+Fed\b', r'\bChicago\s+PMI\b',
+        # Explicit US qualifier + macro indicator
+        r'\bUS\s+CPI\b', r'\bUS\s+PPI\b', r'\bUS\s+GDP\b',
+        r'\bUS\s+PMI\b', r'\bUS\s+ISM\b',
+        r'\bUS\s+consumer\s+(?:confidence|sentiment|spending)\b',
+        r'\bUS\s+retail\s+sales\b', r'\bUS\s+manufacturing\b',
+        r'\bUS\s+services\b', r'\bUS\s+industrial\s+production\b',
+        r'\bUS\s+factory\s+orders\b', r'\bUS\s+trade\s+(?:deficit|balance)\b',
+        r'\bUS\s+housing\s+starts\b', r'\bUS\s+existing\s+home\b',
+        r'\bUS\s+new\s+home\b', r'\bUS\s+durable\s+goods\b',
+        # Standalone "US" / "U.S." followed by a market-context word
+        r'\bU\.?S\.?\s+(?:stock|market|econom|government|trade|tariff|'
+        r'regulat|consumer|business|housing|job|inflat|data|report|index|'
+        r'bond|yield|equity|fund|investor|dollar|treasury|fed|central\s+bank|'
+        r'growth|outlook|recession|sentiment|spending|earnings|corporate)',
+        # "American" / "America" in economic context
+        r'\bAmerican\s+(?:economy|market|consumer|business|manufacturing)\b',
+    ]
+]
+
+# Chinese-language US-tier keywords (substring match on original CJK text)
+_US_TIER_CJK: list[str] = [
+    "美联储", "联邦储备", "鲍威尔", "沃尔什", "联储主席",
+    "标普", "纳斯达克", "道琼斯", "纽交所", "纽约证券交易所",
+    "白宫", "美国国会", "美财政部", "美国财政部",
+    "非农", "初请失业金", "续请失业金",
+    "美股", "美元指数", "华尔街", "硅谷",
+    "美国CPI", "美国PPI", "美国GDP", "美国PMI", "美国ISM",
+    "美国消费者信心", "美国零售", "美国制造业", "美国服务业",
+]
+
+# ── Non-US patterns ──────────────────────────────────────────────────
+# Any match here → weight 0.25 (basically never push).  Covers ALL
+# regions outside the US: Europe, Japan, China, Korea, Canada, Australia,
+# Taiwan, Hong Kong, India, Brazil, Turkey, SE Asia, Russia, etc.
+
+_NON_US_PATTERNS: list[re.Pattern] = [
+    re.compile(p, re.IGNORECASE) for p in [
+        # ── Europe ──
+        r'\bECB\b', r'\bEuropean\s+Central\s+Bank\b', r'\bEurozone\b',
+        r'\bEuro\s+area\b', r'\bEuropean\s+(?:Union|Commission)\b',
+        r'\b(?:Christine\s+)?Lagarde\b',
+        r'\bEUR\b', r'\beuro\b',
+        # UK
+        r'\bBank\s+of\s+England\b', r'\bBoE\b', r'\b(?:Andrew\s+)?Bailey\b',
+        r'\bUnited\s+Kingdom\b', r'\bUK\b', r'\bBritain\b', r'\bBritish\b',
+        r'\bFTSE\b', r'\bGBP\b', r'\bsterling\b',
+        # Germany
+        r'\bGermany\b', r'\bGerman\b', r'\bBerlin\b', r'\bBundesbank\b',
+        r'\bDAX\b',
+        # France
+        r'\bFrance\b', r'\bFrench\b', r'\bParis\b', r'\bCAC\s*40\b',
+        # Italy / Spain / Netherlands / Switzerland / Sweden / Norway
+        r'\bItaly\b', r'\bItalian\b',
+        r'\bSpain\b', r'\bSpanish\b',
+        r'\bNetherlands\b', r'\bDutch\b',
+        r'\bSwitzerland\b', r'\bSwiss\b', r'\bSNB\b', r'\bCHF\b',
+        r'\bSweden\b', r'\bSwedish\b', r'\bRiksbank\b', r'\bSEK\b',
+        r'\bNorway\b', r'\bNorwegian\b', r'\bNorges\s+Bank\b', r'\bNOK\b',
+
+        # ── Japan ──
+        r'\bJapan\b', r'\bJapanese\b', r'\bTokyo\b',
+        r'\bBank\s+of\s+Japan\b', r'\bBoJ\b', r'\b(?:Kazuo\s+)?Ueda\b',
+        r'\bNikkei\b', r'\bJPY\b', r'\bYen\b', r'\bTOPIX\b',
+
+        # ── China ──
+        r'\bChina\b', r'\bChinese\b', r'\bBeijing\b',
+        r'\bPBOC\b', r'\bPeople\'?s?\s+Bank\s+of\s+China\b',
+        r'\bCSRC\b', r'\bShanghai\b', r'\bShenzhen\b',
+        r'\bCSI\s*300\b', r'\bCNY\b', r'\bRMB\b', r'\bYuan\b',
+        r'\bA-?shares?\b', r'\bA股\b',
+
+        # ── Korea ──
+        r'\bKorea\b', r'\bKorean\b', r'\bSeoul\b',
+        r'\bBank\s+of\s+Korea\b', r'\bBoK\b',
+        r'\bKOSPI\b', r'\bKRW\b', r'\bWon\b',
+
+        # ── Canada ──
+        r'\bCanada\b', r'\bCanadian\b', r'\bOttawa\b',
+        r'\bBank\s+of\s+Canada\b', r'\bBoC\b',
+        r'\bTSX\b', r'\bCAD\b', r'\bLoonie\b',
+
+        # ── Australia / New Zealand ──
+        r'\bAustralia\b', r'\bAustralian\b', r'\bSydney\b',
+        r'\bRBA\b', r'\bASX\b', r'\bAUD\b',
+        r'\bNew\s+Zealand\b', r'\bWellington\b', r'\bRBNZ\b', r'\bNZD\b',
+
+        # ── Taiwan / Hong Kong ──
+        r'\bTaiwan\b', r'\bTaipei\b', r'\bTaiwanese\b',
+        r'\bTWSE\b', r'\bTWD\b',
+        r'\bHong\s+Kong\b', r'\bHK\b',
+        r'\bHang\s+Seng\b', r'\bHSI\b', r'\bHKMA\b', r'\bHKD\b',
+
+        # ── India ──
+        r'\bIndia\b', r'\bIndian\b', r'\bMumbai\b', r'\bDelhi\b',
+        r'\bRBI\b', r'\bNSE\b', r'\bBSE\b', r'\bSensex\b', r'\bNifty\b',
+        r'\bINR\b', r'\bRupee\b',
+
+        # ── Brazil ──
+        r'\bBrazil\b', r'\bBrazilian\b', r'\bBrasilia\b', r'\bSao\s+Paulo\b',
+        r'\bBCB\b', r'\bBovespa\b', r'\bBRL\b', r'\bReal\b',
+
+        # ── Other emerging / non-core ──
+        r'\bTurkey\b', r'\bTurkish\b', r'\bAnkara\b', r'\bIstanbul\b',
+        r'\bTCMB\b', r'\bLira\b', r'\bTRY\b',
+        r'\bSouth\s+Africa\b', r'\bSARB\b', r'\bRand\b', r'\bZAR\b',
+        r'\bIndonesia\b', r'\bIndonesian\b', r'\bJakarta\b',
+        r'\bBank\s+Indonesia\b', r'\bIDR\b', r'\bRupiah\b',
+        r'\bMalaysia\b', r'\bMalaysian\b', r'\bKuala\s+Lumpur\b',
+        r'\bBNM\b', r'\bRinggit\b', r'\bMYR\b',
+        r'\bThailand\b', r'\bThai\b', r'\bBangkok\b', r'\bBoT\b',
+        r'\bBaht\b', r'\bTHB\b',
+        r'\bPhilippines\b', r'\bFilipino\b', r'\bManila\b',
+        r'\bBSP\b', r'\bPeso\b', r'\bPHP\b',
+        r'\bVietnam\b', r'\bVietnamese\b', r'\bHanoi\b', r'\bDong\b', r'\bVND\b',
+        r'\bSingapore\b', r'\bSingaporean\b', r'\bMAS\b', r'\bSGD\b', r'\bSTI\b',
+        r'\bMexico\b', r'\bMexican\b', r'\bBanxico\b', r'\bMXN\b',
+        r'\bChile\b', r'\bSantiago\b', r'\bCLP\b',
+        r'\bArgentina\b', r'\bBuenos\s+Aires\b', r'\bARS\b',
+        r'\bColombia\b', r'\bBogota\b', r'\bCOP\b',
+        r'\bPoland\b', r'\bPolish\b', r'\bWarsaw\b', r'\bNBP\b', r'\bPLN\b',
+        r'\bCzech\b', r'\bPrague\b', r'\bCNB\b', r'\bCZK\b',
+        r'\bRussia\b', r'\bRussian\b', r'\bMoscow\b', r'\bCBR\b',
+        r'\bRuble\b', r'\bRUB\b', r'\bMOEX\b',
+        r'\bNigeria\b', r'\bLagos\b', r'\bCBN\b', r'\bNaira\b', r'\bNGN\b',
+        r'\bEgypt\b', r'\bCairo\b', r'\bEGP\b',
+        r'\bPakistan\b', r'\bKarachi\b', r'\bIslamabad\b', r'\bPKR\b',
+        r'\bBangladesh\b', r'\bDhaka\b',
+        r'\bSaudi\s+Arabia\b', r'\bSaudi\b', r'\bRiyadh\b', r'\bSAMA\b',
+        r'\bUAE\b', r'\bEmirates\b', r'\bDubai\b', r'\bAbu\s+Dhabi\b',
+        r'\bIsrael\b', r'\bIsraeli\b', r'\bTel\s+Aviv\b', r'\bBank\s+of\s+Israel\b',
+        r'\bQatar\b', r'\bDoha\b',
+        r'\bKuwait\b',
+        r'\bUkraine\b', r'\bUkrainian\b', r'\bKyiv\b',
+    ]
+]
+
+# Chinese-language non-US keywords (substring match on original CJK text)
+# Note: "中国" is separately guarded (see _NON_US_CJK guard logic below)
+# because standalone 中国 can appear in "中美" (US-China) contexts.
+_NON_US_CJK: list[str] = [
+    # Europe
+    "欧洲央行", "欧央行", "拉加德", "欧元区", "欧盟委员会",
+    "德国", "柏林", "德联邦银行", "DAX",
+    "法国", "巴黎", "CAC40",
+    "英国", "伦敦", "英央行", "英镑", "富时", "英格伦",
+    "意大利", "西班牙", "荷兰", "瑞士", "瑞典", "挪威",
+    # Japan
+    "日本", "东京", "日本央行", "日银", "日元", "植田和男", "日经",
+    # China
+    "中国央行", "人民银行", "中国人民银行", "证监会", "银保监",
+    "上海", "深圳", "沪深300", "人民币", "在岸", "离岸人民币",
+    "A股",
+    # Korea
+    "韩国", "首尔", "韩元", "韩国央行", "KOSPI",
+    # Canada
+    "加拿大", "渥太华", "加元", "加拿大央行",
+    # Australia
+    "澳大利亚", "澳洲", "悉尼", "澳元", "澳洲央行",
+    # Taiwan / HK
+    "台湾", "台北", "台币", "台股", "加权指数",
+    "香港", "恒生", "港币", "金管局", "港股",
+    # India / Brazil
+    "印度", "孟买", "新德里", "卢比", "印度央行", "Sensex",
+    "巴西", "圣保罗", "雷亚尔", "巴西央行",
+    # Other
+    "土耳其", "里拉", "南非", "兰特",
+    "印尼", "雅加达", "印尼盾",
+    "马来西亚", "吉隆坡", "令吉",
+    "泰国", "曼谷", "泰铢",
+    "菲律宾", "马尼拉", "比索",
+    "越南", "河内", "胡志明", "越南盾",
+    "新加坡", "新元", "新加坡元",
+    "墨西哥", "墨西哥比索",
+    "阿根廷", "布宜诺斯艾利斯",
+    "俄罗斯", "莫斯科", "卢布",
+    "沙特", "利雅得", "阿联酋", "迪拜",
+    "以色列", "特拉维夫",
+    "乌克兰", "基辅",
+    # Chinese provincial data (explicitly domestic, not national)
+    "广东", "北京", "上海", "深圳", "广州", "浙江", "江苏",
+    "山东", "四川", "湖北", "河南", "河北", "湖南", "福建",
+    "安徽", "辽宁", "重庆", "天津", "陕西", "江西", "广西",
+    "云南", "贵州", "山西", "吉林", "黑龙江", "甘肃", "海南",
+    "内蒙古", "宁夏", "青海", "西藏", "新疆",
+]
+
+
+def geo_tier_weight(headline: str, tickers_found: list[str] | None = None) -> float:
+    """Assign geographic relevance weight for US-centric investing.
+
+    Returns:
+        1.0  — US-market news, company-specific news (has tickers), or unclassified
+        0.25 — Non-US macro/regional news (basically never push)
+
+    A ticker hit exempts the item entirely — company news is about the
+    company, not the country.  TSMC earnings ≠ Taiwan GDP report.
+    """
+    # ── Gate 1: company-specific news (has ticker) → exempt ──
+    if tickers_found:
+        return 1.0
+
+    # ── Gate 2: empty headline → unclassified ──
+    if not headline:
+        return 1.0
+
+    text_lower = headline.lower()
+
+    # ── Gate 3: US signals → 1.0 (check FIRST) ──
+    for pat in _US_TIER_PATTERNS:
+        if pat.search(text_lower):
+            return 1.0
+
+    for kw in _US_TIER_CJK:
+        if kw in headline:
+            return 1.0
+
+    # ── Gate 4: non-US signals → 0.25 ──
+    for pat in _NON_US_PATTERNS:
+        if pat.search(text_lower):
+            return 0.25
+
+    for kw in _NON_US_CJK:
+        if kw in headline:
+            return 0.25
+
+    # ── Gate 5: unclassified (global / crypto / commodity / no geo signal) ──
+    return 1.0
+
+
+# ---------------------------------------------------------------------------
 # Stage B — Content quality filter
 # ---------------------------------------------------------------------------
 

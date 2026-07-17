@@ -13,7 +13,7 @@ from config.loader import ConfigLoader
 from engine.entity_extractor import EntityExtractor
 from engine.priority import PriorityScorer
 from engine.strategic_detector import StrategicDetector
-from engine.content_filter import geo_market_filter, content_quality_filter
+from engine.content_filter import geo_market_filter, content_quality_filter, geo_tier_weight
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +166,9 @@ class FastLane:
 
             geo_mult = geo_market_filter(text, source)
             quality_mult = content_quality_filter(text, tickers_str)
-            item._filter_mult = round(geo_mult * quality_mult, 3)
+            tier_mult = geo_tier_weight(text, list(tickers))
+            item._tier_mult = tier_mult
+            item._filter_mult = round(geo_mult * quality_mult * tier_mult, 3)
 
             # 3. Breaking detection
             item.is_breaking = self._is_breaking(text)

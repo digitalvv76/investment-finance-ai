@@ -3,6 +3,7 @@ import pytest
 from engine.content_filter import (
     geo_market_filter,
     content_quality_filter,
+    geo_tier_weight,
     _is_ccp_propaganda,
     _is_single_stock_noise,
     _is_political_gossip,
@@ -285,3 +286,183 @@ class TestMajorStockEvents:
         text = "Apple stock edges higher, analysts remain cautious"
         # No massive move, no FDA, no M&A, no CEO change → noise
         assert _is_single_stock_noise(text.lower(), has_tickers=True)
+
+
+class TestGeoTierWeight:
+    """Geo-tier relevance weighting — US=1.0, non-US=0.25, unclassified=1.0."""
+
+    # ── Tier: US (1.0) ──────────────────────────────────────────────
+
+    def test_us_fed_news(self):
+        assert geo_tier_weight("Federal Reserve holds rates steady, S&P 500 rallies", []) == 1.0
+
+    def test_us_fomc_minutes(self):
+        assert geo_tier_weight("FOMC minutes show broad support for holding rates", []) == 1.0
+
+    def test_us_powell_speech(self):
+        assert geo_tier_weight("Powell says Fed is in no rush to cut rates", []) == 1.0
+
+    def test_us_jobless_claims(self):
+        assert geo_tier_weight("US jobless claims fall to 210k, labor market remains tight", []) == 1.0
+
+    def test_us_nonfarm_payrolls(self):
+        assert geo_tier_weight("Nonfarm Payrolls surge 275k in June, beating 190k estimate", []) == 1.0
+
+    def test_us_cpi_explicit(self):
+        assert geo_tier_weight("US CPI rises 3.2%, above 3.1% consensus estimate", []) == 1.0
+
+    def test_us_retail_sales(self):
+        assert geo_tier_weight("US retail sales unexpectedly drop 0.3% in June", []) == 1.0
+
+    def test_us_wall_street(self):
+        assert geo_tier_weight("Wall Street bonuses hit record $50B as dealmaking surges", []) == 1.0
+
+    def test_us_chinese_language(self):
+        assert geo_tier_weight("美联储紧急降息50基点 纳斯达克暴涨 标普500创新高", []) == 1.0
+
+    def test_us_chinese_language_nonfarm(self):
+        assert geo_tier_weight("美国非农数据大超预期 初请失业金人数降至20万以下", []) == 1.0
+
+    # ── Tier: Non-US (0.25) — Europe ────────────────────────────────
+
+    def test_ecb_rate_decision(self):
+        assert geo_tier_weight("ECB cuts rates by 25bps as Eurozone inflation finally eases", []) == 0.25
+
+    def test_lagarde_speech(self):
+        assert geo_tier_weight("Lagarde signals more rate cuts ahead as growth weakens", []) == 0.25
+
+    def test_uk_cpi(self):
+        assert geo_tier_weight("UK inflation falls to 2.0% target, Bank of England eyes rate cut", []) == 0.25
+
+    def test_boe_decision(self):
+        assert geo_tier_weight("BoE holds rates at 5.25% in split 7-2 vote", []) == 0.25
+
+    def test_germany_gdp(self):
+        assert geo_tier_weight("German GDP contracts 0.3% in Q2, DAX drops 2%", []) == 0.25
+
+    def test_france_political(self):
+        assert geo_tier_weight("French bonds sell off as Paris gridlock threatens fiscal stability", []) == 0.25
+
+    def test_europe_chinese_language(self):
+        assert geo_tier_weight("欧洲央行维持利率不变 拉加德表示不急于降息 欧元区PMI持续萎缩", []) == 0.25
+
+    # ── Tier: Non-US (0.25) — Japan ─────────────────────────────────
+
+    def test_boj_hike(self):
+        assert geo_tier_weight("Bank of Japan unexpectedly hikes rates to 0.5%, yen surges 3%", []) == 0.25
+
+    def test_japan_gdp(self):
+        assert geo_tier_weight("Japan GDP growth accelerates to 3.1% annualized in Q2", []) == 0.25
+
+    def test_nikkei_drop(self):
+        assert geo_tier_weight("Nikkei plunges 5% as yen strength hits exporters", []) == 0.25
+
+    # ── Tier: Non-US (0.25) — China ─────────────────────────────────
+
+    def test_china_gdp(self):
+        assert geo_tier_weight("China Q2 GDP grows 4.7%, misses 5.1% forecast", []) == 0.25
+
+    def test_pboc_rate_cut(self):
+        assert geo_tier_weight("PBOC cuts MLF rate by 10bps to boost flagging economy", []) == 0.25
+
+    def test_china_chinese_language(self):
+        assert geo_tier_weight("中国央行降准50基点释放1万亿流动性 人民币跌破7.3", []) == 0.25
+
+    def test_provincial_cpi_excluded(self):
+        """Guangdong provincial CPI → non-US (0.25). Would be 1.0 if white-listed."""
+        assert geo_tier_weight("广东居民消费价格同比上涨2.1% 食品价格领涨", []) == 0.25
+
+    # ── Tier: Non-US (0.25) — Korea / Canada / Australia ─────────────
+
+    def test_korea_exports(self):
+        assert geo_tier_weight("South Korea exports surge 12% in June, chip demand strong", []) == 0.25
+
+    def test_canada_cpi(self):
+        assert geo_tier_weight("Canada CPI unexpectedly rises to 3.4%, BoC rate cut hopes fade", []) == 0.25
+
+    def test_rba_decision(self):
+        assert geo_tier_weight("RBA holds rates at 4.35%, warns inflation still too high", []) == 0.25
+
+    # ── Tier: Non-US (0.25) — India / Brazil / emerging ─────────────
+
+    def test_india_gdp(self):
+        assert geo_tier_weight("India GDP growth slows to 6.5%, RBI under pressure to cut", []) == 0.25
+
+    def test_brazil_selic(self):
+        assert geo_tier_weight("Brazil central bank BCB raises Selic to 12.25%", []) == 0.25
+
+    def test_turkey_inflation(self):
+        assert geo_tier_weight("Turkey inflation surges to 75% as lira collapses", []) == 0.25
+
+    def test_russia_ruble(self):
+        assert geo_tier_weight("Russian ruble hits 100 per dollar, CBR considers emergency hike", []) == 0.25
+
+    def test_saudi_oil(self):
+        assert geo_tier_weight("Saudi Arabia signals OPEC+ may delay output increase", []) == 0.25
+
+    # ── Ticker exemption ─────────────────────────────────────────────
+
+    def test_ticker_exempts_geo_tier(self):
+        """Company news with ticker → 1.0 regardless of geography."""
+        assert geo_tier_weight("Sony reports record profit, Japan sales surge 40%", ["SONY"]) == 1.0
+
+    def test_tsmc_earnings_exempt(self):
+        """TSMC earnings is company news, not Taiwan macro → 1.0"""
+        assert geo_tier_weight("TSMC beats Q2 estimates, Taiwan fab expansion on track", ["TSMC"]) == 1.0
+
+    def test_no_ticker_no_exempt(self):
+        """Same Japan text without ticker → non-US weight applies."""
+        assert geo_tier_weight("Japan GDP beats expectations, Nikkei rallies", []) == 0.25
+
+    def test_empty_tickers_list_no_exempt(self):
+        """Empty ticker list passed explicitly → tiering applies."""
+        assert geo_tier_weight("ECB minutes show broad hawkish tilt", []) == 0.25
+
+    # ── US priority ──────────────────────────────────────────────────
+
+    def test_us_wins_over_non_us(self):
+        """When both US and non-US mentioned, US signal wins → 1.0"""
+        assert geo_tier_weight(
+            "S&P 500 falls as Japan GDP miss spooks global investors, Fed speakers due today",
+            [],
+        ) == 1.0
+
+    def test_nasdaq_plus_china_still_us(self):
+        """NASDAQ mention dominates China mention → 1.0"""
+        assert geo_tier_weight(
+            "NASDAQ futures drop on China trade war fears, tech stocks slide",
+            [],
+        ) == 1.0
+
+    # ── Unclassified (1.0) ───────────────────────────────────────────
+
+    def test_global_markets_unclassified(self):
+        assert geo_tier_weight("Global markets rally on trade deal optimism", []) == 1.0
+
+    def test_bitcoin_unclassified(self):
+        assert geo_tier_weight("Bitcoin surges past $100,000 on spot ETF inflows", []) == 1.0
+
+    def test_gold_unclassified(self):
+        assert geo_tier_weight("Gold hits new all-time high above $3,000", []) == 1.0
+
+    def test_oil_global_unclassified(self):
+        """Oil price move without country mention → global commodity → 1.0"""
+        assert geo_tier_weight("Oil prices surge 5% on supply disruption fears", []) == 1.0
+
+    def test_blank_headline(self):
+        assert geo_tier_weight("", []) == 1.0
+        assert geo_tier_weight("", ["AAPL"]) == 1.0  # ticker still exempts
+
+    # ── Edge cases ───────────────────────────────────────────────────
+
+    def test_bare_cpi_without_country(self):
+        """'CPI data surprises' without country → unclassified (not US, not non-US)"""
+        assert geo_tier_weight("CPI data surprises markets, rate cut hopes rise", []) == 1.0
+
+    def test_bare_gdp_without_country(self):
+        """'GDP beats estimates' without country → unclassified"""
+        assert geo_tier_weight("GDP growth beats estimates at 3.2%", []) == 1.0
+
+    def test_provincial_city_alone(self):
+        """Shanghai mentioned without China context → non-US"""
+        assert geo_tier_weight("Shanghai composite index falls 2% on deleveraging concerns", []) == 0.25
