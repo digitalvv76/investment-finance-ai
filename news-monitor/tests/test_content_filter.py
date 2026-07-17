@@ -466,3 +466,36 @@ class TestGeoTierWeight:
     def test_provincial_city_alone(self):
         """Shanghai mentioned without China context → non-US"""
         assert geo_tier_weight("Shanghai composite index falls 2% on deleveraging concerns", []) == 0.25
+
+    # ── Adversarial-review fixes ─────────────────────────────────────
+
+    def test_us_and_china_trade_talks(self):
+        r"""'U.S. and China trade talks' — US signal must win (was broken: function
+        word 'and' blocked the context-list match, now standalone \bU\.?S\.?\b catches it)."""
+        assert geo_tier_weight("U.S. and China trade talks resume in Beijing", []) == 1.0
+
+    def test_china_gdp_chinese_language(self):
+        """'中国GDP增长4.7%' — '中国' now in CJK non-US list → 0.25"""
+        assert geo_tier_weight("中国GDP增长4.7% 低于市场预期", []) == 0.25
+
+    def test_china_stock_market_chinese(self):
+        """'中国股市暴跌' → 0.25 (was 1.0 before adding 中国 to CJK list)"""
+        assert geo_tier_weight("中国股市今日暴跌 上证指数失守3000点", []) == 0.25
+
+    def test_china_inflation_chinese(self):
+        """'中国通胀数据公布' → 0.25"""
+        assert geo_tier_weight("中国通胀数据公布 CPI同比上涨2.5%", []) == 0.25
+
+    def test_us_and_will_china(self):
+        r"""'U.S. will impose tariffs on China' — 'will' function word blocked old
+        pattern, now standalone \bU\.?S\.?\b catches it → 1.0"""
+        assert geo_tier_weight("U.S. will impose new tariffs on China imports", []) == 1.0
+
+    def test_snowflake_tokyo_no_ticker(self):
+        """Snowflake in Tokyo without ticker extraction → non-US (known limitation:
+        EntityExtractor name→ticker mapping doesn't cover all companies)"""
+        assert geo_tier_weight("Snowflake opens Tokyo office as Japan business grows", []) == 0.25
+
+    def test_tsmc_taiwan_no_ticker_still_non_us(self):
+        """'Taiwan GDP beats on TSMC exports' without ticker → non-US (macro, not company news)"""
+        assert geo_tier_weight("Taiwan GDP beats expectations on strong TSMC exports", []) == 0.25

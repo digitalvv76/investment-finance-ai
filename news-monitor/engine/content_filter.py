@@ -268,6 +268,10 @@ _US_TIER_PATTERNS: list[re.Pattern] = [
         r'regulat|consumer|business|housing|job|inflat|data|report|index|'
         r'bond|yield|equity|fund|investor|dollar|treasury|fed|central\s+bank|'
         r'growth|outlook|recession|sentiment|spending|earnings|corporate)',
+        # Standalone "US" / "U.S." anywhere in the headline (catch function-word
+        # bridges like "U.S. and China trade talks").  Checked AFTER the
+        # qualified patterns above so those take priority in logging/debugging.
+        r'\bU\.?S\.?\b',
         # "American" / "America" in economic context
         r'\bAmerican\s+(?:economy|market|consumer|business|manufacturing)\b',
     ]
@@ -402,8 +406,10 @@ _NON_US_CJK: list[str] = [
     "意大利", "西班牙", "荷兰", "瑞士", "瑞典", "挪威",
     # Japan
     "日本", "东京", "日本央行", "日银", "日元", "植田和男", "日经",
-    # China
-    "中国央行", "人民银行", "中国人民银行", "证监会", "银保监",
+    # China — "中国" alone is included; substrings like 中美 are handled
+    # by Gate 3 (US patterns checked first — 中美X headlines may also
+    # match US CJK keywords like 美联储/标普, in which case US wins).
+    "中国", "中国央行", "人民银行", "中国人民银行", "证监会", "银保监",
     "上海", "深圳", "沪深300", "人民币", "在岸", "离岸人民币",
     "A股",
     # Korea
