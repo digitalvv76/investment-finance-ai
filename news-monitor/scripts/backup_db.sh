@@ -56,4 +56,26 @@ rm -f "${BACKUP_DIR}/news-${TIMESTAMP}.db" \
 # 5. 保留最近 7 天
 find "$BACKUP_DIR" -name 'backup-*.tar.gz' -mtime +7 -delete
 
+# 6. 恢复验证 — 用容器内 sqlite3 解压并确认可读
+RESTORE_DIR=$(mktemp -d)
+tar -xzf "$BACKUP_FILE" -C "$RESTORE_DIR" 2>/dev/null
+# 把解压的 db 复制到数据卷，让容器内 Python 验证
+cp "${RESTORE_DIR}/news-${TIMESTAMP}.db" "${DATA_DIR}/_restore_test.db"
+VERIFY_OK=$(docker exec "$CONTAINER" python -c "
+import sqlite3
+conn = sqlite3.connect('/app/data/_restore_test.db')
+tables = conn.execute(\"SELECT name FROM sqlite_master WHERE type='table'\").fetchall()
+print('OK' if tables else 'FAIL')
+conn.close()
+" 2>&1)
+rm -f "${DATA_DIR}/_restore_test.db"
+if echo "$VERIFY_OK" | grep -q "OK"; then
+  echo "[backup] ✅ 恢复验证通过"
+else
+  echo "[backup] ❌ 恢复验证失败！备份文件可能损坏: ${BACKUP_FILE}" >&2
+  rm -rf "$RESTORE_DIR"
+  exit 1
+fi
+rm -rf "$RESTORE_DIR"
+
 echo "[backup] ✅ 完成 — ${BACKUP_FILE} ($(du -h "$BACKUP_FILE" | cut -f1))"

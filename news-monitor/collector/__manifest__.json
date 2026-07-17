@@ -7,7 +7,7 @@
     },
     "collector/rss_fetcher.py": {
       "tests": ["tests/test_rss_fetcher.py"],
-      "related_scripts": ["scripts/acceptance_test.py"],
+      "related_scripts": ["tests/manual/acceptance_test.py"],
       "also_tests": []
     },
     "collector/twitter_fetcher.py": {
@@ -32,12 +32,12 @@
     },
     "collector/api_fetcher.py": {
       "tests": [],
-      "related_scripts": ["scripts/acceptance_test.py"],
+      "related_scripts": ["tests/manual/acceptance_test.py"],
       "also_tests": []
     },
     "collector/dedup.py": {
       "tests": ["tests/test_dedup.py"],
-      "related_scripts": ["scripts/acceptance_test.py"],
+      "related_scripts": ["tests/manual/acceptance_test.py"],
       "also_tests": []
     },
     "collector/exchange_calendar.py": {

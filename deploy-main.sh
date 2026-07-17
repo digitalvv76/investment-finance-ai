@@ -25,7 +25,14 @@ warn() { echo -e "${YELLOW}[DEPLOY]${NC} $*"; }
 err()  { echo -e "${RED}[DEPLOY]${NC} $*"; }
 
 VERIFY=true
-for a in "$@"; do case "$a" in --no-verify) VERIFY=false ;; *) err "未知参数 $a"; exit 1 ;; esac; done
+SKIP_REVIEW="${SKIP_REVIEW:-0}"
+for a in "$@"; do
+  case "$a" in
+    --no-verify) VERIFY=false ;;
+    --skip-review) SKIP_REVIEW=1 ;;
+    *) err "未知参数 $a"; exit 1 ;;
+  esac
+done
 
 # 只同步这些运行时目录/文件（Python 逻辑 + prompts），保留 ECS 配置
 SRC_PATHS=(
@@ -47,9 +54,19 @@ ur_pause()  { [ -n "$UR_KEY" ] || { warn "     (UptimeRobot 未配置 API key，
 ur_resume() { [ "$UR_PAUSED" = true ] && { _ur 1; info "     UptimeRobot 监控已恢复"; }; return 0; }
 trap ur_resume EXIT
 
-# ── 0. 前置：本地 main 已推送？ ─────────────────────────────────────────
-info "0/5  前置检查"
+# ── 0. 前置：本地 main 已推送？ + 高危文件闸门 ───────────────────────
+info "0/6  前置检查"
 echo "     本地 HEAD: $(git log -1 --oneline)"
+
+# 高危文件闸门 — 触碰 push/db 代码必须先跑对抗核实
+HIGH_RISK_FILES="dispatch.py|alert_dispatcher.py|fund_flow_collector.py|database.py"
+HIGH_RISK_DIFF=$(git diff origin/main..HEAD --name-only 2>/dev/null | grep -qE "$HIGH_RISK_FILES" && echo "1" || echo "0")
+if [ "$HIGH_RISK_DIFF" = "1" ] && [ "$SKIP_REVIEW" != "1" ]; then
+  err "⚠️  高危文件变更 (push/db) — 需先跑对抗核实"
+  err "    确认核实通过后: SKIP_REVIEW=1 ./deploy-main.sh"
+  exit 1
+fi
+
 if ! git diff --quiet origin/main..HEAD 2>/dev/null; then
   warn "     本地 HEAD 与 origin/main 有差异——请先 git push origin main"
 fi
@@ -109,17 +126,19 @@ COMMIT_HASH=$(git log -1 --format='%h')
 COMMIT_MSG=$(git log -1 --format='%s')
 info "6/6  部署完成 — ${COMMIT_HASH}"
 
-# TG 通知：从 .env 取 token，发静默消息
+# TG 通知：从 .env 取 token，发静默消息（含 24h 推送计数）
 TG_TOKEN="$(grep -s '^TELEGRAM_BOT_TOKEN=' "${_SCRIPT_DIR}/.env" | cut -d= -f2- | tr -d '\r' || true)"
 if [ -n "$TG_TOKEN" ]; then
-  TG_MSG="✅ V2 已更新 — ${COMMIT_HASH}%0A${COMMIT_MSG}"
+  # 统计 ECS 上过去 24h 的推送数
+  PUSH_COUNT=$(ssh "$ECS_HOST" "docker logs news-monitor --since 24h 2>&1 | grep -c 'DISPATCH:'" 2>/dev/null || echo "?")
+  TG_MSG="✅ V2 已更新 — ${COMMIT_HASH}%0A${COMMIT_MSG}%0A📊 24h 推送: ${PUSH_COUNT} 条"
   # 从 settings.json 取第一个 chat_id
   CHAT_ID="$(python3 -c "import json; c=json.load(open('${_SCRIPT_DIR}/news-monitor/config/settings.json')); print(c.get('telegram',{}).get('chat_ids',[''])[0])" 2>/dev/null || echo "")"
   if [ -n "$CHAT_ID" ]; then
     curl -s -m 8 "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
       -d "chat_id=${CHAT_ID}" -d "text=${TG_MSG}" \
       -d "disable_notification=true" >/dev/null 2>&1 && \
-      info "     TG 通知已发送 → chat_id=${CHAT_ID}" || \
+      info "     TG 通知已发送 → chat_id=${CHAT_ID} (24h 推送: ${PUSH_COUNT})" || \
       warn "     TG 通知发送失败"
   fi
 fi
