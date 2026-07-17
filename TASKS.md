@@ -23,7 +23,7 @@
 | T07 | 新模块注册 \_\_manifest\_\_.json（Futu/板块轮动等）| 🟡 中 | 富途 OpenD 迁移 | ✅ 07-16 (cb852b2) |
 | T08 | 新采集器补测试覆盖 | 🟡 中 | 富途 OpenD 迁移 | 07-16 |
 | T09 | 板块轮动 US. 前缀验证 | 🟡 中 | 富途 OpenD 迁移 | 07-16 |
-| T10 | `db-captured-at-timezone` 系统性审计 — 非 watchdog 查询 | 🟡 中 | 时区诊断 | 07-10 |
+| T10 | `db-captured-at-timezone` 系统性审计 — 非 watchdog 查询 | ❌ 关闭 — 影响不大，不修 | 时区诊断 | 07-10 |
 | T11 | LLM Wiki Phase 1 MVP（纯 markdown + git）| 🟡 中 | Wiki 试用会话 | 07-13 |
 | T12 | ECS 安全加固 — root 弱密码 + SSH 密码登录 | 🟡 中 | 孤儿代码审计 | 07-09 |
 | T13 | 影子部署恢复 — dedup O(N²) 已修，影子未重部署 | 🟡 中 | 影子部署会话 | 07-10 |
