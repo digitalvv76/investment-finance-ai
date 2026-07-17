@@ -22,7 +22,7 @@ _DRY_RUN = os.environ.get("DRY_RUN_PUSH", "").lower() in ("1", "true", "yes")
 # 同一宏观主题在 DEDUP_WINDOW 内只推强度最高的一条到手机，
 # 后续除非强度升级（strictly higher）否则跳过 Pushover。
 # 不影响 Telegram（TG 仍全量接收，仅静音控制）。
-_DEDUP_WINDOW_SECONDS = 6 * 3600  # 6 hours — 覆盖一个完整交易时段
+_DEDUP_WINDOW_SECONDS = 24 * 3600  # 24 hours — 同主题一天只震一次手机
 
 # 从 headline_signal 提取宏观主题关键词
 _MACRO_TOPIC_PATTERNS = [
@@ -108,34 +108,28 @@ class DispatchStage:
     # ── Phone threshold gate ──
     # IMPORTANT alerts only reach phone for watchlist stocks or macro ≥85.
     # Non-watchlist events still hit Telegram, just don't vibrate the phone.
-    _PHONE_MACRO_MIN_SCORE = 85
+    _PHONE_MACRO_MIN_SCORE = 92
 
     def _phone_threshold_ok(self, item: PipelineItem) -> tuple[bool, str]:
         """Check if an IMPORTANT item is phone-worthy.
 
         Returns (ok, reason). ok=False means skip phone, TG only.
+
+        ★ 2026-07-17: Watchlist gate removed — 71 stocks generate too many
+        IMPORTANT alerts.  Only macro shock reaches phone now.
+        Strategic rules (gov_intervention / NVDA) are unaffected —
+        they auto-upgrade to CRITICAL and bypass this gate entirely.
         """
         d = item.decision
-        tickers = d.ticker_hint or []
         is_macro = bool(item.macro_tags)
         impact = d.impact_score or 0
 
-        # Watchlist / tracked tickers → phone
-        if tickers:
-            try:
-                from engine.relevance import get_tracked_tickers
-                tracked = get_tracked_tickers()
-                if any(t.upper().strip() in tracked for t in tickers if t and t.strip()):
-                    return True, "watchlist_ticker"
-            except Exception:
-                pass
-
-        # Macro shock ≥ 85 → phone
+        # Macro shock ≥ 92 → phone (was 85, raised 2026-07-17)
         if is_macro and impact >= self._PHONE_MACRO_MIN_SCORE:
             return True, f"macro_shock(impact={impact})"
 
         return False, (
-            f"below_phone_threshold(tickers={tickers}, macro={is_macro}, impact={impact})"
+            f"below_phone_threshold(macro={is_macro}, impact={impact})"
         )
 
     # ── headline_signal similarity threshold for cross-ticker dedup ──
@@ -245,7 +239,7 @@ class DispatchStage:
 
     # Per-cycle TG push cap: prevent flooding when new sources add volume.
     # Phone (Pushover) is already deduped by topic; TG is the flood risk.
-    _MAX_TG_PER_CYCLE = 5
+    _MAX_TG_PER_CYCLE = 4
 
     async def process(self, items: list[PipelineItem]) -> list[PipelineItem]:
         if not items:

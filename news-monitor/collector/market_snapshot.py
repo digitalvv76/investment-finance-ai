@@ -2,7 +2,7 @@
 
 Two windows per trading day:
   Pre-market  09:25 ET — full scan of ~71 tickers, push movers >±2%
-  Intraday    14:30 ET — re-scan, push extreme movers >±5% with volume surge
+  Intraday    14:30 ET — re-scan, push extreme movers >±7% with volume surge
 
 Futu API: get_market_snapshot — batch query up to 400 stocks in one call.
 """
@@ -156,7 +156,7 @@ class MarketSnapshotCollector:
             return None
 
         movers = [s for s in snapshots if abs(s.change_rate) >= threshold]
-        extreme = [s for s in movers if abs(s.change_rate) >= 0.05]
+        extreme = [s for s in movers if abs(s.change_rate) >= 0.07]
 
         summary = SnapshotSummary(
             window=window,

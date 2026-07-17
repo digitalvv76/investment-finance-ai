@@ -283,24 +283,50 @@ async def test_dispatch_intensity_upgrade_repushes():
 
 @pytest.mark.asyncio
 async def test_dispatch_mixed_tickers_all_pass():
-    """Different tickers → all pass through to phone."""
+    """Different macro topics → all pass through to phone (macro gate only)."""
     pushover = SpyChannel("pushover")
     telegram = SpyChannel("telegram")
     stage = DispatchStage([pushover, telegram])
 
     items = [
-        _item(id=1, title="NVDA earnings", ticker_hint=["NVDA"],
-              intensity=4, direction="up"),
-        _item(id=2, title="RKLB launch success", ticker_hint=["RKLB"],
-              intensity=4, direction="up"),
-        _item(id=3, title="TSLA delivery beat", ticker_hint=["TSLA"],
-              intensity=4, direction="up"),
+        _item(id=1, title="CPI 超预期 4.2%", ticker_hint=[],
+              intensity=4, direction="up", macro_tags="CPI",
+              headline_signal="CPI 同比上涨4.2%远超预期", impact_score=94),
+        _item(id=2, title="FOMC 紧急降息 50bp", ticker_hint=[],
+              intensity=4, direction="down", macro_tags="FOMC",
+              headline_signal="美联储宣布紧急降息50个基点", impact_score=93),
+        _item(id=3, title="非农就业大幅不及预期", ticker_hint=[],
+              intensity=4, direction="down", macro_tags="NFP",
+              headline_signal="6月非农就业仅增8万远逊预期", impact_score=95),
     ]
 
     await stage.process(items)
 
+    # All three are macro shock ≥92 → phone
     assert len(pushover.calls) == 3
     assert len(telegram.calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_dispatch_watchlist_no_phone():
+    """Watchlist stocks alone → TG only, no phone (2026-07-17 gate change)."""
+    pushover = SpyChannel("pushover")
+    telegram = SpyChannel("telegram")
+    stage = DispatchStage([pushover, telegram])
+
+    items = [
+        _item(id=1, title="NVDA earnings beat", ticker_hint=["NVDA"],
+              intensity=4, direction="up", impact_score=0, macro_tags=""),
+        _item(id=2, title="RKLB launch success", ticker_hint=["RKLB"],
+              intensity=4, direction="up", impact_score=0, macro_tags=""),
+    ]
+
+    await stage.process(items)
+
+    # Watchlist-only → phone gate blocks
+    assert len(pushover.calls) == 0
+    # TG still gets them
+    assert len(telegram.calls) == 2
 
 
 @pytest.mark.asyncio
@@ -345,22 +371,25 @@ async def test_headline_similarity_cross_ticker_dedup():
     Scenario: Chinese source reports "台积电3nm涨价", LLM ticker_hint=[];
     English source reports "TSMC price hike", LLM ticker_hint=["TSM"].
     Without cross-key fallback, both push to phone. With it, second is skipped.
+
+    ★ 2026-07-17: Phone gate now requires macro ≥92.  Test items carry
+    macro_tags + impact_score to pass the gate, preserving the dedup logic.
     """
     pushover = SpyChannel("pushover")
     telegram = SpyChannel("telegram")
     stage = DispatchStage([pushover, telegram])
 
     # Item 1: Chinese source — article covers TSMC+NVIDIA, LLM picks NVDA
-    # NVDA is in watchlist → phone threshold passes
     item1 = _item(id=1, title="台积电3nm制程涨价20%，英伟达成本承压",
                   headline_signal="台积电宣布3nm制程涨价20%，英伟达GPU成本将上升，利好半导体代工板块",
-                  ticker_hint=["NVDA"], intensity=4, direction="up")
+                  ticker_hint=["NVDA"], intensity=4, direction="up",
+                  macro_tags="半导体", impact_score=93)
 
     # Item 2: English source — same event, LLM picks TSM (different ticker!)
-    # TSM is in watchlist → phone threshold passes
     item2 = _item(id=2, title="TSMC Raises 3nm Prices By 20%",
                   headline_signal="台积电3nm晶圆代工价格上调20%，反映AI芯片强劲需求，利好台积电毛利率",
-                  ticker_hint=["TSM"], intensity=4, direction="up")
+                  ticker_hint=["TSM"], intensity=4, direction="up",
+                  macro_tags="半导体", impact_score=93)
 
     await stage.process([item1])
     assert len(pushover.calls) == 1  # first item pushes to phone

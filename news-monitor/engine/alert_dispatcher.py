@@ -53,7 +53,7 @@ class DispatchResult:
 # ---------------------------------------------------------------------------
 
 CRITICAL_PRIORITY = 0.55      # PriorityScorer scores >= this → CRITICAL
-IMPORTANT_PRIORITY = 0.45     # "" >= this → IMPORTANT
+IMPORTANT_PRIORITY = 0.50     # "" >= this → IMPORTANT (was 0.45, raised 2026-07-17)
 STRATEGIC_CRITICAL_CONF = 0.70  # Strategic match confidence >= this → CRITICAL
 GOV_INTERVENTION_CRITICAL = True  # Any gov_intervention match → auto CRITICAL
 TIMELINESS_PHONE_MIN = 0.25   # Timeliness below this → skip phone push (analyst reports etc.)

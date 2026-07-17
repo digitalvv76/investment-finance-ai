@@ -553,10 +553,10 @@ class FundFlowCollector:
 
         Matrix:
           背离 + STRONG + extreme  → 2 (loud)
-          背离 + STANDARD           → 1 (silent)
+          背离 + STRONG             → 1 (silent)
           确认 + STRONG + extreme   → 1 (silent)
           黄金坑 / 散户陷阱         → +1 tier (max 2)
-          其余                      → 0 (skip)
+          其余 (含背离+STANDARD)    → 0 (skip)
         """
         st = s.signal_type or "none"
         part = s.participation or "low"
@@ -567,8 +567,9 @@ class FundFlowCollector:
         if st in ("bearish_divergence", "bullish_divergence"):
             if strength == "STRONG" and part == "extreme":
                 tier = 2
-            elif strength in ("STRONG", "STANDARD"):
+            elif strength == "STRONG":
                 tier = 1
+            # STANDARD → skip (2026-07-17: 只有强烈信号才推送)
         elif st == "confirmation":
             if strength == "STRONG" and part == "extreme":
                 tier = 1
