@@ -8,6 +8,7 @@
 
 | 日期 | Spec 文件 | 说明 |
 |------|----------|------|
+| 07-17 | `SPEC-graham-review.md` | Agent 人格化 — Graham 价值投资审查（5 问题清单，只能降级不能升级）|
 | 07-17 | `SPEC-provincial-cpi-repeat-push.md` | 宏观地域三级体系 + 堵省级CPI刷屏（P0+P1+P2+P3）|
 | 07-17 | 时区统一 | **追加**：在做地域分级时顺手把 `captured_at`/`created_at` 统一为 UTC。参考 [[db-captured-at-timezone]] + T10 |
 
