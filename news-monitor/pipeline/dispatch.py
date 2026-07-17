@@ -115,14 +115,27 @@ class DispatchStage:
 
         Returns (ok, reason). ok=False means skip phone, TG only.
 
-        ★ 2026-07-17: Watchlist gate removed — 71 stocks generate too many
-        IMPORTANT alerts.  Only macro shock reaches phone now.
-        Strategic rules (gov_intervention / NVDA) are unaffected —
-        they auto-upgrade to CRITICAL and bypass this gate entirely.
+        ★ Priority order (2026-07-17):
+          1. Strategic rules FIRST — gov_intervention / NVDA always phone.
+             fast_lane.py tags these as STRATEGIC_* in macro_tags.
+          2. Macro shock ≥ 92 → phone.
+          3. Everything else → TG only (watchlist IMPORTANT included).
         """
         d = item.decision
         is_macro = bool(item.macro_tags)
         impact = d.impact_score or 0
+
+        # ── Strategic bypass ──
+        # fast_lane.py appends STRATEGIC_GOV_INTERVENTION / STRATEGIC_NVDA_*
+        # to macro_tags when StrategicDetector fires.  These are the highest-
+        # value trading signals and ALWAYS reach phone, regardless of impact
+        # score.  The classify() auto-CRITICAL path is dead code in the live
+        # pipeline (evaluate.py passes strategic_matches=None), so this check
+        # is the single gate for strategic phone access.
+        if is_macro:
+            tags = [t.strip() for t in item.macro_tags.split(",")]
+            if any(t.startswith("STRATEGIC_") for t in tags):
+                return True, "strategic_bypass"
 
         # Macro shock ≥ 92 → phone (was 85, raised 2026-07-17)
         if is_macro and impact >= self._PHONE_MACRO_MIN_SCORE:

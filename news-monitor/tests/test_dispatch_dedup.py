@@ -330,6 +330,35 @@ async def test_dispatch_watchlist_no_phone():
 
 
 @pytest.mark.asyncio
+async def test_dispatch_strategic_bypass():
+    """Strategic rules (gov_intervention / NVDA) ALWAYS reach phone,
+    even with low impact_score and no watchlist ticker match.
+    ★ 2026-07-17: Strategic bypass is the FIRST check in _phone_threshold_ok.
+    """
+    pushover = SpyChannel("pushover")
+    telegram = SpyChannel("telegram")
+    stage = DispatchStage([pushover, telegram])
+
+    items = [
+        _item(id=1, title="美国政府向RKLB注资50亿美元",
+              ticker_hint=["RKLB"], intensity=4, direction="up",
+              macro_tags="STRATEGIC_GOV_INTERVENTION", impact_score=60),
+        _item(id=2, title="NVIDIA宣布收购ASTS 20%股权",
+              ticker_hint=["ASTS"], intensity=4, direction="up",
+              macro_tags="STRATEGIC_NVDA_INVESTMENT", impact_score=55),
+    ]
+
+    await stage.process(items)
+
+    # Strategic bypass — both reach phone despite low impact_score
+    assert len(pushover.calls) == 2, (
+        f"Strategic bypass failed: expected 2, got {len(pushover.calls)}"
+    )
+    # TG also gets them
+    assert len(telegram.calls) == 2
+
+
+@pytest.mark.asyncio
 async def test_dispatch_normal_skipped_entirely():
     """NORMAL items never reach any channel (including dedup check)."""
     pushover = SpyChannel("pushover")
