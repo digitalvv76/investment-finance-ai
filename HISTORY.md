@@ -2931,4 +2931,18 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 - 新增 [[strategic-rules-phone-first]]：战略规则是手机推送最高优先级
 - 更新 [[push-phone-rules]]：记录新门禁参数
 
+### 对抗核实 + 部署
+- `d6a3da7` fix: classify() 死代码→_phone_threshold_ok 显式战略绕过
+- `994503c` ops: 数据库每日备份 + backup_db.sh 恢复验证 + deploy smoke test + TG 通知
+
+### 流程改进
+- `f2e87ae` ops: deploy-main.sh 高危文件闸门 + SESSION.md 去重 + 过时脚本清理
+- `9ed7ccb` docs: V1 交付合入 — TASKS.md + 工作流评估 + 交接机制
+- 部署流程评估 (8 条工作流) + V1/V2 协作改进方案
+- 新增 TASKS.md (18 条任务) + SESSION.md「待 V2 读取」交接机制
+
+### 第三方评估
+- 工作流整体评分 B+，核心问题: 任务追踪缺结构化 + 双窗口信息不对称
+- V2 建议 v1-stable 取消/限寿命，待用户决策 (T14)
+
 ---
