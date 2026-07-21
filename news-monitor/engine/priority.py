@@ -10,7 +10,7 @@ Factors:
     7. deviation    — macro data deviation from expectations (NEW)
     8. surprise     — unexpected/shocking events (NEW)
     9. asset_linkage — multi-asset-class impact (NEW)
-   10. pricing_power — product/service price increase news (NEW)
+   10. business_impact — revenue/profit impact signals: pricing, sales, margin, guidance, deals (NEW)
 
 Extracted from fast_lane.py as a shared module. Used by both the fast lane
 rule engine and the deep lane orchestrator.
@@ -36,7 +36,7 @@ DEFAULT_WEIGHTS = {
     "deviation": 0.25,       # NEW: macro data deviation magnitude
     "surprise": 0.15,        # NEW: unexpected/shocking nature
     "asset_linkage": 0.15,   # NEW: cross-asset impact
-    "pricing_power": 0.15, # NEW: product/service price increase
+    "business_impact": 0.15, # NEW: revenue/profit impact signals
 }
 
 # Source authority scores (higher = more trusted/urgent)
@@ -197,12 +197,13 @@ _SURPRISE_KEYWORDS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Pricing power — product/service price increase signals
+# Business impact — revenue/profit-impacting events (pricing, sales, margin,
+# guidance, deals, cost structure).  Covers both positive (↑) and negative (↓).
 # ---------------------------------------------------------------------------
 
-# Simple keyword → intensity map for substring matching
-_PRICING_POWER_KEYWORDS = [
-    # Direct price hike announcements (strongest — 0.85–0.9)
+# Keyword → intensity map for substring matching, grouped by category.
+_BUSINESS_IMPACT_SIGNALS = [
+    # ── 价格变动 (pricing) ──
     ("price increase", 0.9),
     ("price hike", 0.9),
     ("raise prices", 0.9),
@@ -215,15 +216,12 @@ _PRICING_POWER_KEYWORDS = [
     ("price hikes", 0.9),
     ("price rises", 0.85),
     ("rising prices", 0.85),
-    # Pricing power signals (moderate-strong — 0.7–0.8)
     ("pricing power", 0.8),
     ("passed on to customers", 0.7),
     ("pass through costs", 0.7),
     ("cost pass-through", 0.7),
-    # Softer price signals (0.5)
     ("price adjustment", 0.5),
     ("supply chain cost", 0.5),
-    # —— Chinese pricing signals ——
     ("涨价", 0.9),
     ("提价", 0.9),
     ("全面涨价", 0.9),
@@ -234,10 +232,92 @@ _PRICING_POWER_KEYWORDS = [
     ("成本传导", 0.7),
     ("价格调整", 0.5),
     ("成本上升", 0.5),
-    # Tariff-driven price signals (0.5–0.6)
     ("tariff pass", 0.6),
     ("tariff cost", 0.6),
     ("import cost", 0.5),
+    # ── 营收/销售 (revenue & sales) ──
+    ("record revenue", 0.9),
+    ("record sales", 0.9),
+    ("record quarter", 0.8),
+    ("sales surge", 0.7),
+    ("demand surge", 0.7),
+    ("demand exceeds", 0.7),
+    ("revenue beat", 0.7),
+    ("topline growth", 0.6),
+    ("sold out", 0.6),
+    ("order backlog", 0.6),
+    ("创纪录营收", 0.9),
+    ("创纪录收入", 0.9),
+    ("销量暴增", 0.7),
+    ("销量大增", 0.6),
+    ("营收超预期", 0.7),
+    ("收入超预期", 0.7),
+    ("订单积压", 0.6),
+    ("供不应求", 0.7),
+    # ── 利润/利润率 (profit & margin) ──
+    ("record profit", 0.9),
+    ("record earnings", 0.9),
+    ("earnings beat", 0.7),
+    ("profit beat", 0.7),
+    ("margin expansion", 0.7),
+    ("profit surge", 0.7),
+    ("margin compression", 0.7),
+    ("profit warning", 0.9),
+    ("earnings miss", 0.7),
+    ("revenue miss", 0.7),
+    ("创纪录利润", 0.9),
+    ("创纪录盈利", 0.9),
+    ("毛利率扩张", 0.7),
+    ("利润率提升", 0.6),
+    ("盈利预警", 0.9),
+    ("利润预警", 0.9),
+    ("利润下滑", 0.7),
+    ("利润率压缩", 0.7),
+    # ── 业绩指引 (guidance) ──
+    ("raises guidance", 0.8),
+    ("raised guidance", 0.8),
+    ("lifts forecast", 0.8),
+    ("lifted forecast", 0.8),
+    ("raised outlook", 0.7),
+    ("upbeat outlook", 0.6),
+    ("cuts guidance", 0.8),
+    ("cut guidance", 0.8),
+    ("lowers forecast", 0.8),
+    ("lowered forecast", 0.8),
+    ("上调指引", 0.8),
+    ("上调业绩预期", 0.8),
+    ("上调盈利预期", 0.8),
+    ("调高业绩指引", 0.8),
+    ("下调指引", 0.8),
+    ("下调业绩预期", 0.8),
+    ("调低业绩指引", 0.8),
+    # ── 重大合同/订单 (deals & contracts) ──
+    ("wins contract", 0.7),
+    ("won contract", 0.7),
+    ("major deal", 0.7),
+    ("landmark deal", 0.8),
+    ("record order", 0.8),
+    ("largest order", 0.8),
+    ("biggest deal", 0.8),
+    ("billion dollar deal", 0.9),
+    ("billion dollar contract", 0.9),
+    ("赢得合同", 0.7),
+    ("重大协议", 0.7),
+    ("里程碑协议", 0.8),
+    ("最大订单", 0.8),
+    ("创纪录订单", 0.8),
+    ("亿元大单", 0.8),
+    # ── 成本结构 (cost structure) ──
+    ("cost reduction", 0.6),
+    ("cost cutting", 0.6),
+    ("efficiency gain", 0.5),
+    ("cost overrun", 0.7),
+    ("input costs rising", 0.6),
+    ("cost reduction plan", 0.6),
+    ("成本削减", 0.6),
+    ("降本增效", 0.6),
+    ("效率提升", 0.5),
+    ("成本超支", 0.7),
 ]
 
 # Regex for "raise ... prices" with up to 3 words in between.
@@ -361,8 +441,8 @@ class PriorityScorer:
         # 9. Asset linkage (cross-asset impact)
         score += self._asset_linkage_score(text)
 
-        # 10. Pricing power (product/service price increases)
-        score += self._pricing_power_score(text)
+        # 10. Business impact (revenue/profit signals)
+        score += self._business_impact_score(text)
 
         return round(score, 4)
 
@@ -525,14 +605,15 @@ class PriorityScorer:
         return round(factor * self.weights["asset_linkage"], 4)
 
     # ------------------------------------------------------------------
-    # NEW: Pricing power (涨价/提价)
+    # NEW: Business impact (营收/利润影响力)
     # ------------------------------------------------------------------
 
-    def _pricing_power_score(self, text: str) -> float:
-        """Score based on product/service price increase signals.
+    def _business_impact_score(self, text: str) -> float:
+        """Score based on revenue/profit-impacting business signals.
 
-        Detects price hike announcements, cost pass-through, and pricing
-        power language. Returns weighted score based on strongest match.
+        Detects pricing, sales volume, margin changes, guidance updates,
+        major deals/contracts, and cost structure events. Returns weighted
+        score based on strongest match.
         """
         if not text:
             return 0.0
@@ -541,7 +622,7 @@ class PriorityScorer:
         max_intensity = 0.0
 
         # 1. Substring keyword matching
-        for keyword, intensity in _PRICING_POWER_KEYWORDS:
+        for keyword, intensity in _BUSINESS_IMPACT_SIGNALS:
             if keyword in text_lower:
                 max_intensity = max(max_intensity, intensity)
 
@@ -549,7 +630,7 @@ class PriorityScorer:
         if _PRICE_RAISE_REGEX.search(text_lower):
             max_intensity = max(max_intensity, 0.9)
 
-        return round(max_intensity * self.weights["pricing_power"], 4)
+        return round(max_intensity * self.weights["business_impact"], 4)
 
     # ------------------------------------------------------------------
     # Internal

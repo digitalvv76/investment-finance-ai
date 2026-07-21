@@ -103,7 +103,7 @@ class TestPriorityScorer:
         )
         assert score < IMPORTANT_THRESHOLD
 
-    def test_pricing_power_english(self, scorer):
+    def test_business_impact_price_english(self, scorer):
         """Price increase language should boost score."""
         score = scorer.score(
             NewsItem(
@@ -111,10 +111,10 @@ class TestPriorityScorer:
                 url="x", source="Nikkei Asia",
             ),
         )
-        # pricing_power: "raise"+"price" → intensity 0.9 → 0.9*0.15=0.135
-        assert score >= 0.10  # should get meaningful pricing_power boost
+        # business_impact: regex match → intensity 0.9 → 0.9*0.15=0.135
+        assert score >= 0.10
 
-    def test_pricing_power_chinese(self, scorer):
+    def test_business_impact_price_chinese(self, scorer):
         """Chinese 涨价 should boost score."""
         score = scorer.score(
             NewsItem(
@@ -122,41 +122,70 @@ class TestPriorityScorer:
                 url="x", source="新浪财经·7x24综合快讯",
             ),
         )
-        # "涨价" not present but source authority (0.06) gives some score
         assert score >= 0.02
 
-    def test_pricing_power_chinese_explicit(self, scorer):
-        """Explicit 涨价 keyword should give strong boost."""
+    def test_business_impact_price_explicit(self, scorer):
+        """Explicit 全面涨价 keyword should give strong boost."""
         score = scorer.score(
             NewsItem(
                 title="台积电宣布3nm制程全面涨价20%",
                 url="x", source="新浪财经·7x24综合快讯",
             ),
         )
-        # "全面涨价" → intensity 0.9 → 0.9*0.15=0.135, + source 0.06
         assert score >= 0.15
 
-    def test_pricing_power_no_price_signal(self, scorer):
-        """Headlines without pricing language should not get pricing boost."""
+    def test_business_impact_no_signal(self, scorer):
+        """Headlines without business impact should not get boost."""
         score = scorer.score(
             NewsItem(
                 title="TSMC reports strong quarterly earnings, beats expectations",
                 url="x", source="Reuters",
             ),
         )
-        # Has source authority but no pricing_power, should be driven by other factors
         assert score >= 0.05  # source authority alone
 
-    def test_pricing_power_max_not_sum(self, scorer):
-        """Multiple price keywords should take max, not sum."""
+    def test_business_impact_max_not_sum(self, scorer):
+        """Multiple keywords should take max, not sum."""
         score1 = scorer.score(
             NewsItem(title="price hike price increase", url="x", source="Test"),
         )
         score2 = scorer.score(
             NewsItem(title="price hike", url="x", source="Test"),
         )
-        # Both keywords have intensity 0.9, so scores should be identical
         assert score1 == score2
+
+    def test_business_impact_guidance_raise(self, scorer):
+        """Guidance raise should get business_impact boost."""
+        score = scorer.score(
+            NewsItem(
+                title="NVDA raises guidance on strong AI chip demand",
+                url="x", source="CNBC",
+            ),
+        )
+        # "raises guidance" → 0.8 × 0.15 = 0.12
+        assert score >= 0.15
+
+    def test_business_impact_record_revenue(self, scorer):
+        """Record revenue should get strong boost."""
+        score = scorer.score(
+            NewsItem(
+                title="Apple reports record revenue of $98 billion in Q3",
+                url="x", source="Reuters",
+            ),
+        )
+        # "record revenue" → 0.9 × 0.15 = 0.135
+        assert score >= 0.15
+
+    def test_business_impact_major_deal(self, scorer):
+        """Billion dollar deal should get strong boost."""
+        score = scorer.score(
+            NewsItem(
+                title="Rocket Lab wins billion dollar contract from Space Force",
+                url="x", source="Bloomberg",
+            ),
+        )
+        # "billion dollar contract" → 0.9 × 0.15 = 0.135
+        assert score >= 0.20
 
     def test_score_batch(self, scorer):
         """Batch scoring should tag items correctly."""
