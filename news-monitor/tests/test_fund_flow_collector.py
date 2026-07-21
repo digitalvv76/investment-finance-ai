@@ -167,6 +167,29 @@ def test_law_a_small_same_downgrade():
     # 2-day divergence: base=70 - LawA=15 = 55 → STANDARD ✅
 
 
+def test_str_threshold_70_is_standard():
+    """Plain 2-day divergence without any law confirmation → STANDARD (no push)."""
+    collector = FundFlowCollector(db=MagicMock(), watchlist=["TSLA"])
+    days = [
+        FundFlowDay(date="2026-07-10", main_net=0.5e8, super_big_net=0.5e8,
+                    big_net=0.1e8, mid_net=0, small_net=0,
+                    main_pct=8.0, close_price=100.0, change_pct=-2.0),
+        FundFlowDay(date="2026-07-11", main_net=0.3e8, super_big_net=0.3e8,
+                    big_net=0.1e8, mid_net=0, small_net=0,
+                    main_pct=9.0, close_price=96.0, change_pct=-4.0),
+        FundFlowDay(date="2026-07-14", main_net=0.2e8, super_big_net=0.2e8,
+                    big_net=0.1e8, mid_net=0, small_net=0,
+                    main_pct=10.0, close_price=90.0, change_pct=-6.25),
+    ]
+    result = _make_result("TSLA", days_data=days)
+    signals = collector._compute_signals(result)
+    assert len(signals) == 1
+    s = signals[0]
+    # 2-day bullish divergence, cum_small=0 (no Law A), no golden_pit
+    # base=70 → STANDARD under 85 threshold
+    assert s.signal_strength == "STANDARD"
+
+
 # ------------------------------------------------------------------
 # Persistence
 # ------------------------------------------------------------------

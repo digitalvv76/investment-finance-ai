@@ -572,7 +572,7 @@ def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
             modifiers.append("small_same_downgrade")
 
     # V2.5: standardized strength tier
-    if strength >= 70:
+    if strength >= 85:
         final_strength = "STRONG"
     elif strength >= 40:
         final_strength = "STANDARD"
