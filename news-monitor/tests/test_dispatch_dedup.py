@@ -431,3 +431,120 @@ async def test_headline_similarity_cross_ticker_dedup():
     )
     # TG still gets both (by design — TG doesn't participate in phone dedup)
     assert len(telegram.calls) == 2
+
+
+# ── CRITICAL dedup (post-2026-07-21 fix: CRITICAL no longer bypasses) ────
+
+@pytest.mark.asyncio
+async def test_critical_same_topic_dedup():
+    """CRITICAL same-topic items are now deduped (was bypassed before fix).
+    Same ticker + same direction + same intensity → second is blocked."""
+    pushover = SpyChannel("pushover")
+    telegram = SpyChannel("telegram")
+    stage = DispatchStage([pushover, telegram])
+
+    item1 = _item(id=1, title="NVDA invests $500M in NBIS",
+                  headline_signal="NVIDIA announces $500M strategic investment in Nebius Group",
+                  ticker_hint=["NVDA"], intensity=5, direction="up",
+                  alert_level=AlertLevel.CRITICAL)
+    item2 = _item(id=2, title="Nvidia stakes NBIS for $500M",
+                  headline_signal="NVIDIA takes strategic stake in Nebius at $500M valuation",
+                  ticker_hint=["NVDA"], intensity=5, direction="up",
+                  alert_level=AlertLevel.CRITICAL)
+
+    await stage.process([item1])
+    assert len(pushover.calls) == 1
+
+    await stage.process([item2])
+    # Second CRITICAL with same key should be deduped
+    assert len(pushover.calls) == 1, (
+        f"CRITICAL dedup failed: expected 1 Pushover, got {len(pushover.calls)}"
+    )
+    # TG still gets both
+    assert len(telegram.calls) == 2
+
+
+# ── Strategic-tag cross-key dedup ────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_strategic_tag_cross_ticker_dedup():
+    """NVDA invests in NBIS: Chinese source → ticker_hint=[\"NVDA\"],
+    English source → ticker_hint=[\"NBIS\"]. Different ticker keys, but
+    same STRATEGIC_NVDA_INVESTMENT tag → second is deduped on phone."""
+    pushover = SpyChannel("pushover")
+    telegram = SpyChannel("telegram")
+    stage = DispatchStage([pushover, telegram])
+
+    # Chinese source: emphasizes NVIDIA (英伟达)
+    item1 = _item(id=1, title="英伟达宣布战略入股云计算公司NBIS",
+                  headline_signal="英伟达宣布以5亿美元战略入股云计算基础设施公司NBIS，持股约12%",
+                  ticker_hint=["NVDA"], intensity=5, direction="up",
+                  macro_tags="STRATEGIC_NVDA_INVESTMENT", impact_score=100)
+
+    # English source: emphasizes Nebius
+    item2 = _item(id=2, title="Nebius Group Receives $500M Strategic Investment from NVIDIA",
+                  headline_signal="Nvidia announces $500M strategic investment in Nebius Group, taking 12% stake in cloud infrastructure company",
+                  ticker_hint=["NBIS"], intensity=5, direction="up",
+                  macro_tags="STRATEGIC_NVDA_INVESTMENT", impact_score=100)
+
+    await stage.process([item1])
+    assert len(pushover.calls) == 1, f"First item should push: got {len(pushover.calls)}"
+
+    await stage.process([item2])
+    # Same STRATEGIC tag → deduped even though ticker keys differ
+    assert len(pushover.calls) == 1, (
+        f"Strategic-tag cross-key dedup failed: expected 1 Pushover, got {len(pushover.calls)}. "
+        f"Calls: {[(c['id'], c['title'][:40]) for c in pushover.calls]}"
+    )
+    # TG still gets both
+    assert len(telegram.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_strategic_tag_intensity_upgrade():
+    """Same strategic tag, intensity 4→5 → upgrade pushes again."""
+    pushover = SpyChannel("pushover")
+    telegram = SpyChannel("telegram")
+    stage = DispatchStage([pushover, telegram])
+
+    item1 = _item(id=1, title="传闻英伟达考虑投资NBIS",
+                  headline_signal="消息称英伟达考虑战略投资云计算公司NBIS",
+                  ticker_hint=["NVDA"], intensity=4, direction="up",
+                  macro_tags="STRATEGIC_NVDA_INVESTMENT", impact_score=85)
+
+    item2 = _item(id=2, title="英伟达确认入股NBIS！",
+                  headline_signal="英伟达官方确认以5亿美元战略入股NBIS，持股12%",
+                  ticker_hint=["NBIS"], intensity=5, direction="up",
+                  macro_tags="STRATEGIC_NVDA_INVESTMENT", impact_score=100)
+
+    await stage.process([item1])
+    assert len(pushover.calls) == 1
+
+    await stage.process([item2])
+    # Intensity upgrade → pushes again
+    assert len(pushover.calls) == 2, (
+        f"Strategic upgrade failed: expected 2, got {len(pushover.calls)}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_different_strategic_tags_both_pass():
+    """Different STRATEGIC_ tags → different events → both pass."""
+    pushover = SpyChannel("pushover")
+    stage = DispatchStage([pushover])
+
+    item1 = _item(id=1, title="美国政府向RKLB拨款50亿",
+                  headline_signal="美国国防部向Rocket Lab授予50亿美元发射合同",
+                  ticker_hint=["RKLB"], intensity=4, direction="up",
+                  macro_tags="STRATEGIC_GOV_INTERVENTION", impact_score=95)
+
+    item2 = _item(id=2, title="英伟达宣布投资ASTS",
+                  headline_signal="NVIDIA宣布以3亿美元战略入股卫星通信公司AST SpaceMobile",
+                  ticker_hint=["ASTS"], intensity=4, direction="up",
+                  macro_tags="STRATEGIC_NVDA_INVESTMENT", impact_score=92)
+
+    await stage.process([item1, item2])
+    # Different strategic tags → different events → both push
+    assert len(pushover.calls) == 2, (
+        f"Different strategic tags should both push: got {len(pushover.calls)}"
+    )

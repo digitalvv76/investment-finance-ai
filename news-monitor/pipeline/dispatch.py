@@ -105,6 +105,8 @@ class DispatchStage:
         self._phone_push_log: dict[str, tuple[int, float, int]] = {}
         # Companion cache: topic_key → headline_signal text (for cross-key similarity)
         self._headline_cache: dict[str, str] = {}
+        # Strategic tag tracking: topic_key → STRATEGIC_* tags (for cross-key dedup)
+        self._phone_push_tags: dict[str, set[str]] = {}
 
     # ── Phone threshold gate ──
     # IMPORTANT alerts only reach phone for watchlist stocks or macro ≥85.
@@ -156,9 +158,12 @@ class DispatchStage:
     def _phone_should_skip(self, item: PipelineItem) -> tuple[bool, str]:
         """Check same-topic dedup for phone push.
 
-        Two-tier dedup:
+        Three-tier dedup:
           1. Exact key match (ticker or macro topic)
-          2. Cross-key headline_signal similarity (catches 台积电/TSM
+          2. Strategic tag match — same STRATEGIC_* category → same event
+             (catches NVDA/NBIS ticker mismatch where LLM picks different
+             tickers for the same NVIDIA investment news)
+          3. Cross-key headline_signal similarity (catches 台积电/TSM
              where LLM ticker_hint differs across sources)
 
         Returns (skip, reason). skip=True means don't push to Pushover.
@@ -175,6 +180,9 @@ class DispatchStage:
         headline = (item.decision.headline_signal or item.title or "").strip()
         now = time.time()
 
+        # Extract STRATEGIC_* tags for cross-key dedup (Tier 2)
+        new_tags = self._strategic_tags(item)
+
         if key is not None:
             prev = self._phone_push_log.get(key)
             if prev is not None:
@@ -184,6 +192,7 @@ class DispatchStage:
                     if intensity > prev_intensity:
                         self._phone_push_log[key] = (intensity, now, item.id or 0)
                         self._headline_cache[key] = headline
+                        self._phone_push_tags[key] = new_tags
                         return False, f"intensity_upgrade({prev_intensity}→{intensity})"
                     else:
                         return True, (
@@ -191,7 +200,35 @@ class DispatchStage:
                             f"prev_intensity={prev_intensity}, age={age:.0f}s)"
                         )
 
-        # ── Tier 2: cross-key headline_signal similarity ──
+        # ── Tier 2: strategic-tag dedup (before headline similarity) ──
+        # Same STRATEGIC_* tag → same underlying event, even if LLM picked
+        # different tickers (e.g. NVDA vs NBIS for the same NVIDIA investment).
+        # StrategicDetector regex is deterministic — two articles matching the
+        # same category on the same day are the same event.
+        if new_tags and key is not None:
+            for existing_key, (prev_intensity, prev_ts, prev_id) in self._phone_push_log.items():
+                if existing_key == key:
+                    continue
+                age = now - prev_ts
+                if age >= _DEDUP_WINDOW_SECONDS:
+                    continue
+                prev_tags = self._phone_push_tags.get(existing_key, set())
+                if new_tags & prev_tags:
+                    if intensity > prev_intensity:
+                        self._phone_push_log[key] = (intensity, now, item.id or 0)
+                        self._headline_cache[key] = headline
+                        self._phone_push_tags[key] = new_tags
+                        return False, (
+                            f"intensity_upgrade_strategic({prev_intensity}→{intensity}, "
+                            f"tags={new_tags & prev_tags}, prev_key={existing_key})"
+                        )
+                    return True, (
+                        f"strategic_tag_dedup(tags={new_tags & prev_tags}, "
+                        f"prev_key={existing_key}, prev_id={prev_id}, "
+                        f"prev_intensity={prev_intensity}, age={age:.0f}s)"
+                    )
+
+        # ── Tier 3: cross-key headline_signal similarity ──
         # Catches 台积电/TSM and other Chinese/English ticker-name mismatches
         # where the LLM ticker_hint differs but the headline describes the
         # same event.  Only runs when there IS a key to log (skip None).
@@ -209,6 +246,8 @@ class DispatchStage:
                 if self._headlines_similar(headline, existing_key, item):
                     if intensity > prev_intensity:
                         self._phone_push_log[key] = (intensity, now, item.id or 0)
+                        self._headline_cache[key] = headline
+                        self._phone_push_tags[key] = new_tags
                         return False, (
                             f"intensity_upgrade_cross_key({prev_intensity}→{intensity}, "
                             f"prev_key={existing_key})"
@@ -223,7 +262,17 @@ class DispatchStage:
             self._phone_push_log[key] = (intensity, now, item.id or 0)
             if headline:
                 self._headline_cache[key] = headline
+            if new_tags:
+                self._phone_push_tags[key] = new_tags
         return False, ""
+
+    @staticmethod
+    def _strategic_tags(item: PipelineItem) -> set[str]:
+        """Extract STRATEGIC_* tags from an item's macro_tags."""
+        raw = getattr(item, "macro_tags", "") or ""
+        if not raw:
+            return set()
+        return {t.strip() for t in raw.split(",") if t.strip().startswith("STRATEGIC_")}
 
     def _headlines_similar(
         self, headline: str, existing_key: str, item: PipelineItem,
@@ -275,8 +324,8 @@ class DispatchStage:
                 continue
 
             for channel in self._channels:
-                # ── Phone dedup ──
-                if channel.name == "pushover" and level != AlertLevel.CRITICAL:
+                # ── Phone dedup (includes CRITICAL — was excluded before 2026-07-21) ──
+                if channel.name == "pushover":
                     skip, reason = self._phone_should_skip(item)
                     if skip:
                         logger.info(
