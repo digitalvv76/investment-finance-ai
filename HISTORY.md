@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-21 晚 · 🔧 Futu 英文快讯采集全量并发改造
+
+### 问题发现
+- KTOS 反无人机合同快讯：Futu 08:01 发布英文快讯 "Kratos Receive Mobile Counter-Unmanned Aircraft system(C-Uas)"
+- 系统完全漏掉：08:00 KTOS 搜索太早 → 08:06 才轮回来 → 快讯已被挤出结果窗口
+- 补抓到的中文版 "克瑞拓斯" 映射失败 → 0 分 → 再次被毙
+- 最终 Finnhub 08:20 才推送，比 Futu 首发晚了 19 分钟
+
+### 修复
+- `b09d817` feat: Futu 关键词轮转(16/89·5.5min盲区) → 全量并发(138 keywords·Semaphore(5)·60s全覆盖)
+- 每只关注股双关键词：ticker + 英文公司名 (KTOS+Kratos, NVDA+Nvidia, etc.)
+- entity_extractor 补充 "克瑞拓斯"→KTOS 中文译名映射
+- 生产验证：初始 burst 149 unique，稳态 11 unique/60s，心跳从 ~185 提升到 ~195-397
+- ECS 部署：Docker build 因 Playwright CDN 不通失败（阿里云网络），改 docker cp 热更新
+- ECS 磁盘满 (100%) → docker system prune -f 清理 +3.3GB 构建缓存
+
+---
+
 ## 2026-07-21 下午 · 🚀 快讯源优势强化 + 商业影响力因子
 
 ### 台积电涨价跑赢富途 → 多源管线优势
@@ -3096,3 +3114,15 @@ Finnhub覆盖英文, 富途填补中文缺口.
 ---
 
 ## 2026-07-21T17:47+08:00 · 会话开始
+
+## 2026-07-21T19:02 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 7be488f · 2026-07-21T19:02 · docs: 关机同步 — HISTORY.md + SESSION.md 更新 (2026-07-21 下午)
+
+---
+
+---
+
+## 2026-07-21T20:28+08:00 · 会话开始
