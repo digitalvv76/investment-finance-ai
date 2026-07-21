@@ -4,20 +4,27 @@
 
 ---
 
-## 2026-07-21 · 📊 资金流优化 + 实体提取修复
+## 2026-07-21 下午 · 🚀 快讯源优势强化 + 商业影响力因子
 
-### 富途新闻全覆盖 + 轮转提速
-- `b0ac1fa` feat: 富途关键词从 10 只→74 只全量覆盖 + 轮转提速 — futu_news_fetcher 关键词列表扩展到全量关注标的，轮转机制加速
+### 台积电涨价跑赢富途 → 多源管线优势
+- 发现 Nikkei Asia 04:25 独家 "TSMC to raise chipmaking prices 10%" 比新浪中文转载快 3-40 分钟，比 Futu 关键词轮询更快
+- 根因：通用快讯源 60s 全量扫描 vs Futu 86 关键词轮询（~11min 才回到同一 ticker）
+- `935c9b8` feat: TSM 加入 Futu 关键词（75只）+ TSMC/Nebius 英文→TSM 实体提取映射
 
-### 实体提取修复
-- `04b8336` fix: 实体提取 NEBIUS(nebus)映射修正 + 中文英伟达链路补全 — entity_extractor 新增 nebus→NBIS 映射 + 中文"英伟达"→NVDA 链路，补测试覆盖
+### 快讯源优势四合一强化
+- `a585dad` feat: Finnhub 5min→60s 心跳（4min 加速）+ Futu 8→16 关键词/轮（5.5min 覆盖）+ 新浪 0.04→0.06 + 华尔街见闻·全球 0.06→0.08 提权 + dispatch 延迟追踪日志（source=X latency=Ys）
 
-### 资金流 STRONG 信号收紧
-- `1ec9773` feat: STRONG 门槛 70→85 — 纯背离不推，必须有确认因子
-- `67b09dc` feat: T01 资金流信号三项改进 — 法则A代码化 (fund_flow_collector + futu_fetcher) + LLM 预计算指标 + Futu K 线优先
+### 商业影响力评分体系
+- `ea5bbfc` feat: pricing_power 涨价因子 — 中英文关键词（涨价/price hike 等）+ 邻近词检测（raise...prices 0-3 词间隔）
+- `c46af29` feat: business_impact 营收/利润六维因子 — 价格变动 + 营收销售 + 利润利润率 + 业绩指引 + 重大合同 + 成本结构，强度 0.5-0.9，权重 0.15
 
 ### 开工同步
-- `17c185a` docs: 开工同步 — HISTORY 补账 + manifest 清理 + TASKS 更新
+- `e53b7ad` docs: HISTORY 补录 5 个缺失提交
+- `b0ac1fa` feat: 富途关键词 10→74 全量覆盖 + 轮转提速
+- `04b8336` fix: 实体提取 NEBIUS 映射修正 + 中文英伟达链路补全
+- `1ec9773` feat: STRONG 门槛 70→85
+- `67b09dc` feat: T01 资金流信号三项改进
+- `17c185a` docs: 开工同步
 
 ---
 
