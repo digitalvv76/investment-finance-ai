@@ -22,6 +22,7 @@ def scheduler_setup():
         ],
         "tier_2_playwright": [
             {"name": "ZeroHedge", "url": "https://zerohedge.com", "frequency_tier": "heartbeat"},
+            {"name": "SeekingAlpha", "url": "https://seekingalpha.com"},
         ],
     }
 
@@ -178,6 +179,8 @@ async def test_heartbeat_fetches_rss_and_chinese(scheduler_setup):
     s.chinese_fetcher.fetch_all = AsyncMock(return_value=cn_items)
     s.web_scraper = MagicMock()
     s.web_scraper.fetch_all = AsyncMock(return_value=[])
+    s.finnhub_fetcher = MagicMock()
+    s.finnhub_fetcher.fetch_all = AsyncMock(return_value=[])
 
     await s._heartbeat_tick()
 
@@ -193,7 +196,7 @@ async def test_heartbeat_fetches_rss_and_chinese(scheduler_setup):
 
 @pytest.mark.asyncio
 async def test_tick_5min_fetches_twitter_and_finnhub(scheduler_setup):
-    """5-min tick still runs Twitter + Finnhub (RSS/Chinese moved to heartbeat)."""
+    """5-min tick still runs Twitter + Playwright (Finnhub moved to heartbeat)."""
     s = scheduler_setup["scheduler"]
     callback = AsyncMock()
     s.on_news_batch(callback)
@@ -202,8 +205,6 @@ async def test_tick_5min_fetches_twitter_and_finnhub(scheduler_setup):
     twitter_items = [NewsItem(title="Tweet", url="https://n.com/3", source="Twitter")]
     s.twitter_fetcher = MagicMock()
     s.twitter_fetcher.fetch_all = AsyncMock(return_value=twitter_items)
-    s.finnhub_fetcher = MagicMock()
-    s.finnhub_fetcher.fetch_all = AsyncMock(return_value=[])
 
     await s._tick_5min()
 
@@ -326,23 +327,22 @@ async def test_tick_5min_parallel_exception_isolation(scheduler_setup):
 
     from storage.models import NewsItem
 
-    # Twitter fails, Finnhub succeeds
-    s.playwright_fetcher.fetch_source = AsyncMock(return_value=[])
+    # Playwright succeeds, Twitter fails
+    pw_items = [NewsItem(title="PW OK", url="https://x.com/1", source="ZeroHedge")]
+    s.playwright_fetcher.fetch_source = AsyncMock(return_value=pw_items)
     s.twitter_fetcher.fetch_all = AsyncMock(side_effect=RuntimeError("twitter boom"))
-    finnhub_items = [NewsItem(title="Finn OK", url="https://x.com/2", source="Finnhub")]
-    s.finnhub_fetcher.fetch_all = AsyncMock(return_value=finnhub_items)
 
     await s._tick_5min()
 
     callback.assert_called_once()
     called_with = callback.call_args[0][0]
     titles = [item.title for item in called_with]
-    assert "Finn OK" in titles
+    assert "PW OK" in titles
 
 
 @pytest.mark.asyncio
 async def test_heartbeat_parallel_all_collectors_called(scheduler_setup):
-    """All 5 collectors are invoked (not just the first one)."""
+    """All 7 collectors are invoked (not just the first one)."""
     s = scheduler_setup["scheduler"]
     callback = AsyncMock()
     s.on_news_batch(callback)
@@ -353,6 +353,8 @@ async def test_heartbeat_parallel_all_collectors_called(scheduler_setup):
     s.playwright_fetcher.fetch_source = AsyncMock(return_value=[])
     s.api_fetcher.check_all = AsyncMock(return_value=[])
     s.web_scraper.fetch_all = AsyncMock(return_value=[])
+    s.finnhub_fetcher = MagicMock()
+    s.finnhub_fetcher.fetch_all = AsyncMock(return_value=[])
 
     await s._heartbeat_tick()
 

@@ -54,7 +54,7 @@ class TestScreenStage:
         enriched = [
             NewsItem(
                 id=1, title="Meh", source="blog", url="http://x.com/1",
-                priority_score=0.15, tickers_found="",
+                priority_score=0.25, tickers_found="",
             )
         ]
         mock_fast_lane.process.return_value = enriched

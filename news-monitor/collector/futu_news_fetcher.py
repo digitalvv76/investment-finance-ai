@@ -56,7 +56,7 @@ _SEARCH_KEYWORDS = [
 ]
 
 # Number of keywords to search per cycle (rotate through full list)
-_KEYWORDS_PER_CYCLE = 8
+_KEYWORDS_PER_CYCLE = 16
 
 # Max results per keyword
 _MAX_PER_KEYWORD = 20

@@ -7,6 +7,7 @@ import os
 import re
 import time
 from collections import deque
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from pipeline.item import PipelineItem, AlertLevel
@@ -307,6 +308,19 @@ class DispatchStage:
                     if success:
                         if channel.name == "telegram":
                             tg_pushed += 1
+                            # ── Source-to-push latency ──
+                            try:
+                                pub_ts = item.published_at
+                                if pub_ts:
+                                    pub_dt = datetime.fromisoformat(pub_ts)
+                                    latency_s = (datetime.now(timezone.utc) - pub_dt).total_seconds()
+                                    logger.info(
+                                        "DISPATCH: #%d source=%s latency=%.0fs title=%s",
+                                        item.id, item.source, latency_s,
+                                        (item.title or "")[:80],
+                                    )
+                            except Exception:
+                                pass
                         logger.debug("DISPATCH: %d sent to %s", item.id, channel.name)
                 except Exception:
                     logger.exception("DISPATCH: channel %s failed for id=%d",

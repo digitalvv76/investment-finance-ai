@@ -113,13 +113,13 @@ class NewsScheduler:
                 logger.error(f"Callback error: {e}")
 
     async def _heartbeat_tick(self):
-        """1-minute heartbeat: Chinese + RSS + Playwright + API + Web scraper.
+        """1-minute heartbeat: Chinese + RSS + Playwright + API + Web scraper + Futu + Finnhub.
 
-        All five collectors run concurrently via asyncio.gather. Each
+        All seven collectors run concurrently via asyncio.gather. Each
         collector is independently exception-isolated (return_exceptions=True)
         AND timeout-protected (asyncio.wait_for).
 
-        Combined tick ~12s (was ~40s sequential), well under 60s limit.
+        Combined tick ~15s, well under 60s limit.
         """
         heartbeat_sources = [
             s for s in self.sources.get('tier_2_playwright', [])
@@ -186,6 +186,18 @@ class NewsScheduler:
                 logger.warning("Futu news fetch failed: %s", e)
                 return []
 
+        async def _fetch_finnhub():
+            try:
+                return await asyncio.wait_for(
+                    self.finnhub_fetcher.fetch_all(), timeout=45,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Finnhub fetch timed out after 45s")
+                return []
+            except Exception as e:
+                logger.warning("Finnhub fetch failed: %s", e)
+                return []
+
         async def _fetch_web_scraper():
             try:
                 return await asyncio.wait_for(
@@ -208,6 +220,7 @@ class NewsScheduler:
                     _fetch_api(),
                     _fetch_web_scraper(),
                     _fetch_futu_news(),
+                    _fetch_finnhub(),
                     return_exceptions=True,
                 ),
                 timeout=55,  # heartbeat fires every 60s, leave 5s margin
@@ -226,7 +239,7 @@ class NewsScheduler:
                 items.extend(result)
 
         if items:
-            logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape+futu)")
+            logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape+futu+finnhub)")
             await self._notify_callbacks(items)
 
     async def _run_playwright_heartbeat(self, sources):
@@ -242,12 +255,12 @@ class NewsScheduler:
         return items
 
     async def _tick_5min(self):
-        """5-minute tick: Playwright 5min + Twitter + Finnhub.
+        """5-minute tick: Playwright 5min + Twitter.
 
-        All three run concurrently via asyncio.gather. Each collector
+        Both run concurrently via asyncio.gather. Each collector
         is independently exception-isolated AND timeout-protected.
 
-        Combined tick ~25s (was ~80s sequential), well under 300s.
+        Combined tick ~25s, well under 300s.
         """
         sources = [
             s for s in self.sources.get('tier_2_playwright', [])
@@ -278,24 +291,11 @@ class NewsScheduler:
                 logger.warning("Twitter fetch failed: %s", e)
                 return []
 
-        async def _fetch_finnhub():
-            try:
-                return await asyncio.wait_for(
-                    self.finnhub_fetcher.fetch_all(), timeout=45,
-                )
-            except asyncio.TimeoutError:
-                logger.warning("Finnhub fetch timed out after 45s")
-                return []
-            except Exception as e:
-                logger.warning("Finnhub fetch failed: %s", e)
-                return []
-
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(
                     _fetch_playwright_5min(),
                     _fetch_twitter(),
-                    _fetch_finnhub(),
                     return_exceptions=True,
                 ),
                 timeout=150,

@@ -69,9 +69,9 @@ SOURCE_AUTHORITY: Dict[str, float] = {
     # —— Tier 2: Chinese supplementary sources ——
     # WallStreetCN is China's best financial newswire — on par with Bloomberg terminal
     # for Chinese markets & macro coverage. Raised from 0.02 to 0.05-0.06.
-    "新浪财经·7x24综合快讯": 0.04,
-    "新浪财经·7x24全球财经": 0.04,
-    "华尔街见闻·全球快讯": 0.06,
+    "新浪财经·7x24综合快讯": 0.06,
+    "新浪财经·7x24全球财经": 0.06,
+    "华尔街见闻·全球快讯": 0.08,
     "华尔街见闻·美股": 0.06,
     "华尔街见闻·外汇": 0.05,
     "华尔街见闻·加密货币": 0.05,
