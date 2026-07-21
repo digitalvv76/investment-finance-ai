@@ -2990,3 +2990,16 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 ---
 
 ## 2026-07-21T11:41+08:00 · 会话开始
+
+### T01 资金流信号再次评估 — 审查完成 + 三项改进
+
+V1 三份诊断文档审查完毕。V2 确认系统总体良好，发现三个可改进项：
+
+1. **法则 A 代码化** (`compute_divergence_signal`): 小单反向确认 — 底背离+散户恐慌→升级，顶背离+散户FOMO→升级，散户同向→降级。用户经验确认有价值。
+2. **LLM prompt 预计算指标**: 传 cum_price/super_big/continuity 等定量指标，不传信号结论，防 LLM 算术错误和锚定效应。
+3. **Futu K 线替代 yfinance**: `_analyze_signal` 优先用 fund_flow_days 里的 Futu 价格，yfinance 降级为 fallback。统一数据源。
+
+附带修复: `cum_price` 未传入 details → `cum_price_3d` 始终为 0 → TG 推送消息不显示 3 日涨跌幅。已修。
+
+### 开工同步 (`17c185a`)
+- HISTORY.md 补账 + manifest 清理 + TASKS 更新

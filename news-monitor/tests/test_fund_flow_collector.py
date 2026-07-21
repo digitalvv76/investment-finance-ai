@@ -32,19 +32,20 @@ def _make_result(ticker="AAPL", days_data=None):
     """Build a FundFlowResult with optional day data."""
     if days_data is None:
         # 2-day bearish divergence: price ↑↑ while super_big ↓↓
-        # divergence_count=2 → strength=70=STRONG, participation=extreme → v2 tier 2
+        # cum_small positive = retail FOMO chasing → Law A small_reverse upgrade
+        # divergence_count=2 → base=70 + Law_A(15) = 85 → STRONG, extreme → tier 2
         days_data = [
             FundFlowDay(date="2026-07-10", main_net=1.0e8, main_in_flow=1.0e8,
                         super_big_net=1.0e8,
-                        big_net=0.2e8, mid_net=-0.3e8, small_net=-0.7e8,
+                        big_net=0.2e8, mid_net=0.3e8, small_net=0.7e8,
                         main_pct=10.0, close_price=100.0, change_pct=1.0),
             FundFlowDay(date="2026-07-11", main_net=0.5e8, main_in_flow=0.5e8,
                         super_big_net=0.5e8,
-                        big_net=0.2e8, mid_net=-0.5e8, small_net=-0.7e8,
+                        big_net=0.2e8, mid_net=0.5e8, small_net=0.7e8,
                         main_pct=12.0, close_price=103.0, change_pct=3.0),
             FundFlowDay(date="2026-07-14", main_net=0.2e8, main_in_flow=0.2e8,
                         super_big_net=0.2e8,
-                        big_net=0.2e8, mid_net=-0.8e8, small_net=-1.2e8,
+                        big_net=0.2e8, mid_net=0.8e8, small_net=1.2e8,
                         main_pct=18.0, close_price=108.0, change_pct=4.85),
         ]
     return FundFlowResult(
@@ -118,6 +119,52 @@ def test_compute_signals_mixed_direction():
     signals = collector._compute_signals(result)
     assert len(signals) == 1
     assert signals[0].continuity == "mixed"
+
+
+def test_law_a_small_reverse_upgrade():
+    """Bearish divergence + retail FOMO (small inflow) → Law A upgrade +15 strength."""
+    collector = FundFlowCollector(db=MagicMock(), watchlist=["AAPL"])
+    days = [
+        FundFlowDay(date="2026-07-10", main_net=0.8e8, super_big_net=0.8e8,
+                    big_net=0.2e8, mid_net=0.3e8, small_net=0.5e8,
+                    main_pct=8.0, close_price=100.0, change_pct=2.0),
+        FundFlowDay(date="2026-07-11", main_net=0.3e8, super_big_net=0.3e8,
+                    big_net=0.1e8, mid_net=0.2e8, small_net=0.4e8,
+                    main_pct=6.0, close_price=104.0, change_pct=4.0),
+        FundFlowDay(date="2026-07-14", main_net=0.1e8, super_big_net=0.1e8,
+                    big_net=0.1e8, mid_net=0.1e8, small_net=0.3e8,
+                    main_pct=9.0, close_price=110.0, change_pct=5.77),
+    ]
+    result = _make_result("AAPL", days_data=days)
+    signals = collector._compute_signals(result)
+    assert len(signals) == 1
+    s = signals[0]
+    # cum_small > 0 + bearish_divergence → small_reverse upgrade
+    assert s.signal_strength == "STRONG"
+    # 2-day divergence: base=70 + LawA=15 = 85 ✅
+
+
+def test_law_a_small_same_downgrade():
+    """Bearish divergence + retail following (small outflow) → Law A downgrade -15 strength."""
+    collector = FundFlowCollector(db=MagicMock(), watchlist=["NVDA"])
+    days = [
+        FundFlowDay(date="2026-07-10", main_net=1.0e8, super_big_net=1.0e8,
+                    big_net=0.2e8, mid_net=-0.5e8, small_net=-0.5e8,
+                    main_pct=10.0, close_price=100.0, change_pct=2.0),
+        FundFlowDay(date="2026-07-11", main_net=0.5e8, super_big_net=0.5e8,
+                    big_net=0.1e8, mid_net=-0.8e8, small_net=-0.8e8,
+                    main_pct=8.0, close_price=104.0, change_pct=4.0),
+        FundFlowDay(date="2026-07-14", main_net=0.2e8, super_big_net=0.2e8,
+                    big_net=0.1e8, mid_net=-1.0e8, small_net=-1.0e8,
+                    main_pct=12.0, close_price=110.0, change_pct=5.77),
+    ]
+    result = _make_result("NVDA", days_data=days)
+    signals = collector._compute_signals(result)
+    assert len(signals) == 1
+    s = signals[0]
+    # cum_small < 0 + bearish_divergence → small_same downgrade
+    assert s.signal_strength == "STANDARD"
+    # 2-day divergence: base=70 - LawA=15 = 55 → STANDARD ✅
 
 
 # ------------------------------------------------------------------

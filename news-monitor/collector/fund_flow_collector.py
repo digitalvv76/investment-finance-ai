@@ -393,18 +393,34 @@ class FundFlowCollector:
         """Run Prompt v2 LLM analysis on a signal. Populates s.analysis_summary
         and s.analysis_full in-place."""
         try:
-            # Fetch price data via yfinance
-            price_data = await asyncio.to_thread(
-                lambda: _fetch_price_data(s.ticker, period="1mo"),
-            )
-            if price_data:
-                s.price_data = price_data
-                recent = price_data[-3:]
-                if len(recent) >= 2:
-                    s.price_change_3d = (
-                        (recent[-1]["close"] - recent[0]["close"])
-                        / recent[0]["close"] * 100
-                    )
+            # Use Futu K-line data from fund_flow_days (same source as signal
+            # computation). Fall back to yfinance only when Futu data is empty.
+            if s.fund_flow_days:
+                price_data = [
+                    {"date": d.date, "close": d.close_price}
+                    for d in s.fund_flow_days if d.close_price != 0
+                ]
+                if price_data:
+                    s.price_data = price_data
+                    if len(price_data) >= 2:
+                        s.price_change_3d = (
+                            (price_data[-1]["close"] - price_data[0]["close"])
+                            / price_data[0]["close"] * 100
+                        )
+
+            # Fallback to yfinance only when Futu K-line data is unavailable
+            if not s.price_data:
+                price_data = await asyncio.to_thread(
+                    lambda: _fetch_price_data(s.ticker, period="1mo"),
+                )
+                if price_data:
+                    s.price_data = price_data
+                    recent = price_data[-3:]
+                    if len(recent) >= 2:
+                        s.price_change_3d = (
+                            (recent[-1]["close"] - recent[0]["close"])
+                            / recent[0]["close"] * 100
+                        )
 
             # Build prompt with fund flow + price data
             prompt = self._build_analysis_prompt(s)
@@ -458,14 +474,36 @@ class FundFlowCollector:
             closes = [d["close"] for d in s.price_data[-10:]]
             price_info = f"近10日收盘价: {', '.join(f'{c:.2f}' for c in closes)}"
 
+        # Pre-computed indicators from signal engine (same data source as table).
+        # Provide numbers so LLM can focus on interpretation, not arithmetic.
+        indicator_lines = [
+            f"📊 系统预计算指标（同一数据源，供参考，请独立判断）：",
+            f"- 3日累计涨跌幅: {s.cum_price_3d:+.1f}%",
+            f"- 3日特大单累计: {s.cum_super_big_3d/1e4:.0f}万",
+            f"- 3日主力(super+big)累计: {s.cum_main_3d/1e4:.0f}万",
+            f"- 主力占比: {s.latest_main_pct:.1f}% ({s.participation})",
+            f"- 特大单连续性: {s.continuity}",
+        ]
+        if s.golden_pit:
+            indicator_lines.append(
+                f"- ⚠️ 黄金坑条件触发（暴跌+流出极小+特大单逆势流入）"
+            )
+        if s.retail_trap:
+            indicator_lines.append(
+                f"- ⚠️ 散户陷阱条件触发（涨>5%+特大单未参与+小单疯狂流入）"
+            )
+        indicators = "\n".join(indicator_lines)
+
         system_prompt = _load_prompt_v2()
         user_prompt = (
             f"标的名称：{s.ticker}\n"
             f"数据周期：最近{s._days if hasattr(s, '_days') else 20}个交易日\n"
             f"{price_info}\n\n"
+            f"{indicators}\n\n"
             f"{table}\n\n"
             f"请根据以上数据和分析框架，以「背离信号」为核心，"
-            f"输出一份完整的专业资金流分析报告。"
+            f"独立输出一份完整的专业资金流分析报告。"
+            f"预计算指标仅供参考，请基于原始数据表做独立验证。"
         )
 
         return f"{system_prompt}\n\n---\n\n{user_prompt}"

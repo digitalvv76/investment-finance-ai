@@ -383,17 +383,20 @@ class FutuFundFlowFetcher:
 
 
 def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
-    """Compute price vs fund-flow divergence signal — 5-law framework.
+    """Compute price vs fund-flow divergence signal — 6-law framework.
 
     ★ Anchor: 特大单 (super_big_net).
     主力 = super+big for participation ratio (V2.1 P0 anti-splitting).
 
-    Five laws from user training data:
-      E. 合力检测 — all 4 tiers same direction = healthy; only retail = trap
-      F. 散户陷阱 — price up + super flat/out + small crazy in = downgrade ×2
-      G. 黄金坑 — extreme drop + tiny outflow + super buying = stronger than normal divergence
+    Six laws from user training data:
+      A. 小单反向确认 — retail panic/FOMO confirms divergence
+      B. 连续性确认 — 3-day consecutive direction (via continuity field)
+      C. 主力占比定强度 — participation ratio grading (via participation field)
+      D. 合力检测 — tier alignment (via all_tiers_aligned)
+      E. 散户陷阱 — price up + super flat/out + small crazy in = downgrade ×2
+      F. 黄金坑 — extreme drop + tiny outflow + super buying = upgrade
 
-    Returns: {signal, strength, detail, details, laws}
+    Returns: {signal, strength, detail, details}
     """
 
     if len(days) < 3:
@@ -547,6 +550,27 @@ def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
         detail = "特大单无明显背离信号"
         strength = 0
 
+    # -------------------------------------------------------------------
+    # Law A: 小单反向确认
+    # -------------------------------------------------------------------
+    # Retail panic (small outflow) during bottom divergence → confidence boost.
+    # Retail FOMO (small inflow) during top divergence → confidence boost.
+    # Retail following institution direction → may be real trend, downgrade.
+    if signal in ("bullish_divergence", "bearish_divergence"):
+        if signal == "bullish_divergence" and cum_small < 0:
+            strength = min(strength + 15, 100)
+            detail += "；法则A: 散户恐慌抛售→底部确认"
+            modifiers.append("small_reverse_confirm")
+        elif signal == "bearish_divergence" and cum_small > 0:
+            strength = min(strength + 15, 100)
+            detail += "；法则A: 散户疯狂追涨→顶部确认"
+            modifiers.append("small_reverse_confirm")
+        elif (signal == "bullish_divergence" and cum_small > 0) or \
+             (signal == "bearish_divergence" and cum_small < 0):
+            strength = max(strength - 15, 0)
+            detail += "；法则A: 散户同向→可能为真趋势"
+            modifiers.append("small_same_downgrade")
+
     # V2.5: standardized strength tier
     if strength >= 70:
         final_strength = "STRONG"
@@ -572,6 +596,7 @@ def compute_divergence_signal(days: List[FundFlowDay]) -> dict:
             ),
             "cum_main_3d": cum_main,
             "cum_super_big_3d": cum_super_big,
+            "cum_price": cum_price,
             "latest_main_pct": latest.main_pct,
             "all_tiers_aligned": all_positive or all_negative,
             "retail_trap": retail_trap,
