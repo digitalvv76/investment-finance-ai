@@ -10,6 +10,7 @@ Factors:
     7. deviation    — macro data deviation from expectations (NEW)
     8. surprise     — unexpected/shocking events (NEW)
     9. asset_linkage — multi-asset-class impact (NEW)
+   10. pricing_power — product/service price increase news (NEW)
 
 Extracted from fast_lane.py as a shared module. Used by both the fast lane
 rule engine and the deep lane orchestrator.
@@ -35,6 +36,7 @@ DEFAULT_WEIGHTS = {
     "deviation": 0.25,       # NEW: macro data deviation magnitude
     "surprise": 0.15,        # NEW: unexpected/shocking nature
     "asset_linkage": 0.15,   # NEW: cross-asset impact
+    "pricing_power": 0.15, # NEW: product/service price increase
 }
 
 # Source authority scores (higher = more trusted/urgent)
@@ -195,6 +197,57 @@ _SURPRISE_KEYWORDS = [
 ]
 
 # ---------------------------------------------------------------------------
+# Pricing power — product/service price increase signals
+# ---------------------------------------------------------------------------
+
+# Simple keyword → intensity map for substring matching
+_PRICING_POWER_KEYWORDS = [
+    # Direct price hike announcements (strongest — 0.85–0.9)
+    ("price increase", 0.9),
+    ("price hike", 0.9),
+    ("raise prices", 0.9),
+    ("raises prices", 0.9),
+    ("raising prices", 0.9),
+    ("raised prices", 0.9),
+    ("raise price", 0.9),
+    ("raises price", 0.9),
+    ("price raised", 0.85),
+    ("price hikes", 0.9),
+    ("price rises", 0.85),
+    ("rising prices", 0.85),
+    # Pricing power signals (moderate-strong — 0.7–0.8)
+    ("pricing power", 0.8),
+    ("passed on to customers", 0.7),
+    ("pass through costs", 0.7),
+    ("cost pass-through", 0.7),
+    # Softer price signals (0.5)
+    ("price adjustment", 0.5),
+    ("supply chain cost", 0.5),
+    # —— Chinese pricing signals ——
+    ("涨价", 0.9),
+    ("提价", 0.9),
+    ("全面涨价", 0.9),
+    ("价格上调", 0.85),
+    ("上调价格", 0.85),
+    ("定价权", 0.8),
+    ("转嫁成本", 0.7),
+    ("成本传导", 0.7),
+    ("价格调整", 0.5),
+    ("成本上升", 0.5),
+    # Tariff-driven price signals (0.5–0.6)
+    ("tariff pass", 0.6),
+    ("tariff cost", 0.6),
+    ("import cost", 0.5),
+]
+
+# Regex for "raise ... prices" with up to 3 words in between.
+# Catches "raise chipmaking prices", "raised the price", etc.
+_PRICE_RAISE_REGEX = re.compile(
+    r'\b(?:raise|raises|raising|raised|hike|hikes|hiking|hiked)\s+(?:\w+\s+){0,3}(?:price|prices)\b',
+    re.IGNORECASE,
+)
+
+# ---------------------------------------------------------------------------
 # Asset linkage — multi-asset-class keywords
 # ---------------------------------------------------------------------------
 
@@ -307,6 +360,9 @@ class PriorityScorer:
 
         # 9. Asset linkage (cross-asset impact)
         score += self._asset_linkage_score(text)
+
+        # 10. Pricing power (product/service price increases)
+        score += self._pricing_power_score(text)
 
         return round(score, 4)
 
@@ -467,6 +523,33 @@ class PriorityScorer:
             factor = 0.0
 
         return round(factor * self.weights["asset_linkage"], 4)
+
+    # ------------------------------------------------------------------
+    # NEW: Pricing power (涨价/提价)
+    # ------------------------------------------------------------------
+
+    def _pricing_power_score(self, text: str) -> float:
+        """Score based on product/service price increase signals.
+
+        Detects price hike announcements, cost pass-through, and pricing
+        power language. Returns weighted score based on strongest match.
+        """
+        if not text:
+            return 0.0
+
+        text_lower = text.lower()
+        max_intensity = 0.0
+
+        # 1. Substring keyword matching
+        for keyword, intensity in _PRICING_POWER_KEYWORDS:
+            if keyword in text_lower:
+                max_intensity = max(max_intensity, intensity)
+
+        # 2. Regex proximity: "raise ... prices" (up to 3 words between)
+        if _PRICE_RAISE_REGEX.search(text_lower):
+            max_intensity = max(max_intensity, 0.9)
+
+        return round(max_intensity * self.weights["pricing_power"], 4)
 
     # ------------------------------------------------------------------
     # Internal

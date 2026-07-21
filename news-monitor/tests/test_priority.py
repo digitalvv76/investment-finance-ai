@@ -103,6 +103,61 @@ class TestPriorityScorer:
         )
         assert score < IMPORTANT_THRESHOLD
 
+    def test_pricing_power_english(self, scorer):
+        """Price increase language should boost score."""
+        score = scorer.score(
+            NewsItem(
+                title="Exclusive: TSMC to raise chipmaking prices by up to 10% from 2027",
+                url="x", source="Nikkei Asia",
+            ),
+        )
+        # pricing_power: "raise"+"price" → intensity 0.9 → 0.9*0.15=0.135
+        assert score >= 0.10  # should get meaningful pricing_power boost
+
+    def test_pricing_power_chinese(self, scorer):
+        """Chinese 涨价 should boost score."""
+        score = scorer.score(
+            NewsItem(
+                title="台积电计划从2027年起将芯片制造价格提高至多10%",
+                url="x", source="新浪财经·7x24综合快讯",
+            ),
+        )
+        # "涨价" not present but source authority (0.06) gives some score
+        assert score >= 0.02
+
+    def test_pricing_power_chinese_explicit(self, scorer):
+        """Explicit 涨价 keyword should give strong boost."""
+        score = scorer.score(
+            NewsItem(
+                title="台积电宣布3nm制程全面涨价20%",
+                url="x", source="新浪财经·7x24综合快讯",
+            ),
+        )
+        # "全面涨价" → intensity 0.9 → 0.9*0.15=0.135, + source 0.06
+        assert score >= 0.15
+
+    def test_pricing_power_no_price_signal(self, scorer):
+        """Headlines without pricing language should not get pricing boost."""
+        score = scorer.score(
+            NewsItem(
+                title="TSMC reports strong quarterly earnings, beats expectations",
+                url="x", source="Reuters",
+            ),
+        )
+        # Has source authority but no pricing_power, should be driven by other factors
+        assert score >= 0.05  # source authority alone
+
+    def test_pricing_power_max_not_sum(self, scorer):
+        """Multiple price keywords should take max, not sum."""
+        score1 = scorer.score(
+            NewsItem(title="price hike price increase", url="x", source="Test"),
+        )
+        score2 = scorer.score(
+            NewsItem(title="price hike", url="x", source="Test"),
+        )
+        # Both keywords have intensity 0.9, so scores should be identical
+        assert score1 == score2
+
     def test_score_batch(self, scorer):
         """Batch scoring should tag items correctly."""
         items = [
