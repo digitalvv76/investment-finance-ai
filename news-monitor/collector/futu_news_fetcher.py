@@ -8,11 +8,14 @@ Strategy: search ALL keywords every cycle using concurrent API calls.
 Each keyword gets its own OpenQuoteContext connection running in a thread
 pool.  Deduplication by title hash prevents cross-keyword duplicates.
 
-v2 change (2026-07-21): replaced keyword rotation with full concurrent search.
-All 119 keywords searched every 60s instead of rotating 16 per cycle — eliminates
-the ~5.5 min blind spot that caused flash news (e.g. Kratos anti-drone contract)
-to be missed when published between rotations.  English company names added as
-supplementary keywords to catch headlines that use names instead of tickers.
+v2 (2026-07-21): replaced keyword rotation with full concurrent search.
+All keywords searched every 60s instead of rotating 16 per cycle.
+English company names added as supplementary keywords.
+
+v2.1 (2026-07-21): keyword→ticker fallback.  When Futu returns an article
+with empty related_securities, inject the search keyword's canonical ticker
+(like Finnhub does via its symbol= parameter).  Prevents score=0 when
+entity extraction misses a Chinese company name.
 """
 
 from __future__ import annotations
@@ -111,6 +114,117 @@ _MIN_CYCLE_INTERVAL = 60
 # Dedup window — skip titles seen in last N seconds
 _DEDUP_TTL = 3600 * 4  # 4 hours
 
+# ---------------------------------------------------------------------------
+# Keyword → ticker fallback (like Finnhub's symbol= parameter)
+# ---------------------------------------------------------------------------
+# When Futu returns an article with empty related_securities, inject the
+# search keyword's canonical ticker so the article gets a ticker hit in
+# scoring.  Built from entity_extractor's company-name mappings + direct
+# ticker matching against the known watchlist.
+_KEYWORD_TO_TICKER: Dict[str, str] = {}
+
+
+def _build_keyword_ticker_map() -> Dict[str, str]:
+    """Build keyword→ticker lookup from entity_extractor mappings + keyword list.
+
+    Called once at module load.  Returns a dict suitable for O(1) lookup
+    during fetch.  Covers EVERY watchlist stock through three strategies:
+      1. Direct ticker: uppercase 2-5 letters in the ticker section → self
+      2. English company name → ticker (via entity_extractor._company_to_ticker)
+      3. Manual company name → ticker for watchlist stocks not in entity_extractor
+    Non-ticker keywords (macro, people, market, policy) are excluded.
+    """
+    from engine.entity_extractor import EntityExtractor
+
+    ee = EntityExtractor(config=None)
+
+    # Merge English + Chinese company-name → ticker maps
+    company_to_ticker: Dict[str, str] = {}
+    for name, ticker in ee._company_to_ticker.items():
+        company_to_ticker[name.lower()] = ticker
+    for name, ticker in ee._cn_company_to_ticker.items():
+        company_to_ticker[name.lower()] = ticker
+
+    # Additional watchlist-specific company names not in entity_extractor
+    _extra_company_names: Dict[str, str] = {
+        # Space / defense
+        "archer aviation": "ACHR", "aerovironment": "AVAV",
+        "redwire": "RDW", "huntington ingalls": "HII",
+        # Tech / semiconductors
+        "ionq": "IONQ", "hewlett packard enterprise": "HPE",
+        "navitas semiconductor": "NVTS",
+        # Energy / nuclear
+        "oklo": "OKLO", "nuscale": "SMR", "nano nuclear": "NNE",
+        "centrus energy": "LEU", "bloom energy": "BE",
+        "iris energy": "IREN", "energy fuels": "UUUU",
+        "vistra": "VST",
+        # Industrials / materials
+        "mp materials": "MP", "bwx technologies": "BWXT",
+        "lumentum": "LITE",
+        # Biotech / health
+        "tempus ai": "TEM", "recursion": "RXRX",
+        "serv robotics": "SERV", "serve robotics": "SERV",
+        # Finance / crypto
+        "galaxy digital": "GLXY",
+        # Satcom / space
+        "ast spacemobile": "ASTS", "echostar": "SATS",
+        # Chips / hardware
+        "micron": "MU", "oracle": "ORCL",
+        "wolfspeed": "WOLF",
+        # Adtech / data
+        "zeta global": "ZETA",
+        # Broadcom / Marvell (ensure)
+        "broadcom": "AVGO", "marvell": "MRVL",
+        "arm holdings": "ARM",
+    }
+    company_to_ticker.update(_extra_company_names)
+
+    # Also add commonly-used short names
+    for short_name, ticker in [
+        ("arm", "ARM"), ("ionq", "IONQ"), ("oklo", "OKLO"),
+        ("spacex", "SPCX"), ("nebius", "NBIS"), ("kratos", "KTOS"),
+        ("nvidia", "NVDA"), ("tesla", "TSLA"), ("palantir", "PLTR"),
+        ("rigetti", "RGTI"), ("oracle", "ORCL"), ("micron", "MU"),
+        ("broadcom", "AVGO"), ("marvell", "MRVL"),
+        ("tsmc", "TSM"), ("alibaba", "BABA"), ("google", "GOOGL"),
+        ("rocket lab", "RKLB"), ("lam research", "LRCX"),
+        ("taiwan semiconductor", "TSM"),
+    ]:
+        if short_name not in company_to_ticker:
+            company_to_ticker[short_name] = ticker
+
+    # Non-ticker keywords to exclude (macro, people, market, policy)
+    _NON_TICKER = {
+        "CPI", "PPI", "GDP", "ETH", "BTC", "SOL",
+        "美联储", "非农", "美股", "港股", "芯片法案", "关税",
+        "CHIPS Act", "chips act", "tariff",
+        "黄仁勋", "Jensen Huang", "马斯克", "Elon Musk",
+        "巴菲特", "Warren Buffett",
+    }
+
+    result: Dict[str, str] = {}
+    for kw in _SEARCH_KEYWORDS:
+        if kw in _NON_TICKER:
+            continue
+
+        kw_lower = kw.lower()
+
+        # Strategy 1: Direct ticker (uppercase 2-5 letters)
+        if 1 <= len(kw) <= 5 and kw.isalpha() and kw.isupper():
+            result[kw] = kw
+            continue
+
+        # Strategy 2: Company name → ticker
+        ticker = company_to_ticker.get(kw_lower)
+        if ticker:
+            result[kw] = ticker
+
+    return result
+
+
+# Build at import time
+_KEYWORD_TO_TICKER = _build_keyword_ticker_map()
+
 
 class FutuNewsFetcher:
     """Futu news search fetcher — concurrent full-keyword coverage.
@@ -177,7 +291,19 @@ class FutuNewsFetcher:
                     continue
             self._seen[title_hash] = now
 
-            tickers_str = ",".join(raw.get("related_tickers", []))
+            tickers_raw = raw.get("related_tickers", [])
+            # ── Finnhub-style fallback: inject search keyword's ticker ──
+            # When Futu returns empty related_securities (common for Chinese-
+            # language articles found via English ticker search), use the
+            # keyword→ticker map to ensure the article gets a ticker hit in
+            # scoring.  This mirrors Finnhub's tickers_found=ticker from its
+            # symbol= query parameter.
+            if not tickers_raw:
+                search_kw = raw.get("_search_kw", "")
+                fallback_ticker = _KEYWORD_TO_TICKER.get(search_kw, "")
+                if fallback_ticker:
+                    tickers_raw = [fallback_ticker]
+            tickers_str = ",".join(tickers_raw)
             items.append(NewsItem(
                 title=title,
                 url=raw.get("url", ""),
@@ -224,6 +350,7 @@ class FutuNewsFetcher:
                     "url": str(row.get("url", "")),
                     "published_at": str(row.get("publish_time", "")),
                     "related_tickers": related,
+                    "_search_kw": kw,  # for keyword→ticker fallback
                 })
             return items
         except Exception as e:
