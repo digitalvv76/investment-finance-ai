@@ -325,8 +325,9 @@ class FutuNewsFetcher:
         """Fetch news for ONE keyword. Runs in thread pool (Futu API is sync)."""
         from futu import OpenQuoteContext, NewsSubType, RET_OK
 
-        ctx = OpenQuoteContext(host=self._host, port=self._port)
+        ctx = None
         try:
+            ctx = OpenQuoteContext(host=self._host, port=self._port)
             ret, data = ctx.get_search_news(
                 kw,
                 max_count=_MAX_PER_KEYWORD,
@@ -357,7 +358,8 @@ class FutuNewsFetcher:
             logger.debug("FutuNews: keyword '%s' error: %s", kw, e)
             return []
         finally:
-            ctx.close()
+            if ctx is not None:
+                ctx.close()
 
     async def close(self):
         """No-op — connections are per-cycle."""
