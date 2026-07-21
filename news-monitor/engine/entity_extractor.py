@@ -81,7 +81,8 @@ class EntityExtractor:
             "oklo": "OKLO", "nuscale": "SMR",
             # Space / defense
             "kratos": "KTOS", "ast spacemobile": "ASTS",
-            "rigetti": "RGTI", "tempus": "TEM", "nebis": "NBIS",
+            "rigetti": "RGTI", "tempus": "TEM",
+            "nebus": "NBIS", "nebis": "NBIS", "nebius": "NBIS", "nebius group": "NBIS",
             # ETFs
             "ark innovation": "ARKK",
         }

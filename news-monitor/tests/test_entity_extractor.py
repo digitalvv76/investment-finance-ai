@@ -93,3 +93,25 @@ class TestEntityExtractor:
         result = ex.extract("NVDA and AMD are top semiconductor stocks")
         assert 'NVDA' in result['tickers']
         assert 'AMD' in result['tickers']
+
+    def test_chinese_nvidia_mapping(self, extractor):
+        """Chinese 英伟达 should map to NVDA."""
+        result = extractor.extract("英伟达公司报告持有NEBIUS Group N.V. 9.3%的被动股权")
+        assert 'NVDA' in result['tickers']
+
+    def test_nebius_company_name_to_nbis(self, extractor):
+        """Company name 'Nebius' (with 'u') should map to ticker NBIS."""
+        result = extractor.extract("Nebius Group secures NVIDIA investment")
+        assert 'NBIS' in result['tickers']
+
+    def test_nebius_uppercase_to_nbis(self, extractor):
+        """Uppercase NEBIUS should map to NBIS via case-insensitive match."""
+        result = extractor.extract("英伟达披露持有NEBIUS 9.3%股权——SEC文件")
+        assert 'NVDA' in result['tickers']
+        assert 'NBIS' in result['tickers']
+
+    def test_nebius_group_full_name(self, extractor):
+        """Full company name 'Nebius Group N.V.' should map to NBIS."""
+        result = extractor.extract("NVIDIA discloses stake in Nebius Group N.V.")
+        assert 'NVDA' in result['tickers']
+        assert 'NBIS' in result['tickers']
