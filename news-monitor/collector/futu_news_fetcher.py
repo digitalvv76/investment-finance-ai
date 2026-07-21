@@ -43,7 +43,7 @@ _SEARCH_KEYWORDS = [
     "MRVL", "MU", "NBIS", "NNE", "NVDA", "NVTS", "OKLO", "ORCL",
     "PLTR", "QQQ", "QQQM", "RDW", "RGTI", "RKLB", "ROBT", "RXRX",
     "SATS", "SERV", "SMH", "SMR", "SOL", "SOXL", "SOXX", "SPCX",
-    "TEM", "TSLA", "UPXI", "UUUU", "VOO", "VPG", "VST", "WEN",
+    "TEM", "TSLA", "TSM", "UPXI", "UUUU", "VOO", "VPG", "VST", "WEN",
     "WOLF", "ZETA",
     # === Macro / Fed (no ticker needed) ===
     "美联储", "CPI", "PPI", "非农", "GDP",

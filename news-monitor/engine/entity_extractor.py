@@ -67,6 +67,7 @@ class EntityExtractor:
             "intel": "INTC", "amd": "AMD", "broadcom": "AVGO",
             "marvell": "MRVL", "lam research": "LRCX",
             "arm holdings": "ARM", "arm": "ARM",
+            "tsmc": "TSM", "taiwan semiconductor": "TSM",
             "rocket lab": "RKLB", "spacex": "SPCX",
             # Crypto-exposed equities (publicly traded)
             "coinbase": "COIN", "microstrategy": "MSTR",

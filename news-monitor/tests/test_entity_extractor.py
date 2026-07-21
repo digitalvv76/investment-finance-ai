@@ -115,3 +115,22 @@ class TestEntityExtractor:
         result = extractor.extract("NVIDIA discloses stake in Nebius Group N.V.")
         assert 'NVDA' in result['tickers']
         assert 'NBIS' in result['tickers']
+
+    def test_tsmc_english_to_tsm(self, extractor):
+        """English 'TSMC' should map to TSM ticker."""
+        result = extractor.extract(
+            "Exclusive: TSMC to raise chipmaking prices by up to 10% from 2027"
+        )
+        assert 'TSM' in result['tickers']
+
+    def test_tsmc_full_name_to_tsm(self, extractor):
+        """'Taiwan Semiconductor' should map to TSM ticker."""
+        result = extractor.extract(
+            "Taiwan Semiconductor Manufacturing Co plans price increases"
+        )
+        assert 'TSM' in result['tickers']
+
+    def test_tsmc_chinese_to_tsm(self, extractor):
+        """Chinese 台积电 should map to TSM."""
+        result = extractor.extract("台积电计划从2027年起将芯片制造价格提高至多10%")
+        assert 'TSM' in result['tickers']
