@@ -2,12 +2,12 @@
   "modules": {
     "storage/database.py": {
       "tests": ["tests/test_database.py"],
-      "related_scripts": ["scripts/acceptance_test.py"],
+      "related_scripts": [],
       "also_tests": []
     },
     "storage/models.py": {
       "tests": ["__ALL__"],
-      "related_scripts": ["scripts/acceptance_test.py"],
+      "related_scripts": [],
       "also_tests": []
     },
     "storage/vector_store.py": {

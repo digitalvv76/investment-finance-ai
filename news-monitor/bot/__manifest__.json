@@ -2,7 +2,7 @@
   "modules": {
     "bot/telegram_bot.py": {
       "tests": [],
-      "related_scripts": ["scripts/test_phone_alert.py"],
+      "related_scripts": [],
       "also_tests": []
     },
     "bot/handlers.py": {

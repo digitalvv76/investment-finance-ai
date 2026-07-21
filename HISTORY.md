@@ -2976,3 +2976,17 @@ SessionEnd 自动补账仅加 hash 存根，现替换为简洁引用。详细内
 
 ### 部署: `446bf71` `091f7a0` `6f8c032` 均已上 ECS
 
+
+---
+
+### 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重）。
+
+- `f0e8db2` docs: HISTORY.md 推送门槛调整记录 — 07-17 推送门槛会话的文档补录
+- `cc5198a` docs: 提交关机同步残留 — SessionEnd 自动补账机制 + 会话开始标记
+- `1fd2ab5` docs: 关机同步 — HISTORY.md + SESSION.md + TASKS.md 更新（geo-tier + Graham 部署 + T01/T10 关闭）
+
+---
+
+## 2026-07-21T11:41+08:00 · 会话开始

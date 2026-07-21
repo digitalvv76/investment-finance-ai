@@ -1,11 +1,6 @@
 {
   "_description": "Utility scripts. These are support tools, not runtime modules. Entries exist for pre-commit validation when a script is modified.",
   "modules": {
-    "scripts/acceptance_test.py": {
-      "tests": [],
-      "related_scripts": [],
-      "also_tests": []
-    },
     "scripts/backtest_signal.py": {
       "tests": [],
       "related_scripts": [],
@@ -97,11 +92,6 @@
       "also_tests": []
     },
     "scripts/test_new_fetchers.py": {
-      "tests": [],
-      "related_scripts": [],
-      "also_tests": []
-    },
-    "scripts/test_phone_alert.py": {
       "tests": [],
       "related_scripts": [],
       "also_tests": []

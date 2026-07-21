@@ -3,7 +3,7 @@
   "modules": {
     "main.py": {
       "tests": [],
-      "related_scripts": ["scripts/acceptance_test.py"],
+      "related_scripts": [],
       "also_tests": ["tests/test_fast_lane.py", "tests/test_deep_lane.py", "tests/test_alert_dispatcher.py"]
     }
   }
