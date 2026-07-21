@@ -134,3 +134,15 @@ class TestEntityExtractor:
         """Chinese 台积电 should map to TSM."""
         result = extractor.extract("台积电计划从2027年起将芯片制造价格提高至多10%")
         assert 'TSM' in result['tickers']
+
+    def test_kratos_chinese_kruitosi_to_ktos(self, extractor):
+        """Chinese 克瑞拓斯 (Futu Benzinga transliteration) should map to KTOS."""
+        result = extractor.extract(
+            "克瑞拓斯安全防卫获得美国能源部约$1.56亿的合同，用于提供移动式反无人飞行器系统平台"
+        )
+        assert 'KTOS' in result['tickers']
+
+    def test_kratos_chinese_kweituosi_to_ktos(self, extractor):
+        """Chinese 奎托斯 (existing mapping) should still map to KTOS."""
+        result = extractor.extract("奎托斯获得美国防务合同")
+        assert 'KTOS' in result['tickers']

@@ -66,9 +66,9 @@
       "also_tests": []
     },
     "collector/futu_news_fetcher.py": {
-      "tests": [],
-      "related_scripts": [],
-      "also_tests": []
+      "tests": ["tests/test_futu_news_fetcher.py"],
+      "related_scripts": ["engine/entity_extractor.py"],
+      "also_tests": ["tests/test_entity_extractor.py"]
     },
     "collector/market_snapshot.py": {
       "tests": [],
