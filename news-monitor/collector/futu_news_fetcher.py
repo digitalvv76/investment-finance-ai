@@ -31,23 +31,32 @@ logger = logging.getLogger(__name__)
 # Keyword rotation — covers tickers, macro, sectors, people
 # ---------------------------------------------------------------------------
 _SEARCH_KEYWORDS = [
-    # Ticker-specific (top watchlist)
-    "NVDA", "AAPL", "TSLA", "MSFT", "AMD", "AVGO", "PLTR",
-    "英伟达", "特斯拉", "苹果",
-    # Macro / Fed
+    # === Full watchlist — direct ticker search (74 stocks) ===
+    # Futu get_search_news is language-agnostic: "NBIS" catches both
+    # "NBIS Stock Jumps" and "奈比斯暴涨".  Finnhub covers English;
+    # Futu fills the Chinese-language gap.
+    "AAOI", "ABSI", "ACHR", "ALAB", "AMBA", "ARKK", "ARKQ", "ARM",
+    "ASTS", "AVAV", "AVGO", "BABA", "BE", "BOT", "BOTZ", "BTBT",
+    "BTC", "BTCS", "BTDR", "BWXT", "CBRS", "CLPT", "CRWV", "DTIL",
+    "ETH", "FIG", "FUTU", "GLD", "GLXY", "GOOGL", "HII", "HPE",
+    "IONQ", "IREN", "KTOS", "LEU", "LITE", "LRCX", "MP", "MRAAY",
+    "MRVL", "MU", "NBIS", "NNE", "NVDA", "NVTS", "OKLO", "ORCL",
+    "PLTR", "QQQ", "QQQM", "RDW", "RGTI", "RKLB", "ROBT", "RXRX",
+    "SATS", "SERV", "SMH", "SMR", "SOL", "SOXL", "SOXX", "SPCX",
+    "TEM", "TSLA", "UPXI", "UUUU", "VOO", "VPG", "VST", "WEN",
+    "WOLF", "ZETA",
+    # === Macro / Fed (no ticker needed) ===
     "美联储", "CPI", "PPI", "非农", "GDP",
-    # Sector / theme
-    "AI芯片", "半导体", "人工智能", "量子计算",
-    "核能", "SMR", "太空",
-    # Market movers
+    # === Key people (person-driven events) ===
     "黄仁勋", "马斯克", "巴菲特",
-    "芯片法案", "关税",
-    # Broad market
+    # === Broad market fallback ===
     "美股", "港股",
+    # === Policy catalysts ===
+    "芯片法案", "关税",
 ]
 
 # Number of keywords to search per cycle (rotate through full list)
-_KEYWORDS_PER_CYCLE = 5
+_KEYWORDS_PER_CYCLE = 8
 
 # Max results per keyword
 _MAX_PER_KEYWORD = 20
