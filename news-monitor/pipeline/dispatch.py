@@ -192,7 +192,8 @@ class DispatchStage:
                     if intensity > prev_intensity:
                         self._phone_push_log[key] = (intensity, now, item.id or 0)
                         self._headline_cache[key] = headline
-                        self._phone_push_tags[key] = new_tags
+                        if new_tags:
+                            self._phone_push_tags[key] = new_tags
                         return False, f"intensity_upgrade({prev_intensity}→{intensity})"
                     else:
                         return True, (
@@ -217,7 +218,8 @@ class DispatchStage:
                     if intensity > prev_intensity:
                         self._phone_push_log[key] = (intensity, now, item.id or 0)
                         self._headline_cache[key] = headline
-                        self._phone_push_tags[key] = new_tags
+                        if new_tags:
+                            self._phone_push_tags[key] = new_tags
                         return False, (
                             f"intensity_upgrade_strategic({prev_intensity}→{intensity}, "
                             f"tags={new_tags & prev_tags}, prev_key={existing_key})"
@@ -247,7 +249,8 @@ class DispatchStage:
                     if intensity > prev_intensity:
                         self._phone_push_log[key] = (intensity, now, item.id or 0)
                         self._headline_cache[key] = headline
-                        self._phone_push_tags[key] = new_tags
+                        if new_tags:
+                            self._phone_push_tags[key] = new_tags
                         return False, (
                             f"intensity_upgrade_cross_key({prev_intensity}→{intensity}, "
                             f"prev_key={existing_key})"
