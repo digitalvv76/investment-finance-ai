@@ -3126,3 +3126,95 @@ Finnhub覆盖英文, 富途填补中文缺口.
 ---
 
 ## 2026-07-21T20:28+08:00 · 会话开始
+
+## 2026-07-21T22:18 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### cfb4135 · 2026-07-21T21:11 · @ docs: 补录 Futu 全量并发改造 + KTOS 漏报根因分析
+
+@
+
+---
+
+### 32f04d6 · 2026-07-21T21:33 · feat: Futu keyword→ticker fallback — Finnhub 式兜底注入
+
+像 Finnhub 的 symbol=参数一样，当 Futu 返回 related_securities=[] 时，
+从搜索关键词自动解析并注入 ticker，不再依赖实体提取去猜。
+
+- 115个关键词→ticker映射：直接ticker(如KTOS→KTOS)+英文公司名(如Kratos→KTOS)
+- 覆盖全部关注股(41只英文名+74只ticker)，macro/people类关键词自动排除
+- 根除：克瑞拓斯中文标题+related_securities=[] → ticker提取失败 → 中文降权×0.5 → 0分
+
+---
+
+### b4db93d · 2026-07-21T21:49 · @ fix: futu_news OpenQuoteContext UnboundLocalError — ctx=None guard
+
+对抗式核实发现: OpenQuoteContext 构造函数失败时 ctx 未绑定,
+finally: ctx.close() 抛出 UnboundLocalError 掩盖原始异常。
+修复: ctx=None 初始化 + finally 中 None 检查。
+
+@
+
+---
+
+### 30d6a01 · 2026-07-21T22:16 · @ docs: 关机同步 — SESSION.md 更新
+
+@
+
+---
+
+---
+
+## 2026-07-21T22:19+08:00 · 会话开始
+
+## 2026-07-21T23:22 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 21a3c9d · 2026-07-21T22:44 · fix: CRITICAL不再绕过手机去重 + 战略标签跨key去重
+
+两处改动:
+1. dispatch.py:279 去掉 level != AlertLevel.CRITICAL — CRITICAL 也走 _phone_should_skip
+2. 新增 Tier 2 战略标签去重: 同一 STRATEGIC_* 标签 → 同一事件 → 去重 (不管 ticker key 是否匹配)
+
+之前 NBIS/英伟达投资新闻从多个源(Futu中/英/Finnhub/新浪)重复推送到手机,
+根因是两个:
+- CRITICAL 完全绕过 _phone_should_skip → 多源同事件全推
+- 中文源 ticker_hint=["NVDA"], 英文源=["NBIS"] → dedup key 不同 → 匹配失效
+
+修复后:
+- CRITICAL 首次正常推送, 24h内同主题同强度去重
+- 同一 STRATEGIC_NVDA_INVESTMENT 标签 → 无视 ticker 差异, 直接去重
+- 强度升级仍然突破去重 (如 4→5)
+
+测试: 新增 4 个 test case (CRITICAL去重/战略标签跨key/战略升级/不同标签不误杀), 共 30 passed
+
+---
+
+### 0e4db8d · 2026-07-21T23:21 · fix: CRITICAL不再绕过手机去重 + 战略标签跨key去重
+
+两处改动:
+1. dispatch.py:279 去掉 level != AlertLevel.CRITICAL — CRITICAL 也走 _phone_should_skip
+2. 新增 Tier 2 战略标签去重: 同一 STRATEGIC_* 标签 → 同一事件 → 去重 (不管 ticker key 是否匹配)
+3. 强度升级路径 _phone_push_tags 加 if new_tags: 守卫 — 防止无标签 item 清空历史标签
+
+之前 NBIS/英伟达投资新闻从多个源(Futu中/英/Finnhub/新浪)重复推送到手机,
+根因是两个:
+- CRITICAL 完全绕过 _phone_should_skip → 多源同事件全推
+- 中文源 ticker_hint=["NVDA"], 英文源=["NBIS"] → dedup key 不同 → 匹配失效
+
+修复后:
+- CRITICAL 首次正常推送, 24h内同主题同强度去重
+- 同一 STRATEGIC_NVDA_INVESTMENT 标签 → 无视 ticker 差异, 直接去重
+- 强度升级仍然突破去重 (如 4→5)
+
+对抗式核实: 发现 _phone_push_tags 无条件覆盖 → 已修(加 if new_tags 守卫)
+
+测试: 新增 4 个 test case, 共 30 passed
+
+---
+
+---
+
+## 2026-07-22T12:48+08:00 · 会话开始
