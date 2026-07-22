@@ -3217,4 +3217,34 @@ finally: ctx.close() 抛出 UnboundLocalError 掩盖原始异常。
 
 ---
 
+## 2026-07-22 · 📋 开工同步 + Google/SK 海力士 财报前瞻
+
+### 开工
+- `4146d73` docs: 补录 6 个缺失提交到 HISTORY.md（SessionEnd 自动补账）
+- T14 确认：v1-stable 工作树去留 → 推荐 B 方案（取消，V1 在 main 写 spec）
+
+### Google Q2 2026 财报前瞻 (今晚盘后)
+- 现价 $347，距 52 周高 $408 跌 15%，RSI 43 偏弱
+- 共识：营收 $116.8B +21%，EPS $2.89 +25%，Cloud +63-67%
+- 核心看点：Cloud 增速是否加速、CapEx 是否再上调、Gemini 3.5 Pro 延期影响
+- Anthropic 持股增值可能推高 EPS 至 $8+（BofA 预测），但真实经营质量看运营利润
+- 华尔街压倒性看多：29 Buy / 0 Sell，均价目标 $437（+26%）
+- 设了 durable cron 4:37am 北京时自动搜财报结果
+
+### SK 海力士 Q2 2026 财报前瞻 (7/29，非 7/22)
+- ⚠️ 官方 DART/SEC 6-K 确认 7/29 上午 9:00 KST，Investing.com 显示 7/22 是错的
+- 现价 ₩197-200 万（今日 +5-8%），距高点 ₩299 万仍跌 34%
+- 过去 10 天过山车：7/13 -15.4% → 7/14 +4% → 7/16 -11.5% → 7/21 +4% → 7/22 +7-8%
+- 券商严重分歧：KIS ₩60.4T OP（低共识 8%）vs NH ₩66.2T（略高共识）
+- 但全部维持目标价不降：均价 ₩340 万（+71% 空间）
+- Forward P/E 仅 4.6x，LTA 长协降低周期性，HBM4 Q3 量产
+
+### Samsung Q2 明天 (7/23) 打头阵
+- Samsung 财报直接联动 SK 海力士预期，设了 durable cron 9:07am
+
+### 定时监控
+- 写入 `.claude/scheduled_tasks.json` 三个 durable cron：
+  - Google 7/23 4:37am | Samsung 7/23 9:07am | SK 海力士 7/29 8:47am
+
+---
 ## 2026-07-22T12:48+08:00 · 会话开始
