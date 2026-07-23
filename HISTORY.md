@@ -3248,3 +3248,21 @@ finally: ctx.close() 抛出 UnboundLocalError 掩盖原始异常。
 
 ---
 ## 2026-07-22T12:48+08:00 · 会话开始
+
+## 2026-07-22T14:19 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### e5d7fe2 · 2026-07-22T14:17 · @ @ docs: 关机同步 — Google/SK Hynix/Samsung 财报监控已部署
+
+HISTORY.md: 补录开工 + 两份财报前瞻分析 + 定时监控
+SESSION.md: 更新状态 + 财报周风险标注
+
+@
+
+---
+
+## 2026-07-23T19:43+08:00 · 📱 推送测试
+- 运行 `test_push.py` 验证 TG + Pushover 双通道
+- ✅ Pushover 正常 | ✅ Telegram 正常（需先给 Bot 发消息激活 getUpdates）
+- Chat ID: 7305690438

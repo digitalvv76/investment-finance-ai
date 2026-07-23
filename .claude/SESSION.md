@@ -1,6 +1,6 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-22 关机。Google/SK Hynix/Samsung 财报监控已部署，三个 durable cron 待触发。
+> 最后更新: 2026-07-23 关机。推送测试双通道正常，Google/Samsung 财报 cron 已过期待检查。
 
 ## 🆕 待 V2 读取
 
@@ -28,11 +28,8 @@
 - **资金流**: 仅 STRONG 推送
 
 ## 🔧 本会话新增
-- `4146d73` docs: HISTORY.md 补录 6 个缺失提交
-- `.claude/scheduled_tasks.json` 三个 durable cron 财报监控：
-  - Google Q2 → 7/23 4:37am 北京时
-  - Samsung Q2 → 7/23 9:07am 北京时
-  - SK Hynix Q2 → 7/29 8:47am 北京时
+- 推送测试：✅ Pushover ✅ Telegram（双通道正常，Chat ID 7305690438）
+- HISTORY.md 清理：合并重复会话标记 + 补录今日操作
 
 ## 📋 任务追踪
 
