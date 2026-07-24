@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-07-24 上午 · 🔧 管道停摆 12 小时紧急修复
+
+### 问题
+- 用户反馈 TG 和手机收不到推送
+- 排查发现容器已 unhealthy 3 天（7/21 起），但 Docker `unless-stopped` 不响应健康检查失败
+- 昨晚 23:02 管道彻底停摆：所有采集器超时，容器 init 进程僵死（`procReady not received`）
+- 日志完全停止 12 小时
+
+### 根因
+- `docker-compose.yml` PID 限制只有 **200**，Playwright/Chrome 大量子进程撑爆上限
+- `pthread_create: Resource temporarily unavailable` → Chrome crash loop → 事件循环阻塞
+- Docker health check 失败但不触发重启（`unless-stopped` 只响应容器退出）
+
+### 修复
+- `8cdb675` fix: PID 限制 200→1024
+- ECS 安装 autoheal cron (`/root/autoheal.sh`): 每 2 分钟检查，连续 3 次 unhealthy 自动重启
+- `deploy-main.sh` 完整重建恢复管道
+- 验证：管道全周期恢复（采集→去重→筛选→评估→分发），系统日报已发送
+
+### 预防措施
+1. PID 1024 — Playwright 浏览器有足够进程空间
+2. autoheal cron — 6 分钟内自动愈合（3 次 × 2 分钟）
+3. UptimeRobot 803451600 — 监控 /health 端点，宕机 5 分钟告警
+
+---
+
 ## 2026-07-21 晚 · 🔧 Futu 英文快讯采集全量并发改造
 
 ### 问题发现
@@ -3266,3 +3292,15 @@ SESSION.md: 更新状态 + 财报周风险标注
 - 运行 `test_push.py` 验证 TG + Pushover 双通道
 - ✅ Pushover 正常 | ✅ Telegram 正常（需先给 Bot 发消息激活 getUpdates）
 - Chat ID: 7305690438
+
+## 2026-07-23T19:52 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 56763a6 · 2026-07-23T19:51 · docs: 关机同步 — 推送测试双通道正常 + HISTORY 清理
+
+---
+
+---
+
+## 2026-07-24T11:01+08:00 · 会话开始
