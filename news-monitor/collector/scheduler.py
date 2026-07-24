@@ -100,7 +100,7 @@ class NewsScheduler:
         scheduler alive.  This is the LAST LINE OF DEFENSE — individual stages
         have their own tighter timeouts.
         """
-        CALLBACK_TIMEOUT = 120  # generous: pipeline has own per-stage timeouts
+        CALLBACK_TIMEOUT = 480  # 2026-07-25: 120→480 — DeepSeek LLM evaluation occasionally exceeds 120s, killing dispatch before it runs
         for cb in self._callbacks:
             try:
                 await asyncio.wait_for(cb(items), timeout=CALLBACK_TIMEOUT)
