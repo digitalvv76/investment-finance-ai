@@ -67,7 +67,7 @@ services:
     deploy:
       resources:
         limits:
-          pids: 200
+          pids: 1024
           memory: 3G
         reservations:
           memory: 512M
