@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Protocol, runtime_checkable
 
 from pipeline.item import PipelineItem
@@ -32,12 +33,15 @@ class Pipeline:
             return []
         for i, stage in enumerate(self._stages):
             stage_name = type(stage).__name__
+            t0 = time.monotonic()
             try:
                 items = await stage.process(items)
-                logger.debug("%s: %d items → %d items", stage_name,
-                             len(items), len(items))
+                elapsed = time.monotonic() - t0
+                logger.info("PIPELINE-TIMING: %s=%.2fs (%d items)",
+                            stage_name, elapsed, len(items))
             except Exception:
-                logger.exception("%s: stage-level failure", stage_name)
+                elapsed = time.monotonic() - t0
+                logger.exception("%s: stage-level failure after %.2fs", stage_name, elapsed)
                 # Stage-level failure: return what we have so far
                 return items
             if not items:
