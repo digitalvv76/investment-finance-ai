@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-25 · 🔧 Dispatch 超时修复 — 管线回调 120→480s
+
+### 问题
+- 用户反馈 TG + 手机 13+ 小时无推送
+- 排查发现收集正常（4-14条/h），SCREEN 有输出，但 EVALUATE/DISPATCH 无日志
+- 根因：**调度器回调超时 120s**，DeepSeek LLM 评价偶尔慢，累计超时 → `_notify_callbacks` 掐断整个管线 → Dispatch 永远跑不到
+
+### 日志特征
+- `Callback on_news_batch timed out after 120s` 反复出现
+- SCREEN 日志正常（秒级），之后无 EVALUATE/DISPATCH
+- 上次完整推送停留在 7/23 23:15
+
+### 修复
+- `178c2e9` fix: `CALLBACK_TIMEOUT` 120→480s
+- docker cp 热更新部署（Playwright CDN 被墙无法 build）
+- 验证：管线全周期恢复，12:23 EVALUATE 27 items → DISPATCH 完成
+
+### 后续
+- 插计时代码摸底各阶段耗时（Macro/Evaluate/Graham），数据驱动设定阶段级超时
+- 长期方案（管线异步化）评审结论：不值，过度工程
+
+---
+
 ## 2026-07-24 上午 · 🔧 管道停摆 12 小时紧急修复
 
 ### 问题
@@ -3304,3 +3327,15 @@ SESSION.md: 更新状态 + 财报周风险标注
 ---
 
 ## 2026-07-24T11:01+08:00 · 会话开始
+
+## 2026-07-24T11:24 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### fb771da · 2026-07-24T11:18 · docs: 管道停摆修复记录 — PID耗尽根因+autoheal部署+SESSION更新
+
+---
+
+---
+
+## 2026-07-24T23:53+08:00 · 会话开始
