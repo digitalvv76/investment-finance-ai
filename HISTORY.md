@@ -3418,3 +3418,22 @@ SESSION.md: 更新状态 + 财报周风险标注
 ---
 
 ## 2026-07-29T11:36+08:00 · 会话开始
+
+## 2026-07-29T12:53 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 80b2de5 · 2026-07-29T12:21 · docs: 关机同步 — 管线反复中断根因修复+三重防线部署
+
+---
+
+### 0c94dd3 · 2026-07-29T12:26 · fix: health端点degraded时返回HTTP 503 — Docker HEALTHCHECK能检测到
+
+curl -f 只在 HTTP 4xx/5xx 时返回非零 → Docker 才能标记 unhealthy → autoheal 触发。
+之前 degraded 返回 200 → Docker 永远认为 healthy → autoheal 被绕过。
+
+---
+
+---
+
+## 2026-07-29T23:08+08:00 · 会话开始
