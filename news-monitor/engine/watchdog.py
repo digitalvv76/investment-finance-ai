@@ -92,7 +92,27 @@ def evaluate_health(
             emergency=True,
         )
 
-    # 2. DEGRADED — enough activity to judge, but error rate spiking.
+    # 2. DEGRADED — pipeline is collecting but not evaluating/dispatching.
+    #    This is the silent killer: ingest works, but LLM stages hang →
+    #    assessments drop to 0, hours_since_last_push climbs. The old
+    #    "enough activity" DEGRADED check requires ≥5 assessments, which
+    #    never triggers when evaluation is completely stuck.
+    #
+    #    Use == 0 not < min_assessments_for_rate to avoid false positives
+    #    on quiet weekends where a few items are evaluated but none pushed.
+    if (s.ingest_1h > 0
+            and s.assessments_1h == 0
+            and s.hours_since_last_push > 4
+            and s.ingest_1h >= s.ingest_floor):
+        return Verdict(
+            HealthState.DEGRADED,
+            f"采集正常（{s.ingest_1h}条/时）但 {s.hours_since_last_push:.0f}h 无推送、"
+            f"近1h零评估，疑似 Evaluate/Dispatch 阶段卡死",
+            should_alert=True,
+            emergency=False,
+        )
+
+    # 3. DEGRADED — enough activity to judge, but error rate spiking.
     if s.assessments_1h >= min_assessments_for_rate and s.success_rate < degraded_success_floor:
         return Verdict(
             HealthState.DEGRADED,
