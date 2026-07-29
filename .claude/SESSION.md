@@ -1,6 +1,6 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-25。Dispatch 超时修复 (120→480s) + 管线全周期恢复。
+> 最后更新: 2026-07-29。管线反复中断根因修复 — 三重防线部署完成。
 
 ## 🆕 待 V2 读取
 
@@ -13,15 +13,19 @@
 ---
 
 ## 🟢 当前部署状态
-- **ECS 生产**: V2 (origin/main, `8cdb675`)，健康 ✅
+- **ECS 生产**: V2 (origin/main, `1291105`)，健康 ✅
 - **LLM 供应商**: DeepSeek 唯一 ⚠️ 单点
 - **Futu OpenD**: systemd 自启，五合一 ✅（容器重启后需重连）
 - **TG 推送**: 资金流 + 新闻 + 快照 + 板块轮动 ✅
 - **Pushover**: 系统日报已确认送达 ✅
 - **资金流 DB**: 72 标的，每日 03:00 CST 备份 ✅
 - **管线**: Ingest → Macro → Screen → Evaluate → Graham → Dispatch → Deep
+- **管线隔离**: `asyncio.create_task` + `_pipeline_running` 锁，回调不阻塞调度器
 - **Autoheal**: cron 每 2 分钟检查，连续 3 次 unhealthy 自动重启 ✅
+- **健康检查**: 新鲜度门禁（>60min stale → degraded）+ 磁盘监控（>95% → degraded）
+- **Docker 清理**: 每周日 04:00 清理 7 天前镜像 (ECS cron)
 - **PID 限制**: 1024（从 200 上调）
+- **磁盘**: 56.2% used, 15.3 GB free
 
 ## 📱 推送门槛
 - **Geo-tier**: 非美宏观 ×0.25 基本不推
@@ -31,28 +35,13 @@
 - **资金流**: 仅 STRONG 推送
 
 ## 🔧 本会话新增
-- Dispatch 超时诊断：根因是调度器 120s 回调超时，LLM 评价慢时掐断管线
-- `178c2e9` fix: CALLBACK_TIMEOUT 120→480s，docker cp 热更新部署
-- 管线异步化方案评审：结论是不值，过度工程
-- 后续计划：插计时代码摸底 LLM 各阶段耗时，数据驱动设阶段超时
+- `1291105` fix: 管线反复中断根因修复 — 三重防线
+- 清理 ECS 磁盘 17.8GB（旧 rollback 镜像 50+ 个）
+- 健康检查新鲜度门禁 + 磁盘监控 + 管线 task 隔离 + Docker 清理 cron
+- 根因: 健康检查使用 stale 缓存 → Docker/autoheal 永远检测不到故障
 
 ## ⚠️ 踩坑记录
-- 调度器 `_notify_callbacks` 是单跑道阻塞式，采集和管线共享同一条跑道
-- 管线不是每分钟都慢，是偶尔慢（~20% 周期），LLM 评价耗时波动是主因
-- `SCREEN 日志有但 EVALUATE 无` = 管线在 Evaluate 前被超时掐断
-- Docker build 在阿里云 ECS 上玩不了：Playwright CDN 被墙，只能 docker cp 热更新
-- 管线异步化不做：SQLite 并发不安全 + 锁跳过=静默漏评, 比超时更难排查
-
-## 📋 任务追踪
-
-**集中在 `TASKS.md`**。当前活跃: [T14 待用户决策]
-
-## ⚠️ 踩坑记录
-- PID 200 不够：Playwright 浏览器 + Python async 轻松超 200 进程
-- Docker `unless-stopped` 不响应 health check 失败，需外部 autoheal
-- ECS Playwright CDN 不通：`docker build` 会卡在 `playwright install chromium`，需用 `--no-build` 或预装镜像
-- 容器 `procReady not received` 时无法 exec，只能 restart
-
-## 🔴 风险
-- **DeepSeek 单点**: 宕机 = 管线全停
-- **Futu OpenD 重连**: 容器重启后 5 通道需重建连接，当前超时中
+- 三次事故（PID/LLM超时/磁盘满）同一结果：事件循环阻塞 → 健康检查返回 stale "ok" → 无人知晓
+- 磁盘满来自 Docker 镜像堆积（22.5GB），旧 rollback 镜像从未清理
+- Docker `image prune` (不加 -a) 只清 dangling 镜像，回收很少；必须用 `-a` 清所有未使用镜像
+- 健康检查必须校验数据新鲜度，不能只看 HTTP 200
