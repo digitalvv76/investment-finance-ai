@@ -329,13 +329,11 @@ class EventDrivenEvaluator:
         return None
 
     async def _call_llm(self, client, provider_name: str, user_prompt: str) -> str:
-        loop = asyncio.get_event_loop()
-
         if provider_name == "deepseek":
             model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-            return await loop.run_in_executor(
-                None,
-                lambda: client.chat.completions.create(
+            resp = await asyncio.wait_for(
+                asyncio.to_thread(
+                    client.chat.completions.create,
                     model=model,
                     messages=[
                         {"role": "user", "content": user_prompt},
@@ -343,14 +341,16 @@ class EventDrivenEvaluator:
                     temperature=0,
                     max_tokens=600,
                     timeout=self.SDK_TIMEOUT,
-                ).choices[0].message.content,
+                ),
+                timeout=self.HARD_TIMEOUT,
             )
+            return resp.choices[0].message.content
         else:  # anthropic
             import anthropic
             model = os.environ.get("ANTHROPIC_MODEL", "claude-fable-5")
-            resp = await loop.run_in_executor(
-                None,
-                lambda: client.messages.create(
+            resp = await asyncio.wait_for(
+                asyncio.to_thread(
+                    client.messages.create,
                     model=model,
                     max_tokens=600,
                     temperature=0,
@@ -358,6 +358,7 @@ class EventDrivenEvaluator:
                     messages=[{"role": "user", "content": user_prompt}],
                     timeout=self.SDK_TIMEOUT,
                 ),
+                timeout=self.HARD_TIMEOUT,
             )
             return resp.content[0].text
 
