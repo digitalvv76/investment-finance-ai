@@ -247,16 +247,17 @@ async def health_check(request: web.Request) -> web.Response:
 
     # Overall status: ok only when DB cache is fresh AND watchdog is ok
     wd_ok = wd_snapshot.get("ok", True)
-    status = "ok" if (_cached_db_ok and wd_ok and disk_pct < 95) else "degraded"
+    ok = _cached_db_ok and wd_ok and disk_pct < 95
+    http_status = 200 if ok else 503
 
     return _json({
-        "status": status,
+        "status": "ok" if ok else "degraded",
         "uptime_seconds": int(time.time() - _APP_START_TIME),
         "db": "ok" if _cached_db_ok else "error",
         "sse_clients": _get_sse(request).client_count,
         "disk": {"used_pct": disk_pct, "free_gb": disk_free_gb},
         "watchdog": wd_snapshot,
-    })
+    }, status=http_status)
 
 
 async def watchdog_status(request: web.Request) -> web.Response:
