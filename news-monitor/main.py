@@ -278,6 +278,10 @@ class NewsMonitor:
             self.web_dashboard.decisions_source = self._dispatch_stage
         logger.info("Pipeline: IngestStage → MacroStage → ScreenStage → EvaluateStage → GrahamStage → DispatchStage → DeepStage")
 
+        # Pipeline concurrency guard — prevent overlapping runs that could
+        # cause SQLite lock contention + block the scheduler callback.
+        self._pipeline_running = False
+
     # -----------------------------------------------------------------
     # Callback - wired to scheduler.on_news_batch
     # -----------------------------------------------------------------
@@ -287,57 +291,90 @@ class NewsMonitor:
 
         Scheduler just collects + notifies. Pipeline handles everything:
         Ingest (dedup+DB+vector) → Screen → Evaluate → Dispatch → Deep.
+
+        Runs in a background task so the scheduler callback is never blocked.
+        If a pipeline is already running, items are skipped (next heartbeat
+        will pick them up). Total timeout: 600s (10 min) — longer than the
+        scheduler's 480s callback timeout so the scheduler can move on.
         """
+        if not items:
+            return
+
+        # Avoid overlapping pipeline runs — if one is already in flight,
+        # just skip. The next heartbeat (~60s) picks up new items.
+        if self._pipeline_running:
+            logger.debug("Pipeline: skipped %d items (previous run still in flight)", len(items))
+            return
+
+        self._pipeline_running = True
+        asyncio.create_task(self._run_pipeline_bg(items))
+
+    async def _run_pipeline_bg(self, items):
+        """Background pipeline runner with total timeout and cleanup.
+
+        Runs in a separate task so the scheduler callback returns immediately.
+        The ``_pipeline_running`` flag prevents overlapping runs.
+        """
+        PIPELINE_TOTAL_TIMEOUT = 600  # 10 min, longer than scheduler's 480s
         from pipeline.item import PipelineItem
 
-        pipe_items = []
-        for news in items:
-            pi = PipelineItem(
-                id=0,  # Not yet in DB — IngestStage assigns id
-                title=news.title,
-                source=news.source,
-                url=news.url,
-                snippet=getattr(news, 'content_snippet', '') or '',
-                published_at=str(getattr(news, 'published_at', '')),
-                tickers_found=getattr(news, 'tickers_found', '') or '',
-                macro_tags=getattr(news, 'macro_tags', '') or '',
-                _raw={
-                    'title': news.title, 'source': news.source,
-                    'url': news.url,
-                    'content_snippet': getattr(news, 'content_snippet', ''),
-                    'tickers_found': getattr(news, 'tickers_found', ''),
-                    'macro_tags': getattr(news, 'macro_tags', ''),
-                    'is_breaking': getattr(news, 'is_breaking', False),
-                },
-            )
-            pipe_items.append(pi)
+        try:
+            pipe_items = []
+            for news in items:
+                pi = PipelineItem(
+                    id=0,
+                    title=news.title,
+                    source=news.source,
+                    url=news.url,
+                    snippet=getattr(news, 'content_snippet', '') or '',
+                    published_at=str(getattr(news, 'published_at', '')),
+                    tickers_found=getattr(news, 'tickers_found', '') or '',
+                    macro_tags=getattr(news, 'macro_tags', '') or '',
+                    _raw={
+                        'title': news.title, 'source': news.source,
+                        'url': news.url,
+                        'content_snippet': getattr(news, 'content_snippet', ''),
+                        'tickers_found': getattr(news, 'tickers_found', ''),
+                        'macro_tags': getattr(news, 'macro_tags', ''),
+                        'is_breaking': getattr(news, 'is_breaking', False),
+                    },
+                )
+                pipe_items.append(pi)
 
-        if pipe_items:
             try:
-                pipe_items = await self._pipeline.run(pipe_items)
+                pipe_items = await asyncio.wait_for(
+                    self._pipeline.run(pipe_items),
+                    timeout=PIPELINE_TOTAL_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Pipeline: total timeout after %ds — aborting %d items",
+                    PIPELINE_TOTAL_TIMEOUT, len(pipe_items),
+                )
+                pipe_items = []
             except Exception:
                 logger.exception("Pipeline: top-level failure")
                 pipe_items = []
 
-        # ---- Background: persist enriched fields + web broadcast ----
-        for item in pipe_items:
-            try:
-                # Persist SCREEN fields back to DB
-                self.db.update_news_status(
-                    item.id,
-                    'fast_pushed',
-                    tickers_found=item.tickers_found,
-                    macro_tags=item.macro_tags,
-                    is_breaking=int(item.is_breaking),
-                    priority_score=item.priority_score,
-                )
-                # Web SSE broadcast
-                if self.web_dashboard and item.decision.alert_level != AlertLevel.NORMAL:
-                    updated = self.db.get_news_by_id(item.id)
-                    if updated:
-                        await self.web_dashboard.broadcast_alert(updated)
-            except Exception:
-                logger.exception("Pipeline: post-processing failed for id=%d", item.id)
+            # ---- Background: persist enriched fields + web broadcast ----
+            for item in pipe_items:
+                try:
+                    self.db.update_news_status(
+                        item.id,
+                        'fast_pushed',
+                        tickers_found=item.tickers_found,
+                        macro_tags=item.macro_tags,
+                        is_breaking=int(item.is_breaking),
+                        priority_score=item.priority_score,
+                    )
+                    if self.web_dashboard and item.decision.alert_level != AlertLevel.NORMAL:
+                        updated = self.db.get_news_by_id(item.id)
+                        if updated:
+                            await self.web_dashboard.broadcast_alert(updated)
+                except Exception:
+                    logger.exception("Pipeline: post-processing failed for id=%d", item.id)
+        finally:
+            self._pipeline_running = False
 
     async def _collect_impact_outcomes(self, window: str):
         """Periodic task: collect market data for pending assessments."""

@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import shutil
 import time
+from datetime import datetime
 from typing import Any, Dict
 
 from aiohttp import web
@@ -149,6 +151,10 @@ def _watchdog_snapshot(wd) -> Dict[str, Any]:
 
     Falls back to a live gather+evaluate if no check has run yet, so the
     page always reflects current truth even right after startup.
+
+    CRITICAL: if the last check is older than 2× the watchdog interval,
+    the watchdog task may be stalled (event loop blocked, disk full, etc.).
+    We report this as "stale" so Docker HEALTHCHECK + autoheal can act.
     """
     if wd is None:
         return {"available": False, "state": "unknown", "reason": "watchdog 未启用"}
@@ -164,7 +170,38 @@ def _watchdog_snapshot(wd) -> Dict[str, Any]:
     except Exception as e:  # never let the health page itself crash
         return {"available": True, "state": "error", "reason": f"快照失败: {e}"}
 
+    # ---- freshness gate ----
+    # If the watchdog hasn't completed a check cycle in > 2× its interval,
+    # the async event loop may be blocked. Treat this as "stale" so that
+    # Docker HEALTHCHECK fails and autoheal can restart the container.
+    # 2× interval = 60 min by default (interval=1800s).
+    stale = False
+    if wd.last_check_at is not None:
+        max_age = wd._interval * 2
+        age = (datetime.now() - wd.last_check_at).total_seconds()
+        if age > max_age:
+            stale = True
+
     alert_states = {"stalled", "degraded"}
+    if stale:
+        return {
+            "available": True,
+            "state": "stale",
+            "ok": False,
+            "reason": f"Watchdog 超过 {max_age}s 未更新 (已过 {age:.0f}s)，疑似事件循环阻塞",
+            "should_alert": True,
+            "emergency": True,
+            "signals": {
+                "ingest_1h": signals.ingest_1h,
+                "ingest_floor": signals.ingest_floor,
+                "hours_since_last_push": signals.hours_since_last_push,
+                "error_events_1h": signals.error_events_1h,
+                "success_rate": signals.success_rate,
+                "assessments_1h": signals.assessments_1h,
+            },
+            "last_check_at": wd.last_check_at,
+        }
+
     return {
         "available": True,
         "state": verdict.state.value,
@@ -196,12 +233,29 @@ async def health_check(request: web.Request) -> web.Response:
     task) so this handler never blocks on SQLite queries, even during
     pipeline bursts.
     """
+    wd_snapshot = _watchdog_snapshot(_get_watchdog(request))
+
+    # ---- disk usage ---------------------------------------------------
+    disk_pct = 0.0
+    disk_free_gb = 0.0
+    try:
+        usage = shutil.disk_usage("/")
+        disk_pct = round(usage.used / usage.total * 100, 1)
+        disk_free_gb = round(usage.free / (1024 ** 3), 1)
+    except Exception:
+        pass
+
+    # Overall status: ok only when DB cache is fresh AND watchdog is ok
+    wd_ok = wd_snapshot.get("ok", True)
+    status = "ok" if (_cached_db_ok and wd_ok and disk_pct < 95) else "degraded"
+
     return _json({
-        "status": "ok" if _cached_db_ok else "degraded",
+        "status": status,
         "uptime_seconds": int(time.time() - _APP_START_TIME),
         "db": "ok" if _cached_db_ok else "error",
         "sse_clients": _get_sse(request).client_count,
-        "watchdog": _watchdog_snapshot(_get_watchdog(request)),
+        "disk": {"used_pct": disk_pct, "free_gb": disk_free_gb},
+        "watchdog": wd_snapshot,
     })
 
 

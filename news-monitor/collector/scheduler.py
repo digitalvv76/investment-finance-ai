@@ -339,8 +339,9 @@ class NewsScheduler:
         """30-minute tick: low-priority background tasks.
 
         - Purge news older than 90 days
-        - Reclaim disk space (every 6 hours)
+        - Reclaim disk space (vacuum every 6 hours)
         - Log database stats
+        - Monitor disk usage (alert if >85%)
         """
         try:
             deleted = self.db.purge_old_news(days=90)
@@ -361,6 +362,29 @@ class NewsScheduler:
                 stats["news_count"], stats["feedback_count"],
                 stats["event_count"], stats["db_size_mb"],
             )
+
+            # ---- disk usage monitor ----
+            # 2026-07-29: disk filled to 100% → pipeline silently died
+            # because the health endpoint returned cached "ok". Check disk
+            # every 30 min and log a CRITICAL-level alert at 85%.
+            try:
+                import shutil
+                usage = shutil.disk_usage("/")
+                pct = usage.used / usage.total * 100
+                free_gb = usage.free / (1024 ** 3)
+                if pct > 85:
+                    logger.critical(
+                        "DISK: %.1f%% used (%.1f GB free) — near full! "
+                        "DB writes + logs may fail silently.",
+                        pct, free_gb,
+                    )
+                elif pct > 70:
+                    logger.warning(
+                        "DISK: %.1f%% used (%.1f GB free) — monitor closely.",
+                        pct, free_gb,
+                    )
+            except Exception:
+                pass
         except Exception as e:
             logger.warning("Retention/cleanup failed: %s", e)
 
