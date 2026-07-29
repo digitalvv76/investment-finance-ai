@@ -4,6 +4,60 @@
 
 ---
 
+## 2026-07-29 晚 · 🔧 EventDrivenEvaluator LLM 超时 — 第 4 次管线中断根因修复
+
+### 问题
+- 用户反馈推送又停了
+- 排查发现 2 小时内 7 次 600s 总超时，零推送
+- 采集正常（131/h），但 Screen 之后 Evaluate 阶段完全挂死
+- 又是健康检查骗过：`hours_since_last_push: 999` 但 `state: healthy`
+
+### 根因分析
+**四层问题叠加：**
+
+| 层 | 组件 | 问题 |
+|---|------|------|
+| 1 | `EventDrivenEvaluator._call_llm` | `loop.run_in_executor` **无 asyncio 超时**，只靠 SDK timeout(20s) |
+| 2 | SDK timeout 不可靠 | 设 5s 实际 17s 才超时；不覆盖所有挂死场景（如连接池耗尽） |
+| 3 | `MacroAgent._call_llm` | `asyncio.wait_for` 超时后线程仍在跑 — 取消的是协程不是线程 |
+| 4 | 看门狗 `evaluate_health` | 完全不看 `hours_since_last_push`，注释说 "for heartbeat, not alerting" |
+
+**对比三个 LLM 调用者的超时保护：**
+
+| 组件 | 超时机制 | 挂死时行为 |
+|------|----------|-----------|
+| MacroAgent | `asyncio.wait_for(to_thread, 45s)` ✅ | 超时后线程继续跑但协程释放 |
+| ImpactEvaluator | `asyncio.wait_for(to_thread, 45s)` ✅ | 同上 |
+| **EventDrivenEvaluator** | ❌ 无 asyncio 超时 | **协程永久阻塞 → 管线卡死** |
+
+**为什么 MacroStage 之前也总是 45s 超时但这次修复后正常了？**
+DeepSeek 可能在特定 prompt 下触发后端排队。`6050da7` 部署后 MacroStage=1.37s（修复前总是 45s），说明 DeepSeek 响应恢复正常。可能与 prompt 大小/token 生成量有关。
+
+### 修复
+
+**`6050da7` fix: EventDrivenEvaluator LLM 调用加 asyncio 超时**
+- `loop.run_in_executor` → `asyncio.wait_for(asyncio.to_thread(...), timeout=HARD_TIMEOUT(30s))`
+- 与 MacroAgent/ImpactEvaluator 保持一致
+- 超时后触发重试 → fallback → 不会永久阻塞
+
+**`b74ed68` fix: 看门狗 DEGRADED — 零评估+活跃采集新检测**
+- 新增 `evaluate_health` 检查：`ingest_1h ≥ floor` ∧ `assessments_1h == 0` ∧ `hours_since_last_push > 4h` → DEGRADED
+- 填上了 "采集正常但 LLM 阶段全挂" 这个看门狗盲区
+- 用 `== 0` 不用 `< 5` 避免周末安静日误报
+
+### 验证
+- 部署后首周期：Ingest 117 → Macro 1.37s → Screen 21 → Evaluate ~130s → Graham 8s → Dispatch 3 条 TG + 2 条 Pushover
+- `hours_since_last_push: 0.1`，`assessments_1h: 15`，管道全周期正常
+- TG 推送：福特 Q2 盈利 / 美国科技 8.74 亿 / PLTR 法国退场
+- Pushover：美国科技 8.74 亿 (priority=1) + PLTR 法国退场 CRITICAL (priority=2)
+
+### 踩坑
+- `asyncio.wait_for` 取消不了 `to_thread` 里的线程 — 线程会继续跑到 SDK timeout 为止。只防协程永久阻塞，不防线程泄漏
+- SDK timeout 不可靠（httpx 5s → 实际 17s），asyncio 超时是必须的第二层兜底
+- 看门狗设计时明确排除了 `hours_since_last_push`（"for heartbeat, not alerting"）— 设计者没考虑到 "采集正常但评估挂死" 这种故障模式
+
+---
+
 ## 2026-07-29 · 🔧 管线反复中断根因修复 — 三重防线
 
 ### 问题
