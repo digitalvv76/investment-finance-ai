@@ -249,15 +249,36 @@ _KEYWORD_TO_TICKER = _build_keyword_ticker_map()
 def _probe_sync(host: str, port: int) -> bool:
     """Synchronous connection probe — runs in thread pool.
 
-    Creates exactly ONE OpenQuoteContext and makes a cheap API call.
-    Returns True if Futu OpenD is reachable and responding.
+    Uses a raw TCP socket connect (2s timeout) to test Futu OpenD
+    reachability WITHOUT creating an OpenQuoteContext.  This is critical:
+    OpenQuoteContext() starts an internal retry loop that we cannot stop
+    from asyncio (to_thread threads ignore CancelledError).  A raw socket
+    connect succeeds or fails in 2s — no leak, no retry loop.
+
+    After TCP succeeds we still do a quick OpenQuoteContext API call to
+    verify the gateway is actually responding (not just accepting TCP).
     """
+    import socket
+
+    # Phase 1: raw TCP connect — fail-fast, no SDK overhead
+    sock = None
+    try:
+        sock = socket.create_connection((host, port), timeout=2.0)
+    except (OSError, TimeoutError):
+        return False
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+    # Phase 2: lightweight API call through the SDK
     from futu import OpenQuoteContext, RET_OK
 
     ctx = None
     try:
         ctx = OpenQuoteContext(host=host, port=port)
-        # get_market_state is lightweight and exercises the connection.
         ret, _ = ctx.get_market_state(["US.QQQ"])
         return ret == RET_OK
     except Exception:
