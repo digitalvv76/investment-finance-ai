@@ -4,6 +4,54 @@
 
 ---
 
+## 2026-07-30 上午 · 🔧 第 5 次管线中断 — Futu 连接泄漏熔断器
+
+### 问题
+- 用户反馈又一段时间没收到推送
+- 排查发现日志停在 7/29 21:32 EDT，10+ 小时静默
+- Docker 报 healthy 但容器内 health endpoint 拒绝连接
+- 又是健康检查骗过 (`1291105` 新鲜度门禁未生效，web 端口是 8080 不是 8000)
+
+### 根因分析
+**Futu OpenD 连接泄漏拖死事件循环：**
+
+1. Futu OpenD 不可达时，每个 `OpenQuoteContext()` 触发 SDK 内部重连循环（~6s/次）
+2. `FutuNewsFetcher` 每 60s fan-out 138 个关键词 × 5 并发 → 大量线程泄漏
+3. 旧 run 在 15 分钟内产生 280+ 次 `Connect fail` + 日志 I/O
+4. 累积耗尽文件描述符/线程池 → 事件循环 hang → 进程僵死
+5. 即使 `asyncio.wait_for` 取消 await，`to_thread` 里的 SDK 线程无法被杀死
+
+### 修复 (`7d94666` → `79826da`)
+**`futu_news_fetcher.py` — 三层防护：**
+
+1. **Pre-flight 探测**：fan-out 138 个关键词前先用 raw socket TCP (2s timeout) 测连通性
+   - TCP 不通 → 跳过整轮，不创建任何 `OpenQuoteContext`
+   - TCP 通 → 才用 SDK 做一次 API 调试验证
+2. **熔断器**：连续 3 次探测失败 → circuit open → 指数退避 (60s→120s→240s→480s→600s 封顶)
+   - 每 cooldown 周期只探测 1 次（不是每 60s 都探）
+   - 探测成功 → circuit reset
+3. **全关键词失败检测**：fetch 后如果全部 138 个关键词都失败 → 计入熔断计数
+
+**效果对比：**
+| | 修复前 | 修复后 |
+|---|--------|--------|
+| OpenD 挂时连接尝试 | 138 × 5 并发 = 持续泄漏 | 1 次 TCP 探测 (2s 超时) |
+| 线程泄漏 | 280+/15min | 0（TCP 不通不碰 SDK） |
+| 日志噪音 | `Connect fail` 每 6s × N | 1 条 `pre-flight failed` |
+
+### 部署
+- `79826da` push → ECS git pull → docker cp → restart
+- 验证：pre-flight 正确跳过 138 关键词，无 `Connect fail` 日志
+- 管线首周期正常：采集→Screen(45→7)→Evaluate→Dispatch
+
+### 遗留
+- **Futu OpenD 端口不通**：host 上 `0.0.0.0:11111` 在监听，但容器通过 `172.18.0.1:11111` 连不上
+  - 两个 OpenD 实例在跑（Jul16 + Jul22），可能是 Docker bridge iptables 问题
+  - 当前影响：Futu 新闻源不可用（~138 关键词），但不影响其他源（Finnhub/RSS/中文/Playwright 正常）
+  - 待排查修复
+
+---
+
 ## 2026-07-29 晚 · 🔧 EventDrivenEvaluator LLM 超时 — 第 4 次管线中断根因修复
 
 ### 问题
@@ -3491,3 +3539,23 @@ curl -f 只在 HTTP 4xx/5xx 时返回非零 → Docker 才能标记 unhealthy �
 ---
 
 ## 2026-07-29T23:08+08:00 · 会话开始
+
+## 2026-07-29T23:30 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 7c9803f · 2026-07-29T23:26 · @ docs: 管线第4次中断根因修复记录 — EventDrivenEvaluator超时+看门狗盲区
+
+@
+
+---
+
+### f1c242d · 2026-07-29T23:29 · @ docs: 关机同步 — EventDrivenEvaluator超时修复+看门狗盲区+SESSION更新
+
+@
+
+---
+
+---
+
+## 2026-07-30T09:25+08:00 · 会话开始
