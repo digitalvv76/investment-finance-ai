@@ -114,6 +114,26 @@ _MIN_CYCLE_INTERVAL = 60
 # Dedup window — skip titles seen in last N seconds
 _DEDUP_TTL = 3600 * 4  # 4 hours
 
+# ── Circuit breaker: prevent connection-leak death spiral ──────────────
+# When Futu OpenD is unreachable, every OpenQuoteContext() triggers an
+# internal retry loop (~6 s per attempt) inside the Futu SDK.  Fanning out
+# 100+ keywords × 5 concurrent = 5 threads retrying forever, leaking
+# sockets + file descriptors + log I/O.  Over 15 minutes this produces
+# 280+ failures and eventually starves the event loop.
+#
+# Solution: pre-flight check → circuit breaker → skip entire cycle.
+# One quick connect test gates the entire fan-out.  After N consecutive
+# failures, circuit opens and we stop trying for an exponentially
+# increasing backoff (60s → 120s → 240s → 480s → capping at 600s).
+#
+# Production incident: 2026-07-29 — Futu OpenD down → 280+ retries in
+# 15 min → event loop hung → 10 h silent pipeline.  (See HISTORY.md)
+_CONNECT_TIMEOUT = 5.0                # pre-flight max wait
+_CB_THRESHOLD = 3                     # consecutive failures to open circuit
+_CB_BACKOFF_BASE = 60                 # first backoff (seconds)
+_CB_BACKOFF_MAX = 600                 # cap at 10 minutes
+_CB_COOLDOWN_CYCLES = 6               # after backoff, try 1 probe cycle
+
 # ---------------------------------------------------------------------------
 # Keyword → ticker fallback (like Finnhub's symbol= parameter)
 # ---------------------------------------------------------------------------
@@ -226,11 +246,42 @@ def _build_keyword_ticker_map() -> Dict[str, str]:
 _KEYWORD_TO_TICKER = _build_keyword_ticker_map()
 
 
+def _probe_sync(host: str, port: int) -> bool:
+    """Synchronous connection probe — runs in thread pool.
+
+    Creates exactly ONE OpenQuoteContext and makes a cheap API call.
+    Returns True if Futu OpenD is reachable and responding.
+    """
+    from futu import OpenQuoteContext, RET_OK
+
+    ctx = None
+    try:
+        ctx = OpenQuoteContext(host=host, port=port)
+        # get_market_state is lightweight and exercises the connection.
+        ret, _ = ctx.get_market_state(["US.QQQ"])
+        return ret == RET_OK
+    except Exception:
+        return False
+    finally:
+        if ctx is not None:
+            try:
+                ctx.close()
+            except Exception:
+                pass
+
+
 class FutuNewsFetcher:
     """Futu news search fetcher — concurrent full-keyword coverage.
 
     Searches ALL keywords every cycle using concurrent connections.
     No rotation — every ticker/company name is polled every 60 seconds.
+
+    Circuit breaker: when Futu OpenD is unreachable, the fetcher does a
+    single pre-flight connection check before fanning out to 100+ keywords.
+    After N consecutive failures the circuit opens and all cycles are
+    skipped for an exponentially increasing backoff.  This prevents the
+    connection-leak death spiral where 5 concurrent SDK threads each run
+    their internal retry loop forever (280+ failures, event-loop starvation).
     """
 
     def __init__(
@@ -245,15 +296,123 @@ class FutuNewsFetcher:
         self._last_cycle = 0.0
         self._seen: Dict[str, float] = {}  # title_hash → timestamp
 
+        # ── Circuit breaker state ──
+        self._consecutive_failures = 0
+        self._circuit_open_until = 0.0       # monotonic timestamp
+        self._circuit_probe_done = False      # one probe after cooldown
+
+    # ── Circuit breaker helpers ────────────────────────────────────────
+
+    def _circuit_is_open(self, now: float) -> bool:
+        """True while the circuit breaker is tripped."""
+        return now < self._circuit_open_until
+
+    def _record_success(self, now: float) -> None:
+        """Reset circuit on a healthy cycle."""
+        if self._consecutive_failures > 0:
+            logger.info(
+                "FutuNews: circuit reset — connection restored after %d failures",
+                self._consecutive_failures,
+            )
+        self._consecutive_failures = 0
+        self._circuit_open_until = 0.0
+        self._circuit_probe_done = False
+
+    def _record_failure(self, now: float) -> None:
+        """Increment failure count; open circuit if threshold reached."""
+        self._consecutive_failures += 1
+        n = self._consecutive_failures
+        if n >= _CB_THRESHOLD:
+            delay = min(
+                _CB_BACKOFF_BASE * (2 ** (n - _CB_THRESHOLD)),
+                _CB_BACKOFF_MAX,
+            )
+            self._circuit_open_until = now + delay
+            logger.warning(
+                "FutuNews: CIRCUIT OPEN — %d consecutive failures, "
+                "suspending for %ds (next probe at +%ds)",
+                n, delay, delay,
+            )
+        else:
+            logger.warning(
+                "FutuNews: connection failed (%d/%d before circuit opens)",
+                n, _CB_THRESHOLD,
+            )
+
+    # ── Pre-flight check ───────────────────────────────────────────────
+
+    async def _probe_connection(self) -> bool:
+        """Single-thread connection test with a short asyncio timeout.
+
+        Creates exactly ONE OpenQuoteContext in a thread.  If the SDK's
+        internal connect takes longer than _CONNECT_TIMEOUT we cancel the
+        await (the thread keeps running but we know OpenD is down).
+
+        Returns True if the probe succeeded, False otherwise.
+        """
+        host, port = self._host, self._port
+        try:
+            ok = await asyncio.wait_for(
+                asyncio.to_thread(_probe_sync, host, port),
+                timeout=_CONNECT_TIMEOUT,
+            )
+            return bool(ok)
+        except asyncio.TimeoutError:
+            logger.debug("FutuNews: probe timed out after %.0fs", _CONNECT_TIMEOUT)
+            return False
+        except Exception as e:
+            logger.debug("FutuNews: probe error: %s", e)
+            return False
+
+    # ── Main fetch ─────────────────────────────────────────────────────
+
     async def fetch(self) -> List[NewsItem]:
         """Fetch news for ALL keywords concurrently. Call on heartbeat timer."""
         now = time.time()
+
+        # ── Cooldown gate ──────────────────────────────────────────
         if now - self._last_cycle < _MIN_CYCLE_INTERVAL:
             remaining = _MIN_CYCLE_INTERVAL - (now - self._last_cycle)
             logger.debug("FutuNews: cooldown (%.0fs remaining)", remaining)
             return []
 
+        # ── Circuit breaker gate ───────────────────────────────────
+        if self._circuit_is_open(now):
+            # One probe per cooldown period to see if OpenD is back
+            if not self._circuit_probe_done:
+                self._circuit_probe_done = True
+                logger.info(
+                    "FutuNews: circuit open — probing connection (failures=%d)",
+                    self._consecutive_failures,
+                )
+                if await self._probe_connection():
+                    self._record_success(now)
+                    # fall through to normal fetch
+                else:
+                    remaining = int(self._circuit_open_until - now)
+                    logger.warning(
+                        "FutuNews: probe failed — circuit still open "
+                        "(%ds remaining)", remaining,
+                    )
+                    return []
+            else:
+                remaining = int(self._circuit_open_until - now)
+                logger.debug(
+                    "FutuNews: circuit open — skipping cycle (%ds remaining)",
+                    remaining,
+                )
+                return []
+
         self._last_cycle = now
+
+        # ── Pre-flight check (before fan-out) ──────────────────────
+        if not await self._probe_connection():
+            logger.warning(
+                "FutuNews: pre-flight failed — skipping %d keywords this cycle",
+                len(self._keywords),
+            )
+            self._record_failure(now)
+            return []
 
         logger.info("FutuNews: searching ALL %d keywords (concurrent, max %d)",
                      len(self._keywords), _MAX_CONCURRENT)
@@ -276,8 +435,21 @@ class FutuNewsFetcher:
             elif isinstance(result, list):
                 all_raw.extend(result)
 
-        logger.debug("FutuNews: %d raw items from %d keywords",
-                     len(all_raw), len(self._keywords))
+        # ── Health tracking: count successful keywords ─────────────
+        success_count = sum(
+            1 for r in results if isinstance(r, list)
+        )
+        if success_count == 0 and len(self._keywords) > 0:
+            logger.warning(
+                "FutuNews: ALL %d keywords failed — may indicate OpenD issue",
+                len(self._keywords),
+            )
+            self._record_failure(now)
+        else:
+            self._record_success(now)
+
+        logger.debug("FutuNews: %d raw items from %d keywords (%d ok)",
+                     len(all_raw), len(self._keywords), success_count)
 
         # ── Dedup + build NewsItems ──
         items: List[NewsItem] = []
@@ -293,11 +465,6 @@ class FutuNewsFetcher:
 
             tickers_raw = raw.get("related_tickers", [])
             # ── Finnhub-style fallback: inject search keyword's ticker ──
-            # When Futu returns empty related_securities (common for Chinese-
-            # language articles found via English ticker search), use the
-            # keyword→ticker map to ensure the article gets a ticker hit in
-            # scoring.  This mirrors Finnhub's tickers_found=ticker from its
-            # symbol= query parameter.
             if not tickers_raw:
                 search_kw = raw.get("_search_kw", "")
                 fallback_ticker = _KEYWORD_TO_TICKER.get(search_kw, "")
