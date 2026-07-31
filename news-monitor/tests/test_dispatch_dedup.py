@@ -257,8 +257,8 @@ async def test_dispatch_cpi_trio_only_first_to_pushover():
     assert len(pushover.calls) == 1, f"Expected 1 Pushover push, got {len(pushover.calls)}"
     assert pushover.calls[0]["id"] == 1
 
-    # Telegram: all 3 (NOTABLE is silent, but these are IMPORTANT → not silent)
-    assert len(telegram.calls) == 3, f"Expected 3 Telegram pushes, got {len(telegram.calls)}"
+    # Telegram: only first — TG now has same-topic dedup too
+    assert len(telegram.calls) == 1, f"Expected 1 Telegram push (TG dedup), got {len(telegram.calls)}"
 
 
 @pytest.mark.asyncio
@@ -278,7 +278,8 @@ async def test_dispatch_intensity_upgrade_repushes():
     await stage.process(items)
 
     assert len(pushover.calls) == 2, f"Both should push (upgrade): got {len(pushover.calls)}"
-    assert len(telegram.calls) == 2
+    # TG: no intensity upgrade — same key → dedup, only first gets through
+    assert len(telegram.calls) == 1, f"Expected 1 TG push (dedup), got {len(telegram.calls)}"
 
 
 @pytest.mark.asyncio
@@ -429,8 +430,11 @@ async def test_headline_similarity_cross_ticker_dedup():
         f"Cross-key headline dedup failed: expected 1 Pushover, got {len(pushover.calls)}. "
         f"Calls: {[(c['id'], c.get('reason','')) for c in pushover.calls]}"
     )
-    # TG still gets both (by design — TG doesn't participate in phone dedup)
-    assert len(telegram.calls) == 2
+    # TG: headline similarity dedup now applies to TG too — only first gets through
+    assert len(telegram.calls) == 1, (
+        f"Expected 1 TG push (dedup), got {len(telegram.calls)}. "
+        f"Calls: {[(c['id'], c.get('title','')) for c in telegram.calls]}"
+    )
 
 
 # ── CRITICAL dedup (post-2026-07-21 fix: CRITICAL no longer bypasses) ────
@@ -460,8 +464,10 @@ async def test_critical_same_topic_dedup():
     assert len(pushover.calls) == 1, (
         f"CRITICAL dedup failed: expected 1 Pushover, got {len(pushover.calls)}"
     )
-    # TG still gets both
-    assert len(telegram.calls) == 2
+    # TG: same ticker key → dedup, only first gets through
+    assert len(telegram.calls) == 1, (
+        f"CRITICAL TG dedup failed: expected 1 TG push, got {len(telegram.calls)}"
+    )
 
 
 # ── Strategic-tag cross-key dedup ────────────────────────────────────────

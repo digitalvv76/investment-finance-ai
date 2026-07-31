@@ -24,6 +24,7 @@ _DRY_RUN = os.environ.get("DRY_RUN_PUSH", "").lower() in ("1", "true", "yes")
 # 后续除非强度升级（strictly higher）否则跳过 Pushover。
 # 不影响 Telegram（TG 仍全量接收，仅静音控制）。
 _DEDUP_WINDOW_SECONDS = 24 * 3600  # 24 hours — 同主题一天只震一次手机
+_TG_DEDUP_WINDOW_SECONDS = 300  # 5 minutes — 同主题 TG 不重复推送
 
 # 从 headline_signal 提取宏观主题关键词
 _MACRO_TOPIC_PATTERNS = [
@@ -107,6 +108,9 @@ class DispatchStage:
         self._headline_cache: dict[str, str] = {}
         # Strategic tag tracking: topic_key → STRATEGIC_* tags (for cross-key dedup)
         self._phone_push_tags: dict[str, set[str]] = {}
+        # TG topic dedup: topic_key → (timestamp, item_id) — no intensity tracking
+        self._tg_push_log: dict[str, tuple[float, int]] = {}
+        self._tg_headline_cache: dict[str, str] = {}
 
     # ── Phone threshold gate ──
     # IMPORTANT alerts only reach phone for watchlist stocks or macro ≥85.
@@ -291,6 +295,55 @@ class DispatchStage:
             return False
         return _jaccard_similarity(headline, prev_text) >= self._HEADLINE_SIMILARITY_THRESHOLD
 
+    def _tg_should_skip(self, item: PipelineItem) -> tuple[bool, str]:
+        """Topic dedup for Telegram — simpler than phone (no intensity tracking).
+
+        Two-tier:
+          1. Exact key match (ticker or macro topic) within _TG_DEDUP_WINDOW_SECONDS
+          2. Cross-key headline_signal similarity (catches 台积电/TSM)
+        """
+        key = _dedup_key(item)
+        if key is None:
+            headline_fb = (item.decision.headline_signal or item.title or "").strip()
+            if len(headline_fb) > 10:
+                import hashlib
+                key = f"headline:{hashlib.md5(headline_fb.encode('utf-8', errors='replace')).hexdigest()[:12]}"
+
+        headline = (item.decision.headline_signal or item.title or "").strip()
+        now = time.time()
+
+        if key is not None:
+            prev = self._tg_push_log.get(key)
+            if prev is not None:
+                prev_ts, prev_id = prev
+                age = now - prev_ts
+                if age < _TG_DEDUP_WINDOW_SECONDS:
+                    return True, (
+                        f"tg_dedup(key={key}, prev_id={prev_id}, age={age:.0f}s)"
+                    )
+
+        # Cross-key headline similarity
+        if headline and key is not None:
+            for existing_key, (prev_ts, prev_id) in self._tg_push_log.items():
+                if existing_key == key:
+                    continue
+                age = now - prev_ts
+                if age >= _TG_DEDUP_WINDOW_SECONDS:
+                    continue
+                prev_text = self._tg_headline_cache.get(existing_key, "")
+                if prev_text and _jaccard_similarity(headline, prev_text) >= self._HEADLINE_SIMILARITY_THRESHOLD:
+                    return True, (
+                        f"tg_headline_dedup(headline≈prev_key={existing_key}, "
+                        f"prev_id={prev_id}, age={age:.0f}s)"
+                    )
+
+        # Record
+        if key is not None:
+            self._tg_push_log[key] = (now, item.id or 0)
+            if headline:
+                self._tg_headline_cache[key] = headline
+        return False, ""
+
     def _record(self, item: PipelineItem, level: AlertLevel, silent: bool) -> None:
         d = item.decision
         self.recent_decisions.appendleft({
@@ -352,8 +405,16 @@ class DispatchStage:
                             continue
 
                 # ── TG rate limit ──
-                if channel.name == "telegram" and tg_pushed >= self._MAX_TG_PER_CYCLE:
-                    continue
+                if channel.name == "telegram":
+                    if tg_pushed >= self._MAX_TG_PER_CYCLE:
+                        continue
+                    skip, reason = self._tg_should_skip(item)
+                    if skip:
+                        logger.info(
+                            "DISPATCH: TG dedup SKIP #%d: %s",
+                            item.id, reason,
+                        )
+                        continue
 
                 try:
                     success = await channel.send(item, decision, disable_notification=silent)
