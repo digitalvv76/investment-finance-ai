@@ -1,6 +1,6 @@
 # 当前工作状态
 
-> 最后更新: 2026-07-30 上午。Futu 连接泄漏熔断器部署。
+> 最后更新: 2026-07-31。TG 去重部署完成。
 
 ## 🆕 待 V2 读取
 
@@ -30,12 +30,13 @@
 - **TG**: IMPORTANT 阈值 0.50，每周期封顶 4 条
 
 ## 🔧 本会话新增
-- **管线第 5 次中断**: 日志停在 7/29 21:32 EDT，10h 静默，容器 health endpoint 拒绝连接
+- 管线第 5 次中断: 日志停在 7/29 21:32 EDT，10h 静默，容器 health endpoint 拒绝连接
 - `7d94666` fix: FutuNewsFetcher 三层熔断器 — pre-flight TCP 探测 + circuit breaker + 全失败检测
 - `79826da` fix: probe 改用 raw socket TCP (2s timeout) — 彻底避免 OpenQuoteContext 线程泄漏
 - 效果：OpenD 挂时 1 次 2s TCP 探测 → skip 138 关键词，0 线程泄漏
-- **`41b4673` fix**: FutuFundFlowFetcher 加熔断器 — 资金流采集器之前漏掉保护，71 票全部超时
+- `41b4673` fix: FutuFundFlowFetcher 加熔断器 — 资金流采集器之前漏掉保护，71 票全部超时
 - 效果：OpenD 挂时 1 次 3s TCP 探测 → 跳过整批 20 只票，0 线程泄漏
+- `a7c8489` fix: TG 通道加话题去重 (5min窗口+headline similarity) — 修复 BOJ 被5源重复推送
 
 ## ⚠️ 踩坑记录
 - Futu SDK `OpenQuoteContext()` 内部重连循环 ~6s/次，无法从外部停止

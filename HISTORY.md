@@ -25,6 +25,26 @@
 
 ---
 
+## 2026-07-31 · 🩹 TG 通道添加话题去重
+
+### 问题 (`a7c8489`)
+- 用户反馈日本央行 (BOJ) 利率决议在 TG 重复推送了多次
+- 根因：同一事件被 5 个不同来源采集 → 全部通过 Screen/Evaluate/Graham → Dispatch
+- Phone (Pushover) 有 3-tier 去重，但 TG 只有每周期 4 条上限，没有话题去重
+
+### 修复
+- `dispatch.py` — TG 新增 2-tier 去重：
+  1. Exact key match (ticker/macro topic) → 5 分钟内不重复推
+  2. Cross-key headline similarity (Jaccard ≥ 0.22) → 同内容不同 ticker 名去重
+- `_TG_DEDUP_WINDOW_SECONDS = 300`（5 分钟）
+- 不改 Phone 去重逻辑（独立 tracking）
+
+### 验证
+- 33/33 dispatch 测试全过
+- 729 passed overall（5 失败是已有问题：config/formatters/fund_flow）
+- 部署：ECS git pull → docker cp → restart，容器 healthy
+
+---
 ## 2026-07-30 上午 · 🔧 第 5 次管线中断 — Futu 连接泄漏熔断器
 
 ### 问题
@@ -3592,3 +3612,27 @@ curl -f 只在 HTTP 4xx/5xx 时返回非零 → Docker 才能标记 unhealthy �
 ---
 
 ## 2026-07-31T11:17+08:00 · 会话开始
+
+## 2026-07-31T14:11 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 585c1c1 · 2026-07-31T13:49 · chore: 关机同步 — 资金流熔断器修复 + HISTORY补账 + SESSION更新
+
+---
+
+---
+
+## 2026-07-31T15:25+08:00 · 会话开始
+
+---
+
+## 2026-07-31T15:34+08:00 · 会话开始
+
+---
+
+## 2026-07-31T16:22+08:00 · 会话开始
+
+---
+
+## 2026-07-31T18:00+08:00 · 会话开始
