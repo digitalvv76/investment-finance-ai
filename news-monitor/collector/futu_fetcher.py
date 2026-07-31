@@ -13,12 +13,42 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Circuit breaker constants — same as futu_news_fetcher.py
+# ---------------------------------------------------------------------------
+_CB_THRESHOLD = 3          # consecutive failures to open circuit
+_CB_BACKOFF_BASE = 60      # first backoff (seconds)
+_CB_BACKOFF_MAX = 600      # cap at 10 minutes
+_PROBE_TIMEOUT = 3.0       # raw TCP connect timeout
+
+
+def _probe_tcp(host: str, port: int) -> bool:
+    """Raw TCP socket probe — no OpenQuoteContext, no thread leak.
+
+    A quick 3s TCP connect to verify Futu OpenD is reachable before
+    we create any SDK context.  This is critical: OpenQuoteContext()
+    starts an internal retry loop that cannot be stopped from asyncio.
+    """
+    sock = None
+    try:
+        sock = socket.create_connection((host, port), timeout=_PROBE_TIMEOUT)
+        return True
+    except (OSError, TimeoutError):
+        return False
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except Exception:
+                pass
 
 # ---------------------------------------------------------------------------
 # Data model — identical to eastmoney_fetcher.py for drop-in compatibility
@@ -143,6 +173,51 @@ class FutuFundFlowFetcher:
         self._host = host
         self._port = port
         self._cache = _Cache(ttl=3600)
+
+        # ── Circuit breaker state ──
+        self._consecutive_failures = 0
+        self._circuit_open_until = 0.0       # monotonic timestamp
+        self._circuit_probe_done = False      # one probe per cooldown period
+
+    # ── Circuit breaker helpers ────────────────────────────────────────
+
+    def _circuit_is_open(self, now: float) -> bool:
+        """True while the circuit breaker is tripped."""
+        return now < self._circuit_open_until
+
+    def _record_success(self, now: float) -> None:
+        """Reset circuit on a healthy cycle."""
+        if self._consecutive_failures > 0:
+            logger.info(
+                "FundFlow: circuit reset — connection restored after %d failures",
+                self._consecutive_failures,
+            )
+        self._consecutive_failures = 0
+        self._circuit_open_until = 0.0
+        self._circuit_probe_done = False
+
+    def _record_failure(self, now: float) -> None:
+        """Increment failure count; open circuit if threshold reached."""
+        self._consecutive_failures += 1
+        n = self._consecutive_failures
+        if n >= _CB_THRESHOLD:
+            delay = min(
+                _CB_BACKOFF_BASE * (2 ** (n - _CB_THRESHOLD)),
+                _CB_BACKOFF_MAX,
+            )
+            self._circuit_open_until = now + delay
+            logger.warning(
+                "FundFlow: CIRCUIT OPEN — %d consecutive failures, "
+                "suspending for %ds",
+                n, delay,
+            )
+        else:
+            logger.warning(
+                "FundFlow: connection failed (%d/%d before circuit opens)",
+                n, _CB_THRESHOLD,
+            )
+
+    # ── Fetch ──────────────────────────────────────────────────────────
 
     async def fetch(
         self, ticker: str, days: int = 20, prefer_market: str = ""
@@ -349,10 +424,54 @@ class FutuFundFlowFetcher:
     async def fetch_multi(
         self, tickers: List[str], days: int = 20
     ) -> Dict[str, Optional[FundFlowResult]]:
-        """Fetch fund flow for multiple tickers concurrently."""
-        results = {}
-        # Futu rate limit: 30 req per 30 seconds → 1 req/s max
+        """Fetch fund flow for multiple tickers concurrently.
+
+        Gated by circuit breaker + pre-flight TCP probe.  When OpenD is
+        unreachable the entire batch is skipped without creating any
+        OpenQuoteContext — no thread leak, no retry-loop death spiral.
+        """
+        now = time.time()
+
+        # ── Circuit breaker gate ───────────────────────────────────
+        if self._circuit_is_open(now):
+            if not self._circuit_probe_done:
+                self._circuit_probe_done = True
+                logger.info(
+                    "FundFlow: circuit open — probing connection (failures=%d)",
+                    self._consecutive_failures,
+                )
+                if await self._probe_connection():
+                    self._record_success(now)
+                    # fall through to normal fetch
+                else:
+                    remaining = int(self._circuit_open_until - now)
+                    logger.warning(
+                        "FundFlow: probe failed — circuit still open "
+                        "(%ds remaining), skipping %d tickers",
+                        remaining, len(tickers),
+                    )
+                    return {}
+            else:
+                remaining = int(self._circuit_open_until - now)
+                logger.debug(
+                    "FundFlow: circuit open — skipping %d tickers (%ds remaining)",
+                    len(tickers), remaining,
+                )
+                return {}
+
+        # ── Pre-flight TCP probe ───────────────────────────────────
+        if not await self._probe_connection():
+            logger.warning(
+                "FundFlow: pre-flight failed — skipping %d tickers this batch",
+                len(tickers),
+            )
+            self._record_failure(now)
+            return {}
+
+        # ── Fetch — serialized to respect Futu rate limit ───────────
+        results: Dict[str, Optional[FundFlowResult]] = {}
         sem = asyncio.Semaphore(1)
+        failed_count = 0
 
         async def _fetch_one(ticker: str) -> tuple:
             async with sem:
@@ -366,11 +485,48 @@ class FutuFundFlowFetcher:
         for item in gathered:
             if isinstance(item, Exception):
                 logger.error("Batch fetch error: %s", item)
+                failed_count += 1
                 continue
             ticker, result = item
+            if result is None:
+                failed_count += 1
             results[ticker] = result
 
+        # ── Circuit breaker: all-failed detection ──────────────────
+        if failed_count >= len(tickers):
+            logger.warning(
+                "FundFlow: ALL %d tickers failed — recording circuit failure",
+                len(tickers),
+            )
+            self._record_failure(now)
+        elif failed_count > 0:
+            logger.info(
+                "FundFlow: %d/%d tickers failed (partial — not tripping circuit)",
+                failed_count, len(tickers),
+            )
+        else:
+            self._record_success(now)
+
         return results
+
+    async def _probe_connection(self) -> bool:
+        """Pre-flight TCP probe — fail-fast, no SDK overhead.
+
+        Returns True if Futu OpenD is reachable at the TCP level.
+        """
+        host, port = self._host, self._port
+        try:
+            ok = await asyncio.wait_for(
+                asyncio.to_thread(_probe_tcp, host, port),
+                timeout=_PROBE_TIMEOUT + 1.0,
+            )
+            return bool(ok)
+        except asyncio.TimeoutError:
+            logger.debug("FundFlow: TCP probe timed out")
+            return False
+        except Exception as e:
+            logger.debug("FundFlow: TCP probe error: %s", e)
+            return False
 
     async def close(self):
         """No-op — each call opens/closes its own connection."""
