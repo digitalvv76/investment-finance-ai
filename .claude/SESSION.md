@@ -34,6 +34,8 @@
 - `7d94666` fix: FutuNewsFetcher 三层熔断器 — pre-flight TCP 探测 + circuit breaker + 全失败检测
 - `79826da` fix: probe 改用 raw socket TCP (2s timeout) — 彻底避免 OpenQuoteContext 线程泄漏
 - 效果：OpenD 挂时 1 次 2s TCP 探测 → skip 138 关键词，0 线程泄漏
+- **`41b4673` fix**: FutuFundFlowFetcher 加熔断器 — 资金流采集器之前漏掉保护，71 票全部超时
+- 效果：OpenD 挂时 1 次 3s TCP 探测 → 跳过整批 20 只票，0 线程泄漏
 
 ## ⚠️ 踩坑记录
 - Futu SDK `OpenQuoteContext()` 内部重连循环 ~6s/次，无法从外部停止

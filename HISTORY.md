@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-31 · 🔧 资金流采集器加熔断器
+
+### 问题
+- 用户反馈很久没收到资金流分析推送
+- 排查：`FutuFundFlowFetcher` 依赖 Futu OpenD，但上次只给 `FutuNewsFetcher` 加了熔断器
+- 资金流采集器每 30 分钟尝试 → 每只票 3 次 retry → `OpenQuoteContext` 线程泄漏 → 71 票全部超时
+
+### 修复 (`41b4673`)
+- `futu_fetcher.py` `FutuFundFlowFetcher` — 加三层防护：
+  1. `fetch_multi` 入口 raw socket TCP 探测 (3s timeout)
+  2. 连续 3 次全批次失败 → circuit open → 指数退避 (60s→120s→240s→480s→600s)
+  3. 全批次失败检测 → 计入熔断计数
+- 效果：OpenD 挂时 1 次 3s TCP 探测 → 跳过整批 20 只票，0 线程泄漏
+- 部署：ECS git pull → docker cp → restart，容器恢复 healthy
+
+### 遗留
+- **Futu OpenD 端口不通** — 根因仍在（Docker bridge iptables），资金流和新闻源均不可用
+- 当前影响：Futu 新闻（~138 关键词）+ Futu 资金流（71 只票）不可用，其余源正常
+
+---
+
 ## 2026-07-30 上午 · 🔧 第 5 次管线中断 — Futu 连接泄漏熔断器
 
 ### 问题
@@ -3559,3 +3580,15 @@ curl -f 只在 HTTP 4xx/5xx 时返回非零 → Docker 才能标记 unhealthy �
 ---
 
 ## 2026-07-30T09:25+08:00 · 会话开始
+
+## 2026-07-30T11:31 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 624d960 · 2026-07-30T10:21 · docs: 第5次管线中断修复记录 — Futu连接泄漏熔断器+SESSION更新
+
+---
+
+---
+
+## 2026-07-31T11:17+08:00 · 会话开始
