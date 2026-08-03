@@ -43,6 +43,20 @@
 
 ---
 
+## 2026-08-03 · 🤖 Telegram Bot 无限用户扩展 — TELEGRAM_CHAT_ID_N 动态扫描 (`3bc7260`)
+
+### 问题
+- Telegram Bot 用户管理硬编码：只支持 `TELEGRAM_CHAT_ID_2` + `TELEGRAM_CHAT_ID_3` 两个额外用户
+- 新增用户需要改代码 + 部署，无法灵活扩展
+
+### 修复
+- `_get_chat_ids()` 从硬编码改为遍历所有 `TELEGRAM_CHAT_ID_*` 环境变量（正则匹配 `TELEGRAM_CHAT_ID_\d+`）
+- 自动检测消息更新
+- 新用户只需在 ECS `.env` 加 `TELEGRAM_CHAT_ID_N=xxx` 即可，无需改代码或重启
+- 新用户 Chat ID 7207966678 已同步到 ECS `.env`
+
+---
+
 ## 2026-08-03 · 🔄 DeepSeek 模型迁移 — deepseek-chat(已废弃) → v4-pro/flash 分工
 
 ### 🚨 紧急发现
@@ -3776,3 +3790,11 @@ deepseek-chat 已于 2026-07-24 废弃，全线迁移:
 ### 8f05d4e · 2026-08-03T20:43 · chore: 会话收尾 — HISTORY补账 + SESSION更新 (富途复活+max_tokens修复)
 
 ---
+
+---
+
+## 2026-08-03T20:48+08:00 · 会话开始
+
+---
+
+## 2026-08-03T22:21+08:00 · 会话开始
