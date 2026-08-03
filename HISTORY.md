@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-08-03 · 🩹 富途 OpenD 复活 + DeepSeek v4 max_tokens 全线修复
+
+### 富途 OpenD 僵死复活
+- **根因推翻**: 之前以为是 Docker bridge iptables，实际是 OpenD 进程僵死（7/16 至今 18 天）
+  - 进程存活、端口 LISTEN、但不 accept 连接（SYN 无响应）
+  - 7/22 有人试图重启第二个实例但端口被占
+- **修复**: kill -9 旧进程 → 重启 → Host + 容器双通 ✅
+- **完整管线验证**: 22/22 票 Futu 采集成功 → 22 divergence signals → LLM 分析 → 0 推送（无极端背离，正常）
+
+### DeepSeek v4 max_tokens 全线修复 (`9d70e21`, `039ee06`, `cd1ae82`)
+- **根因**: DeepSeek v4 模型 sending reasoning tokens 从 max_tokens 扣，旧值太小导致 content 归零
+- **A/B 证实**: max_tokens=2000 → 0 chars, =8000 → 2937 chars
+- **修复范围** (9 模块):
+
+| 模块 | 旧 | 新 | 模型 |
+|------|:---:|:---:|------|
+| graham_reviewer | 256 | 2048 | FLASH |
+| actionability_review | 10 | 1024 | FLASH |
+| curator | 500 | 2048 | FLASH |
+| trainer | 400 | 2048 | FLASH |
+| translator | 200 | 1024 | FLASH |
+| macro_agent | 600 | 4096 | PRO |
+| event_driven_evaluator | 600 | 4096 | PRO |
+| impact_evaluator | 1200 | 4096 | PRO |
+| deep_lane | 900→800(yaml) | 4096 | 可配 |
+| fund_flow_collector | 2000 | 8000 | FLASH |
+
+### 对抗式核实 (`cd1ae82`)
+- **致命发现**: `settings.yaml: max_tokens: 800` 覆盖 `deep_lane.py` 代码默认值 4096 → 修复不生效
+- **遗漏**: translator.py (200) 未修
+- **timeout**: event_driven HARD_TIMEOUT 30→45s, SDK 20→30s
+- **教训**: 连续 2 次部署跳过对抗式核实 → 补跑发现致命问题 → 已更新铁律 memory
+
+### 部署
+- ECS 3 次部署均 healthy ✅
+- 容器已更新所有 9 模块 + settings.yaml
+
+---
+
 ## 2026-08-03 · 🔄 DeepSeek 模型迁移 — deepseek-chat(已废弃) → v4-pro/flash 分工
 
 ### 🚨 紧急发现
