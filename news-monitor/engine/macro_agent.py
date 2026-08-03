@@ -58,7 +58,7 @@ class MacroAgent:
         self._whitelist: dict[str, tuple[str, re.Pattern]] = {}  # kw → (tier, pattern)
         self._preview_patterns: list[re.Pattern] = []
         self._llm_client = None
-        self._llm_model = "deepseek-chat"
+        self._llm_model = os.environ.get("DEEPSEEK_MODEL_PRO", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro"))
         self._prompt = ""
         self._loaded = False
 
@@ -167,7 +167,7 @@ class MacroAgent:
                 api_key=api_key,
                 base_url="https://api.deepseek.com",
             )
-            self._llm_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+            self._llm_model = os.environ.get("DEEPSEEK_MODEL_PRO", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro"))
 
         resp = await asyncio.wait_for(
             asyncio.to_thread(

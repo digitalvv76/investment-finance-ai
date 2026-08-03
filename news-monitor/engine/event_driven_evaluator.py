@@ -330,7 +330,7 @@ class EventDrivenEvaluator:
 
     async def _call_llm(self, client, provider_name: str, user_prompt: str) -> str:
         if provider_name == "deepseek":
-            model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+            model = os.environ.get("DEEPSEEK_MODEL_PRO", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro"))
             resp = await asyncio.wait_for(
                 asyncio.to_thread(
                     client.chat.completions.create,

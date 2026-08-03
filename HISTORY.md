@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-08-03 · 🔄 DeepSeek 模型迁移 — deepseek-chat(已废弃) → v4-pro/flash 分工
+
+### 🚨 紧急发现
+- `deepseek-chat` 已于 **2026-07-24** 被 DeepSeek 官方废弃，项目全线使用该 ID
+- 当前 API 调用随时可能失效
+
+### 修复
+- `.env` 新增 `DEEPSEEK_MODEL_PRO=deepseek-v4-pro` + `DEEPSEEK_MODEL_FLASH=deepseek-v4-flash`
+- **PRO** (EventDrivenEvaluator/ImpactEvaluator/MacroAgent): 核心评估，准确率优先
+- **FLASH** (Graham/Actionability/FundFlow/Curator/DeepLane/Trainer/Translator): 噪音过滤/后台分析，速度优先
+- 降级策略: 各模块先读 `_PRO`/`_FLASH` → 不存在读 `DEEPSEEK_MODEL` → 再不行用硬编码默认值
+- 10 文件 / 13 行改动
+
+### 验证
+- 251/253 测试通过 (2 失败是已有的 event-escalation.json 缺失)
+- 预期: Graham 审查 5s→1s, 月度成本降 ~30%
+
+---
+
 ## 2026-08-03 · ⚡ Evaluate 阶段并行化 — 新闻推送延迟从 30min 降到 ~2min
 
 ### 问题

@@ -321,7 +321,7 @@ class ImpactEvaluator:
                         system_prompt: str, user_prompt: str) -> str:
         """Call a single LLM provider. Returns raw response text or raises."""
         if provider_name == "deepseek":
-            model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+            model = os.environ.get("DEEPSEEK_MODEL_PRO", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro"))
             resp = await asyncio.wait_for(
                 asyncio.to_thread(
                     client.chat.completions.create,

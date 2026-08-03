@@ -205,7 +205,7 @@ class Curator:
         response = await loop.run_in_executor(
             None,
             lambda: client.chat.completions.create(
-                model="deepseek-chat",
+                model=os.environ.get("DEEPSEEK_MODEL_FLASH", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")),
                 max_tokens=500,
                 temperature=0.1,
                 messages=[{"role": "user", "content": prompt}],

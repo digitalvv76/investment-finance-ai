@@ -159,7 +159,7 @@ class FundFlowCollector:
 
         # LLM client (lazy init)
         self._llm_client = None
-        self._llm_model = "deepseek-chat"
+        self._llm_model = os.environ.get("DEEPSEEK_MODEL_FLASH", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"))
 
     # ------------------------------------------------------------------
     # Public API
@@ -519,7 +519,7 @@ class FundFlowCollector:
                 api_key=api_key,
                 base_url="https://api.deepseek.com",
             )
-            self._llm_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+            self._llm_model = os.environ.get("DEEPSEEK_MODEL_FLASH", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"))
 
         resp = await asyncio.wait_for(
             asyncio.to_thread(

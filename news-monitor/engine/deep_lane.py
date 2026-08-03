@@ -479,7 +479,7 @@ class DeepLane:
     PROVIDERS = {
         "deepseek": {
             "env_key": "DEEPSEEK_API_KEY",
-            "default_model": "deepseek-chat",
+            "default_model": "deepseek-v4-flash",
             "base_url": "https://api.deepseek.com",
         },
         "anthropic": {

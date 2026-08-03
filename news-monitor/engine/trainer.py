@@ -321,7 +321,7 @@ class Trainer:
                 loop.run_in_executor(
                     None,
                     lambda: client.chat.completions.create(
-                        model="deepseek-chat",
+                        model=os.environ.get("DEEPSEEK_MODEL_FLASH", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")),
                         max_tokens=400,
                         temperature=0.3,
                         messages=[{"role": "user", "content": prompt}],

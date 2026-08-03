@@ -48,7 +48,7 @@ def call_llm(system_prompt: str, user_prompt: str, label: str = "") -> dict | No
     )
     try:
         resp = client.chat.completions.create(
-            model=os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+            model=os.environ.get("DEEPSEEK_MODEL_FLASH", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

@@ -123,7 +123,7 @@ class ActionabilityReviewer:
             resp = await asyncio.wait_for(
                 asyncio.to_thread(
                     client.chat.completions.create,
-                    model=os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+                    model=os.environ.get("DEEPSEEK_MODEL_FLASH", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")),
                     messages=[
                         {"role": "system", "content": _SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
