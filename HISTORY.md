@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-08-03 · ⚡ Evaluate 阶段并行化 — 新闻推送延迟从 30min 降到 ~2min
+
+### 问题
+- 用户反馈 BABA Qwen3.8max 新闻比其他渠道晚了近半小时
+- 排查根因：Evaluate 阶段逐条串行调 LLM（每条 10-30s），20 条新闻需要 5-15 分钟才走完管道
+- 管道忙时后续 heartbeat 的新闻直接丢弃（`_pipeline_running` 互斥锁不排队）
+- 管道超时（600s）后整批丢弃 + dedup 阻止重处理 → 永久丢失
+
+### 修复 (`d5ead37`)
+- `pipeline/evaluate.py` — `process()` 从串行 `for` 改为 `asyncio.gather` + `Semaphore(5)`
+- 5 条新闻并发调 LLM，处理时间从 N×15s 降到 ceil(N/5)×15s
+- DeepSeek 5 并发 ≈ 20 RPM < 60 RPM 限额
+- SQLite WAL 模式支持并发写，per-item try/except 隔离单条失败
+- 对抗式核实通过：`_clients` dict 无害竞态、`classify()` 纯函数、DB 独立连接安全
+
+### 验证
+- 13/13 Evaluate + 6/6 Dispatch 测试全过
+- 预期效果：30 分钟延迟 → 2-3 分钟
+
+---
+
 ## 2026-07-31 · 🔧 资金流采集器加熔断器
 
 ### 问题
@@ -3636,3 +3657,27 @@ curl -f 只在 HTTP 4xx/5xx 时返回非零 → Docker 才能标记 unhealthy �
 ---
 
 ## 2026-07-31T18:00+08:00 · 会话开始
+
+## 2026-07-31T18:47 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 887837f · 2026-07-31T18:22 · chore: HISTORY补账 + SESSION更新 — TG去重
+
+---
+
+---
+
+## 2026-07-31T23:03+08:00 · 会话开始
+
+---
+
+## 2026-08-03T07:35+08:00 · 会话开始
+
+---
+
+## 2026-08-03T07:51+08:00 · 会话开始
+
+---
+
+## 2026-08-03T11:43+08:00 · 会话开始
