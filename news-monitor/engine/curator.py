@@ -206,7 +206,7 @@ class Curator:
             None,
             lambda: client.chat.completions.create(
                 model=os.environ.get("DEEPSEEK_MODEL_FLASH", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")),
-                max_tokens=500,
+                max_tokens=2048,
                 temperature=0.1,
                 messages=[{"role": "user", "content": prompt}],
             )

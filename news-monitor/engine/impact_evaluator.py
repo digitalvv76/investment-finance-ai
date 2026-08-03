@@ -331,7 +331,7 @@ class ImpactEvaluator:
                         {"role": "user", "content": user_prompt},
                     ],
                     temperature=0.3,
-                    max_tokens=1200,
+                    max_tokens=4096,
                 ),
                 timeout=self.HARD_TIMEOUT,
             )

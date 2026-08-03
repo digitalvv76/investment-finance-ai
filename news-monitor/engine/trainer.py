@@ -322,7 +322,7 @@ class Trainer:
                     None,
                     lambda: client.chat.completions.create(
                         model=os.environ.get("DEEPSEEK_MODEL_FLASH", os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")),
-                        max_tokens=400,
+                        max_tokens=2048,
                         temperature=0.3,
                         messages=[{"role": "user", "content": prompt}],
                         timeout=30,  # 30s timeout per request

@@ -178,7 +178,7 @@ class MacroAgent:
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.0,
-                max_tokens=600,
+                max_tokens=4096,
             ),
             timeout=45,
         )

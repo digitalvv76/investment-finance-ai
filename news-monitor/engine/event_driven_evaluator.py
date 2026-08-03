@@ -339,7 +339,7 @@ class EventDrivenEvaluator:
                         {"role": "user", "content": user_prompt},
                     ],
                     temperature=0,
-                    max_tokens=600,
+                    max_tokens=4096,
                     timeout=self.SDK_TIMEOUT,
                 ),
                 timeout=self.HARD_TIMEOUT,

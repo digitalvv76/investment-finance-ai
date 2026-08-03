@@ -147,7 +147,7 @@ class GrahamReviewer:
             model=self._model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
-            max_tokens=256,
+            max_tokens=2048,
         )
         return resp.choices[0].message.content.strip()
 

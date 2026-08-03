@@ -3700,3 +3700,32 @@ curl -f 只在 HTTP 4xx/5xx 时返回非零 → Docker 才能标记 unhealthy �
 ---
 
 ## 2026-08-03T11:43+08:00 · 会话开始
+
+## 2026-08-03T13:19 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 9a031cc · 2026-08-03T12:10 · docs: HISTORY补账 — Evaluate并行化 (d5ead37)
+
+---
+
+### c8cff06 · 2026-08-03T13:11 · feat: DeepSeek 模型迁移 deepseek-chat→v4-pro/flash 分工
+
+deepseek-chat 已于 2026-07-24 废弃，全线迁移:
+- PRO (核心评估): EventDrivenEvaluator/ImpactEvaluator/MacroAgent
+- FLASH (噪音过滤): Graham/Actionability/FundFlow/Curator/DeepLane/Trainer/Translator
+- 降级链: _PRO/_FLASH → DEEPSEEK_MODEL → 硬编码默认值
+
+---
+
+### 3436204 · 2026-08-03T13:15 · chore: SESSION更新 — Evaluate并行化+模型迁移，本会话收尾
+
+---
+
+---
+
+## 2026-08-03T18:48+08:00 · 会话开始
+
+---
+
+## 2026-08-03T19:19+08:00 · 会话开始

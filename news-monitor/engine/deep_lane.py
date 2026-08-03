@@ -500,7 +500,7 @@ class DeepLane:
         self._model = self._provider["default_model"]
         # ~300-350 字 target (SPEC-deep-analysis-trim); 900 tokens is a generous
         # backstop against runaway length — real length is budgeted in the prompt.
-        self._max_tokens = 900
+        self._max_tokens = 4096
         self._api_key = os.environ.get(self._provider["env_key"], "")
 
         if config:

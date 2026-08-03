@@ -129,7 +129,7 @@ class ActionabilityReviewer:
                         {"role": "user", "content": user_prompt},
                     ],
                     temperature=0.0,
-                    max_tokens=10,
+                    max_tokens=1024,
                 ),
                 timeout=REVIEW_TIMEOUT,
             )
