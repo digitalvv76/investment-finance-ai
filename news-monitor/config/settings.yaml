@@ -24,11 +24,10 @@ fast_lane:
 
 deep_lane:
   # LLM provider: auto-detected from env vars
-  #   DEEPSEEK_API_KEY set -> uses DeepSeek (deepseek-chat)
+  #   DEEPSEEK_API_KEY set -> uses DeepSeek (deepseek-v4-pro)
   #   ANTHROPIC_API_KEY set -> uses Anthropic Claude (claude-fable-5)
   #   Both set -> DeepSeek preferred
-  llm_model: "deepseek-chat"  # or "claude-fable-5", "claude-opus-4-8"
-  max_tokens: 800
+  max_tokens: 4096
 
 thresholds:
   urgent_priority: 0.7

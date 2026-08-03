@@ -201,8 +201,8 @@ class EventDrivenEvaluator:
     Temperature=0 for deterministic output.
     """
 
-    HARD_TIMEOUT = 30.0       # shorter than old ImpactEvaluator (45s) — prompt is smaller
-    SDK_TIMEOUT = 20.0
+    HARD_TIMEOUT = 45.0       # bumped for v4 reasoning + 4096 max_tokens
+    SDK_TIMEOUT = 30.0
 
     _PROVIDERS = [
         ("DEEPSEEK_API_KEY",   "deepseek",  True,  "https://api.deepseek.com"),
