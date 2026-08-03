@@ -3768,3 +3768,11 @@ deepseek-chat 已于 2026-07-24 废弃，全线迁移:
 ---
 
 ## 2026-08-03T19:19+08:00 · 会话开始
+
+## 2026-08-03T20:43 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### 8f05d4e · 2026-08-03T20:43 · chore: 会话收尾 — HISTORY补账 + SESSION更新 (富途复活+max_tokens修复)
+
+---
