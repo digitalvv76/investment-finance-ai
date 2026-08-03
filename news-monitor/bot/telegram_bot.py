@@ -59,8 +59,8 @@ class NewsBot:
                 if len(seen) > 1:
                     others = sorted(seen - {chat_id})
                     logger.info(
-                        "Multiple chat_ids found: %s. To add additional Telegram, "
-                        "set TELEGRAM_CHAT_ID_2 or TELEGRAM_CHAT_ID_3 in .env",
+                        "Multiple chat_ids found: %s. To add additional Telegram recipients, "
+                        "set TELEGRAM_CHAT_ID_2, _3, _4, ... in .env",
                         seen, others[0],
                     )
             else:
@@ -206,7 +206,7 @@ class NewsBot:
         Priority:
         1. TELEGRAM_CHAT_ID env var — locked primary, never overwritten
         2. Auto-detected (DB) — fallback / additional user
-        3. TELEGRAM_CHAT_ID_2 / _3 — explicit extras
+        3. TELEGRAM_CHAT_ID_2 / _3 / _4 / ... — explicit extras (unlimited)
         """
         ids: list[int] = []
 
@@ -225,16 +225,18 @@ class NewsBot:
             if db_id not in ids:
                 ids.append(db_id)
 
-        # Secondary / tertiary: explicit extras
-        for key in ("TELEGRAM_CHAT_ID_2", "TELEGRAM_CHAT_ID_3"):
-            env_val = os.environ.get(key, "")
-            if env_val:
-                try:
-                    eid = int(env_val)
-                    if eid not in ids:
-                        ids.append(eid)
-                except ValueError:
-                    logger.warning("Invalid %s: %s", key, env_val)
+        # Extended extras: TELEGRAM_CHAT_ID_2, _3, _4, ... (unlimited)
+        for key, val in os.environ.items():
+            if not key.startswith("TELEGRAM_CHAT_ID_"):
+                continue
+            if key == "TELEGRAM_CHAT_ID":  # already handled above
+                continue
+            try:
+                eid = int(val)
+                if eid not in ids:
+                    ids.append(eid)
+            except ValueError:
+                logger.warning("Invalid %s: %s", key, val)
         return ids
 
     def set_chat_id(self, chat_id: int):
