@@ -69,20 +69,33 @@ class EvaluateStage:
         self._db = db
         self._cluster = cluster
 
+    # Maximum concurrent LLM evaluations.  DeepSeek free-tier rate limit
+    # is ~60 RPM; 5 concurrent calls with ~15s each = ~20 RPM, well within
+    # budget.  SQLite WAL mode handles the concurrent writes.
+    MAX_CONCURRENCY = 5
+
     async def process(self, items: list[PipelineItem]) -> list[PipelineItem]:
         if not items:
             return []
 
-        for item in items:
-            # Macro-routed items already have a decision — skip re-evaluation
-            if getattr(item, "_macro_routed", False):
-                continue
-            try:
-                await self._evaluate_one(item)
-            except Exception:
-                logger.exception("EVALUATE: item %d evaluation failed", item.id)
+        # Separate macro-routed items (already have a decision)
+        macro_items = [it for it in items if getattr(it, "_macro_routed", False)]
+        eval_items = [it for it in items if not getattr(it, "_macro_routed", False)]
 
-        logger.info("EVALUATE: processed %d items", len(items))
+        if eval_items:
+            sem = asyncio.Semaphore(self.MAX_CONCURRENCY)
+
+            async def _eval_with_limit(item: PipelineItem) -> None:
+                async with sem:
+                    try:
+                        await self._evaluate_one(item)
+                    except Exception:
+                        logger.exception("EVALUATE: item %d evaluation failed", item.id)
+
+            await asyncio.gather(*[_eval_with_limit(it) for it in eval_items])
+
+        logger.info("EVALUATE: processed %d items (concurrent, max=%d, macro=%d)",
+                     len(items), self.MAX_CONCURRENCY, len(macro_items))
         return items
 
     async def _evaluate_one(self, item: PipelineItem) -> None:
