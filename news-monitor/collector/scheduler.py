@@ -141,10 +141,10 @@ class NewsScheduler:
                 )
             except asyncio.TimeoutError:
                 logger.warning("Chinese news fetch timed out after 45s")
-                return []
+                return None
             except Exception as e:
                 logger.warning("Chinese news fetch failed: %s", e)
-                return []
+                return None
 
         async def _fetch_rss():
             try:
@@ -153,10 +153,10 @@ class NewsScheduler:
                 )
             except asyncio.TimeoutError:
                 logger.warning("RSS fetch timed out after 45s")
-                return []
+                return None
             except Exception as e:
                 logger.warning("RSS fetch failed: %s", e)
-                return []
+                return None
 
         async def _fetch_playwright_heartbeat():
             try:
@@ -165,10 +165,10 @@ class NewsScheduler:
                 )
             except asyncio.TimeoutError:
                 logger.warning("PW heartbeat timed out after 50s")
-                return []
+                return None
             except Exception as e:
                 logger.warning("PW heartbeat failed: %s", e)
-                return []
+                return None
 
         async def _fetch_api():
             try:
@@ -177,10 +177,10 @@ class NewsScheduler:
                 )
             except asyncio.TimeoutError:
                 logger.warning("API check timed out after 30s")
-                return []
+                return None
             except Exception as e:
                 logger.warning("API check failed: %s", e)
-                return []
+                return None
 
         async def _fetch_futu_news():
             try:
@@ -189,10 +189,10 @@ class NewsScheduler:
                 )
             except asyncio.TimeoutError:
                 logger.warning("Futu news fetch timed out after 30s")
-                return []
+                return None
             except Exception as e:
                 logger.warning("Futu news fetch failed: %s", e)
-                return []
+                return None
 
         async def _fetch_finnhub():
             try:
@@ -201,10 +201,10 @@ class NewsScheduler:
                 )
             except asyncio.TimeoutError:
                 logger.warning("Finnhub fetch timed out after 45s")
-                return []
+                return None
             except Exception as e:
                 logger.warning("Finnhub fetch failed: %s", e)
-                return []
+                return None
 
         async def _fetch_web_scraper():
             try:
@@ -213,10 +213,10 @@ class NewsScheduler:
                 )
             except asyncio.TimeoutError:
                 logger.warning("Web scraper timed out after 45s")
-                return []
+                return None
             except Exception as e:
                 logger.warning("Web scraper failed: %s", e)
-                return []
+                return None
 
         # Defense-in-depth: gather timeout as last line of defense
         try:
@@ -239,58 +239,62 @@ class NewsScheduler:
             )
             return
 
-        # Per-source counts for health monitoring
+        # Per-source counts for health monitoring.
+        # Each fetch wrapper returns:
+        #   list[NewsItem] — healthy (may be empty = all duplicates)
+        #   None           — connection / timeout error (source broken)
         source_names = ["chinese", "rss", "playwright", "api", "scrape", "futu", "finnhub"]
-        source_counts = {}
+        source_counts: dict[str, int] = {}
+        source_errors: set[str] = set()
         items = []
         for name, result in zip(source_names, results):
             if isinstance(result, Exception):
                 logger.warning("Heartbeat collector failed: %s", result)
-                source_counts[name] = 0
+                source_errors.add(name)
+            elif result is None:
+                source_errors.add(name)
             elif result:
                 source_counts[name] = len(result)
                 items.extend(result)
-            else:
-                source_counts[name] = 0
+            # else: [] — healthy but no new items (all duplicates / cooldown)
 
-        # Track consecutive zero-cycles per source and fire stall/recovery events
-        self._check_source_health(source_counts)
+        # Track consecutive error-cycles per source
+        self._check_source_health(source_counts, source_errors)
 
         if items:
             logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape+futu+finnhub)")
             await self._notify_callbacks(items)
 
-    def _check_source_health(self, source_counts: dict[str, int]):
-        """Track per-source consecutive zero-cycles and emit stall/recovery events.
+    def _check_source_health(self, source_counts: dict[str, int], source_errors: set[str]):
+        """Track per-source consecutive error-cycles and emit stall/recovery events.
 
-        A core source that produces 0 items for STALL_THRESHOLD consecutive
-        heartbeat cycles is considered stalled.  A ``source_stall`` health event
-        is written (once) so the Watchdog can include it in its verdict.  When
-        the source resumes producing items a matching ``source_recovered`` event
-        is written.
+        An *error* (connection timeout / exception) is distinct from an empty
+        result (healthy but all duplicates).  Only consecutive errors count
+        toward a stall — a source returning ``[]`` while still connecting
+        successfully is healthy and will NOT trigger a stall.
         """
-        for name, count in source_counts.items():
-            if count == 0:
+        for name in self.SOURCE_ALERT_NAMES:
+            if name in source_errors:
                 streak = self._source_zero_streaks.get(name, 0) + 1
                 self._source_zero_streaks[name] = streak
                 if streak >= self.SOURCE_STALL_THRESHOLD and name not in self._source_stalled:
                     self._source_stalled.add(name)
-                    if name in self.SOURCE_ALERT_NAMES:
-                        logger.warning(
-                            "SourceStall: %s — 0 items for %d consecutive cycles",
-                            name, streak,
-                        )
-                        try:
-                            self.db.insert_health_event(HealthEvent(
-                                event_type="source_stall",
-                                detail=f"{name}:{streak}",
-                            ))
-                        except Exception:
-                            logger.debug("SourceStall: failed to write health event")
+                    logger.warning(
+                        "SourceStall: %s — error for %d consecutive cycles",
+                        name, streak,
+                    )
+                    try:
+                        self.db.insert_health_event(HealthEvent(
+                            event_type="source_stall",
+                            detail=f"{name}:{streak}",
+                        ))
+                    except Exception:
+                        logger.debug("SourceStall: failed to write health event")
             else:
                 if name in self._source_stalled:
                     self._source_stalled.discard(name)
-                    logger.info("SourceRecovered: %s — producing again (%d items)", name, count)
+                    count = source_counts.get(name, 0)
+                    logger.info("SourceRecovered: %s — ok (%d items)", name, count)
                     try:
                         self.db.insert_health_event(HealthEvent(
                             event_type="source_recovered",
