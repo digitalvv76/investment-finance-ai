@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-08-04 · 🔧 管线瘫痪诊断修复 + Watchdog 分源健康检查
+
+### 故障诊断
+- **现象**: 用户报告今天 0 推送（上次推送 8/3 13:30）
+- **根因**: 三重阻塞 —
+  1. Futu OpenD 再次僵死（进程存活+端口 LISTEN 但 SYN 无响应，第 3 次）
+  2. 容器长运行 25h 状态累积：Playwright Chromium 崩溃→Twitter 全挂，HTTP 连接池耗尽→Finnhub/RSS/中文源大量 timeout
+  3. 仅剩 4 个 web scraper 产出 → 内容重复循环 → dedup 98% 拦截 → FastLane 全拒
+
+### 修复 (`e884cdf`, `582c20a`)
+- kill -9 + 重启 Futu OpenD → 连通 ✅
+- 容器重启 → 所有数据源恢复（采集量 79→435 条/周期）
+- **Watchdog 分源健康检查**:
+  - `scheduler.py`: 每周期统计分源采集量，核心源 (Futu/Finnhub/Twitter/RSS) 连续 3 周期连接错误 → 写 `source_stall` 事件
+  - `watchdog.py`: 读取活跃 source_stall，纳入 DEGRADED 判决
+  - 区分"连接失败"(None) vs "健康空返回"([]) 避免假阳性
+  - +3 测试用例
+
+### 发现
+- Watchdog 设计有盲区：只看总量 > floor，不查分源健康。Futu/RSS/Twitter 全死但只要 CNBC/ZeroHedge 活着就报告 HEALTHY
+- 根因已在本次修复中消除
+
+---
 ## 2026-08-03 · 🩹 富途 OpenD 复活 + DeepSeek v4 max_tokens 全线修复
 
 ### 富途 OpenD 僵死复活
@@ -3798,3 +3821,19 @@ deepseek-chat 已于 2026-07-24 废弃，全线迁移:
 ---
 
 ## 2026-08-03T22:21+08:00 · 会话开始
+
+## 2026-08-03T22:57 · 🤖 会话结束自动补账
+
+> SessionEnd hook 自动补录 git log 中未记入 HISTORY 的提交（按 commit hash 去重，含 body 作为 WHY）。
+
+### f221b28 · 2026-08-03T22:22 · docs: HISTORY补账 — Telegram Bot 无限用户扩展 (3bc7260)
+
+---
+
+### 5c00f7f · 2026-08-03T22:23 · chore: SESSION更新 — HISTORY补账完成，管线健康
+
+---
+
+---
+
+## 2026-08-04T22:32+08:00 · 会话开始
