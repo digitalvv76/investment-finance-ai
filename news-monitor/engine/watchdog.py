@@ -60,6 +60,7 @@ class HealthSignals:
     error_events_1h: int        # health_events logged in last hour
     success_rate: float         # % assessments without errors
     assessments_1h: int         # LLM evaluations in last hour
+    stalled_sources: list[str]  # core sources currently stalled (no recovery yet)
 
 
 @dataclass
@@ -90,6 +91,20 @@ def evaluate_health(
             f"过去1小时零采集（正常应≥{s.ingest_floor}条/时），疑似采集管道故障或全部源失效",
             should_alert=True,
             emergency=True,
+        )
+
+    # 1.5. SOURCE_DEGRADED — core data sources stalled while pipeline alive.
+    #    Total ingest looks healthy, but critical sources (Futu, Finnhub,
+    #    Twitter, RSS) are producing nothing.  This is the blind spot that
+    #    let the 2026-08-04 outage go undetected for hours.
+    if s.stalled_sources:
+        names = ", ".join(s.stalled_sources)
+        return Verdict(
+            HealthState.DEGRADED,
+            f"核心数据源停滞: {names} — 管线总量正常但关键源无产出，"
+            f"推送可能缺失重要内容",
+            should_alert=True,
+            emergency=False,
         )
 
     # 2. DEGRADED — pipeline is collecting but not evaluating/dispatching.
@@ -194,6 +209,27 @@ class Watchdog:
         except Exception:
             return -1.0
 
+    def _active_source_stalls(self) -> list[str]:
+        """Return core source names that are currently stalled.
+
+        A source is stalled if its most recent ``source_stall`` event is
+        newer than its most recent ``source_recovered`` event (or no
+        recovery event exists).
+        """
+        try:
+            events = self.db.get_health_events(limit=60)
+            latest: dict[str, str] = {}  # source → latest event_type
+            for e in events:
+                name = (e.get("detail") or "").split(":")[0]
+                etype = e.get("event_type", "")
+                if etype in ("source_stall", "source_recovered") and name:
+                    if name not in latest:
+                        latest[name] = etype
+            return [n for n, t in latest.items() if t == "source_stall"]
+        except Exception:
+            logger.debug("Watchdog: failed to read source health events")
+            return []
+
     def gather_signals(self) -> HealthSignals:
         ingest = self.db.count_recent_news(hours=1)
         health = self.db.get_health_stats(hours=1)
@@ -204,6 +240,7 @@ class Watchdog:
             error_events_1h=int(health.get("health_events_1h", 0)),
             success_rate=float(health.get("success_rate", 100.0)),
             assessments_1h=int(health.get("total_assessments_1h", 0)),
+            stalled_sources=self._active_source_stalls(),
         )
 
     # -- one check cycle ----------------------------------------------------

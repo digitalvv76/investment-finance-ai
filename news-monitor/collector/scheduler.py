@@ -17,7 +17,7 @@ from collector.finnhub_fetcher import FinnhubNewsFetcher
 from collector.web_scraper import WebScraper
 from config.loader import ConfigLoader
 from storage.database import Database
-from storage.models import NewsItem
+from storage.models import NewsItem, HealthEvent
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,14 @@ class NewsScheduler:
         self._callbacks: List[NewsCallback] = []
         self._running = False
         self._tasks: List[asyncio.Task] = []
+
+        # Per-source health tracking: consecutive zero-item cycles
+        self._source_zero_streaks: dict[str, int] = {}
+        self._source_stalled: set[str] = set()
+        # Core sources that must produce items — stall on any of these is a
+        # pipeline health event (others are supplementary / best-effort)
+        self.SOURCE_ALERT_NAMES = {"futu", "finnhub", "playwright", "rss"}
+        self.SOURCE_STALL_THRESHOLD = 3  # consecutive zero-cycles before alert
 
         # Initialize fetchers
         self.rss_fetcher = RSSFetcher(self.sources.get('tier_1_rss', []))
@@ -231,16 +239,66 @@ class NewsScheduler:
             )
             return
 
+        # Per-source counts for health monitoring
+        source_names = ["chinese", "rss", "playwright", "api", "scrape", "futu", "finnhub"]
+        source_counts = {}
         items = []
-        for result in results:
+        for name, result in zip(source_names, results):
             if isinstance(result, Exception):
                 logger.warning("Heartbeat collector failed: %s", result)
+                source_counts[name] = 0
             elif result:
+                source_counts[name] = len(result)
                 items.extend(result)
+            else:
+                source_counts[name] = 0
+
+        # Track consecutive zero-cycles per source and fire stall/recovery events
+        self._check_source_health(source_counts)
 
         if items:
             logger.info(f"Heartbeat: {len(items)} items (cn+rss+pw+api+scrape+futu+finnhub)")
             await self._notify_callbacks(items)
+
+    def _check_source_health(self, source_counts: dict[str, int]):
+        """Track per-source consecutive zero-cycles and emit stall/recovery events.
+
+        A core source that produces 0 items for STALL_THRESHOLD consecutive
+        heartbeat cycles is considered stalled.  A ``source_stall`` health event
+        is written (once) so the Watchdog can include it in its verdict.  When
+        the source resumes producing items a matching ``source_recovered`` event
+        is written.
+        """
+        for name, count in source_counts.items():
+            if count == 0:
+                streak = self._source_zero_streaks.get(name, 0) + 1
+                self._source_zero_streaks[name] = streak
+                if streak >= self.SOURCE_STALL_THRESHOLD and name not in self._source_stalled:
+                    self._source_stalled.add(name)
+                    if name in self.SOURCE_ALERT_NAMES:
+                        logger.warning(
+                            "SourceStall: %s — 0 items for %d consecutive cycles",
+                            name, streak,
+                        )
+                        try:
+                            self.db.insert_health_event(HealthEvent(
+                                event_type="source_stall",
+                                detail=f"{name}:{streak}",
+                            ))
+                        except Exception:
+                            logger.debug("SourceStall: failed to write health event")
+            else:
+                if name in self._source_stalled:
+                    self._source_stalled.discard(name)
+                    logger.info("SourceRecovered: %s — producing again (%d items)", name, count)
+                    try:
+                        self.db.insert_health_event(HealthEvent(
+                            event_type="source_recovered",
+                            detail=f"{name}:{count}",
+                        ))
+                    except Exception:
+                        logger.debug("SourceRecovered: failed to write health event")
+                self._source_zero_streaks[name] = 0
 
     async def _run_playwright_heartbeat(self, sources):
         """Run Playwright heartbeat fetches sequentially (shared browser)."""

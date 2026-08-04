@@ -70,10 +70,18 @@ class FakeDB:
         self.health_events.append(e)
         return len(self.health_events)
 
+    def get_health_events(self, limit=50, event_type=None):
+        events = [{"event_type": e.event_type, "detail": e.detail}
+                  for e in reversed(self.health_events)]
+        if event_type:
+            events = [e for e in events if e["event_type"] == event_type]
+        return events[:limit]
+
 
 def _signals(**kw):
     base = dict(ingest_1h=10, ingest_floor=3, hours_since_last_push=1.0,
-                error_events_1h=0, success_rate=100.0, assessments_1h=20)
+                error_events_1h=0, success_rate=100.0, assessments_1h=20,
+                stalled_sources=[])
     base.update(kw)
     return HealthSignals(**base)
 
@@ -118,6 +126,26 @@ class TestEvaluateHealth:
         v = evaluate_health(_signals(ingest_1h=0, ingest_floor=3,
                                      assessments_1h=20, success_rate=10.0))
         assert v.state is HealthState.STALLED
+
+    def test_source_stall_degraded_when_core_source_dead(self):
+        # Total ingest healthy, but Futu is stalled → DEGRADED
+        v = evaluate_health(_signals(
+            ingest_1h=10, ingest_floor=3, stalled_sources=["futu"]))
+        assert v.state is HealthState.DEGRADED
+        assert v.should_alert is True
+        assert v.emergency is False
+        assert "futu" in v.reason
+
+    def test_source_stall_no_alert_when_empty(self):
+        # No stalled sources → normal healthy path
+        v = evaluate_health(_signals(ingest_1h=10, ingest_floor=3, stalled_sources=[]))
+        assert v.state is HealthState.HEALTHY
+
+    def test_source_stall_takes_priority_over_quiet_ok(self):
+        # Below floor AND source stalled → DEGRADED (source stall takes priority)
+        v = evaluate_health(_signals(
+            ingest_1h=1, ingest_floor=3, stalled_sources=["finnhub"]))
+        assert v.state is HealthState.DEGRADED
 
 
 # --------------------------------------------------------------------------
